@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "corral-alexa",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    // "sample" answers from the built-in sample household; "corral" answers from a real Corral with the caller's own token.
+    "BACKEND": "sample",
+    "CORRAL_URL": "https://corral.narralogy.ai"
+  },
+  "dev": { "port": 8795 }
+}

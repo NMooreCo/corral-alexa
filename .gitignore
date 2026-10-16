@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+# Made by scripts/build-widgets.mjs from widgets/.
+src/widgets.generated.ts

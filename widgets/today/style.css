@@ -1,0 +1,240 @@
+/* Sized to read from across a room on an Echo Show (1280 x 800) and to stack on a phone. */
+:root {
+  --paper: #f7f4ec;
+  --card: #ffffff;
+  --ink: #1d2420;
+  --muted: #5d665f;
+  --line: #ded8ca;
+  --forest: #2f5d46;
+  --forest-soft: #e3ece5;
+  --late: #9a5b00;
+  --late-soft: #fbefd9;
+  --busy: #ece8de;
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --paper: #141a17;
+  --card: #1c2420;
+  --ink: #eef2ee;
+  --muted: #a7b2aa;
+  --line: #2f3a34;
+  --forest: #8cc4a3;
+  --forest-soft: #233a2e;
+  --late: #f2b65a;
+  --late-soft: #3a2c14;
+  --busy: #26302b;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 16px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Bigger on bigger screens: about 20px on an Echo Show 8, 24px on an Echo Show 15. */
+  font-size: clamp(16px, 1.6vw, 24px);
+}
+
+main {
+  padding: 20px 24px 24px;
+}
+
+header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.6rem;
+  letter-spacing: -0.01em;
+}
+
+.household {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: 1.1fr 1.2fr 0.9fr;
+  gap: 16px;
+}
+
+@media (max-width: 860px) {
+  .columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+section {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 16px;
+  min-width: 0;
+}
+
+h2 {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  display: flex;
+  justify-content: space-between;
+}
+
+.count {
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--forest);
+}
+
+ol,
+ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.events li,
+.where li {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+
+.events li {
+  border-left: 4px solid var(--forest);
+  background: var(--forest-soft);
+}
+
+.events li.busy {
+  border-left-color: var(--muted);
+  background: var(--busy);
+  color: var(--muted);
+}
+
+.time {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.title {
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+
+.meta {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.chore {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  align-items: center;
+  text-align: left;
+  padding: 10px;
+  min-height: 56px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.chore .box {
+  grid-row: span 2;
+  width: 30px;
+  height: 30px;
+  border: 2px solid var(--forest);
+  border-radius: 8px;
+}
+
+.chore.done .box {
+  background: var(--forest);
+  box-shadow: inset 0 0 0 4px var(--card);
+}
+
+.chore.done .title {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.chore.overdue {
+  border-color: var(--late);
+  background: var(--late-soft);
+}
+
+.chore.overdue strong {
+  color: var(--late);
+}
+
+.chore.pending {
+  opacity: 0.6;
+}
+
+.chore:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.chore:focus-visible {
+  outline: 3px solid var(--forest);
+  outline-offset: 2px;
+}
+
+.where li {
+  grid-template-columns: auto 1fr;
+  column-gap: 10px;
+  border: 1px solid var(--line);
+}
+
+.where .name {
+  font-weight: 700;
+}
+
+.where .place {
+  font-weight: 600;
+  color: var(--forest);
+}
+
+.where .meta {
+  grid-column: 1 / -1;
+}
+
+.empty {
+  color: var(--muted);
+  margin: 0;
+}
+
+#toast {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: var(--paper);
+  padding: 10px 16px;
+  border-radius: 10px;
+  max-width: calc(100% - 32px);
+}

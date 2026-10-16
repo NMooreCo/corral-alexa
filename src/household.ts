@@ -1,0 +1,94 @@
+/**
+ * The household the tools answer from. Both kinds, the built-in sample and a
+ * real Corral, answer Corral's own MCP tools by name, with the same arguments
+ * and the same JSON. So every rule about who sees and changes what (private
+ * events read as Busy, a kid's change waits for a parent, the farm hand only
+ * hears about the ranch) stays in Corral, and this bridge never decides it.
+ */
+
+/** The Corral tools this bridge offers. Each takes Corral's arguments and returns Corral's JSON. */
+export const CORRAL_TOOLS = [
+  "calendar",
+  "tasks",
+  "whereabouts",
+  "people",
+  "lists",
+  "points",
+  "supplies",
+  "add_event",
+  "add_task",
+  "complete_task",
+  "undo_task",
+  "claim_task",
+  "skip_task",
+  "add_list_item",
+  "check_list_item",
+  "update_supply",
+] as const;
+
+export type CorralTool = (typeof CORRAL_TOOLS)[number];
+
+export interface Household {
+  /** The household's name, when known, for screens. */
+  readonly name?: string;
+  /** Calls one of Corral's tools. Throws ToolError for an answer the model should hear and can act on. */
+  call(tool: CorralTool, args: Record<string, unknown>): Promise<unknown>;
+}
+
+/** A refusal or a mistake in the call, said for the model (and through it, the person), like Corral's tool errors. */
+export class ToolError extends Error {
+  override name = "ToolError";
+}
+
+// ---------- What Corral's tools return ----------
+
+/** An event as Corral's calendar tool says it. A Busy block has no id and names nobody. */
+export interface CorralEvent {
+  event?: string;
+  /** For one day of a repeating event: which one. */
+  occurrence?: string;
+  /** Like "Fri, Oct 16, 3:30 PM to 4:45 PM" or "Sat, Oct 17 (all day)". */
+  when: string;
+  title: string;
+  people: string[];
+  drivers: string[];
+  location: string | null;
+  calendar: string;
+}
+
+/** What a task asks for when it's done, like an amount fed or eggs collected. */
+export interface CorralAsk {
+  key: string;
+  label: string;
+  type: string;
+  unit?: string;
+  required?: boolean;
+}
+
+/** A task or chore as Corral's tasks tool says it. */
+export interface CorralTask {
+  id: string;
+  title: string;
+  /** Like "Fri, Oct 16, 9:00 AM", or "Fri, Oct 16" when it's due any time that day. */
+  due: string;
+  status: "open" | "done" | "skipped" | "overdue";
+  /** ["anyone"] when it's up for grabs. */
+  assignees: string[];
+  doneBy: string | null;
+  asks?: CorralAsk[];
+}
+
+/** Where someone is, as Corral's whereabouts tool says it. */
+export interface CorralWhere {
+  name: string;
+  location: string;
+  /** Like "Fri, Oct 16, 3:15 PM", or null when they stay put. */
+  until: string | null;
+  /** Where they go after that, when it's somewhere else. */
+  then?: string;
+}
+
+/** The answer to a change: done now, or sent to someone to approve. */
+export type CorralChange =
+  | { status: "done"; summary: string; [more: string]: unknown }
+  | { status: "waiting_for_approval"; summary: string; approvers: string[]; requestId: string };

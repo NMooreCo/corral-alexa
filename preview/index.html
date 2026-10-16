@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Corral screen preview</title>
+  </head>
+  <body>
+    <header class="bar">
+      <strong>Corral screen preview</strong>
+      <span class="note">An MCP Apps host in device-sized frames, talking to this server's /mcp. It stands in for Alexa+ while building.</span>
+      <label>Device
+        <select id="device">
+          <option value="1280x800">Echo Show 8 (1280 x 800)</option>
+          <option value="960x480">Echo Show 5 (960 x 480)</option>
+          <option value="1920x1080">Echo Show 15 (1920 x 1080)</option>
+          <option value="390x844">Phone (390 x 844)</option>
+        </select>
+      </label>
+      <label>Theme
+        <select id="theme">
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </label>
+      <label><input id="actual" type="checkbox" /> Actual size</label>
+      <button id="reload" type="button">Show today again</button>
+    </header>
+    <main>
+      <div id="stage"><div id="frame"></div></div>
+      <aside>
+        <h2>What the assistant was told</h2>
+        <ol id="log"></ol>
+      </aside>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

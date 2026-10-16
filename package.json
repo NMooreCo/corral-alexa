@@ -1,0 +1,34 @@
+{
+  "name": "corral-alexa",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Corral for Alexa+: a household's calendar, chores, lists and whereabouts as an MCP server with MCP Apps screens",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "build:widgets": "node scripts/build-widgets.mjs",
+    "dev": "pnpm build:widgets && wrangler dev",
+    "deploy": "pnpm build:widgets && wrangler deploy",
+    "typecheck": "pnpm build:widgets && tsc -p tsconfig.json",
+    "test": "pnpm build:widgets && vitest run",
+    "check": "pnpm build:widgets && tsc -p tsconfig.json && vitest run",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/core": "2.3.1",
+    "@modelcontextprotocol/ext-apps": "2.0.3",
+    "@modelcontextprotocol/server": "2.3.1",
+    "temporal-polyfill": "1.0.6",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.3.1",
+    "@types/node": "22",
+    "typescript": "7.0.2",
+    "vite": "8.3.4",
+    "vite-plugin-singlefile": "2.3.3",
+    "vitest": "5.0.5",
+    "wrangler": "4.151.1"
+  }
+}
