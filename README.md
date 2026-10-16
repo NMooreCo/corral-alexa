@@ -54,13 +54,25 @@ Alexa app --> /authorize --> Corral's consent page --> /callback --> back to Ale
 - **Tokens.** Corral's tokens live inside the grant, encrypted. Alexa's access token lasts as long as the Corral token behind it; when Alexa refreshes, this server refreshes Corral's too. If Corral has revoked access, the link ends and Alexa asks to link again. A link lives while it's used, like Corral's own connections (30 idle days).
 - **Built on** Cloudflare's [`workers-oauth-provider`](https://github.com/cloudflare/workers-oauth-provider): tokens, codes and secrets stored only as hashes, props encrypted, refresh tokens rotated.
 
-### Setting it up
+### Deploying
 
-1. Set `BACKEND` to `corral` and `CORRAL_URL` to your Corral. The `OAUTH_KV` namespace is created on the first `pnpm deploy`.
-2. Set an admin secret: `pnpm exec wrangler secret put ADMIN_TOKEN` (24 characters or more).
-3. Make Alexa's client: `ADMIN_TOKEN=... pnpm alexa:client create https://your-bridge.example`. Keep the secret it prints; it isn't shown again.
-4. Point Alexa at it: `alexa-ai configure-account-linking --addon-id <id> --stage development --client-id <client_id>`, with the secret in `ALEXA_CLIENT_SECRET`. Set `accountLinking.enabled` in `addon.json`.
-5. Give the redirect addresses the CLI shows back to the client: `ADMIN_TOKEN=... pnpm alexa:client redirects https://your-bridge.example <client_id> <address> ...`, then `alexa-ai deploy`.
+`wrangler.jsonc` has two environments, and deploys always name one, so the sample can never replace the linked bridge:
+
+| Script | Worker | Address | Answers from |
+|---|---|---|---|
+| `pnpm deploy` | `corral-alexa` | `https://alexa.corral.narralogy.ai` | Corral, after account linking (`env.production`) |
+| `pnpm deploy:demo` | `corral-alexa-demo` | `https://alexa-demo.corral.narralogy.ai` | The sample household, open, with `/preview` (`env.demo`) |
+
+Both are Workers custom domains (Cloudflare makes the DNS record and certificate). Production pins `PUBLIC_URL` so its OAuth issuer is always the same, and keeps its grants in its own KV namespace. To run your own, change the hostnames, `CORRAL_URL` and the KV id.
+
+### Linking Alexa+
+
+1. Set the admin secret once: `pnpm exec wrangler secret put ADMIN_TOKEN --env production` (24 characters or more).
+2. Make Alexa's client: `ADMIN_TOKEN=... pnpm alexa:client create https://alexa.corral.narralogy.ai`. Keep the secret it prints; it isn't shown again.
+3. Point Alexa at it: `alexa-ai configure-account-linking --addon-id <id> --stage development --client-id <client_id>`, with the secret in `ALEXA_CLIENT_SECRET`. Set `accountLinking.enabled` in `addon.json`, with `https://alexa.corral.narralogy.ai/mcp` as the MCP endpoint.
+4. Give the redirect addresses the CLI shows back to the client: `ADMIN_TOKEN=... pnpm alexa:client redirects https://alexa.corral.narralogy.ai <client_id> <address> ...`, then `alexa-ai deploy`.
+
+The first link registers the bridge with Corral as "Corral for Alexa+"; people then see it under Corral's connected apps, and disconnecting it there ends the link.
 
 While building, `ACCEPT_CORRAL_TOKENS=true` also takes a Corral personal access token at `/mcp` (for `pnpm smoke` with `CORRAL_TOKEN`). Leave it off in production: MCP servers should take only tokens they issued.
 

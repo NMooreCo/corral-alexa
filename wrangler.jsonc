@@ -1,16 +1,42 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "corral-alexa",
+  // The top level is for `pnpm dev` on this machine. Deploys always name an environment:
+  // `pnpm deploy` (production, linked to a real Corral) or `pnpm deploy:demo` (the sample household).
+  "name": "corral-alexa-local",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
   // global_fetch_strictly_public sends calls to Corral over the public internet, even from a Worker in the same zone.
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "workers_dev": false,
   "vars": {
     // "sample" answers from the built-in sample household; "corral" answers from a real Corral after account linking.
     "BACKEND": "sample",
     "CORRAL_URL": "https://corral.narralogy.ai"
   },
-  // Account linking's grants and clients. Wrangler creates the namespace on the first deploy.
+  // Account linking's grants and clients, simulated locally by `wrangler dev`.
   "kv_namespaces": [{ "binding": "OAUTH_KV" }],
-  "dev": { "port": 8795 }
+  "dev": { "port": 8795 },
+  "env": {
+    // Linked to Corral: account linking in front, every call made with the person's own Corral token.
+    "production": {
+      "name": "corral-alexa",
+      "routes": [{ "pattern": "alexa.corral.narralogy.ai", "custom_domain": true }],
+      "vars": {
+        "BACKEND": "corral",
+        "CORRAL_URL": "https://corral.narralogy.ai",
+        "PUBLIC_URL": "https://alexa.corral.narralogy.ai"
+      },
+      "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "2873e0d58fb5483183130ef91bd17ba8" }],
+      "observability": { "enabled": true }
+    },
+    // The sample household, open to anyone, with /preview: for judges and demos, never any real household's data.
+    "demo": {
+      "name": "corral-alexa-demo",
+      "routes": [{ "pattern": "alexa-demo.corral.narralogy.ai", "custom_domain": true }],
+      // No CORRAL_URL and no storage on purpose (Wrangler notes that they aren't inherited).
+      "vars": { "BACKEND": "sample" },
+      "kv_namespaces": [],
+      "observability": { "enabled": true }
+    }
+  }
 }
