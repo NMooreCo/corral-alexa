@@ -34,9 +34,35 @@ Set `BACKEND` in `wrangler.jsonc`:
 | `BACKEND` | Answers from | Credential |
 |---|---|---|
 | `sample` (default) | A built-in sample household: Juniper Hollow, a made-up family ranch with two parents, two kids and a farm hand, laid out around today | None |
-| `corral` | A real Corral at `CORRAL_URL`, through its own MCP server | The caller's Corral token, sent as `Authorization: Bearer ...` |
+| `corral` | A real Corral at `CORRAL_URL`, through its own MCP server | Account linking (below) |
 
 The sample answers Corral's tools with the same arguments and the same JSON as Corral, so everything here runs and demos with no account. It acts as a shared kitchen screen: it sees what the adults see except private events (Busy), check-offs and list changes happen right away, and anything it puts on the calendar goes to a parent to approve. Its changes last as long as the worker instance.
+
+## Account linking
+
+In `corral` mode this server is an OAuth 2.1 authorization server for Alexa+, and Corral is where people sign in:
+
+```
+Alexa app --> /authorize --> Corral's consent page --> /callback --> back to Alexa with a code --> /token
+              (this server)   sign in, pick the household,  (this server keeps Corral's
+                              choose what to allow           tokens, encrypted)
+```
+
+- **What Alexa+ needs, and gets:** OAuth 2.1 authorization code with PKCE (S256), protected resource metadata at the root (`/.well-known/oauth-protected-resource`, naming `/mcp`, this server and the scopes), authorization server metadata at `/.well-known/oauth-authorization-server`, `resource` honored on authorize and token, a refresh token with every access token, and a bare `401` (no `WWW-Authenticate`) at `/mcp` before linking.
+- **One fixed client.** Alexa can't register itself, and nothing else may: there's no registration endpoint. Alexa's client is made once through `/admin/clients`.
+- **Corral behind it.** `/authorize` hands the person to Corral's consent page as this server's own Corral client (registered with Corral once, automatically, or set with `CORRAL_CLIENT_ID`), with PKCE and Corral's MCP server as the resource. The `state` is bound to the browser, so a code can't be finished somewhere else.
+- **Tokens.** Corral's tokens live inside the grant, encrypted. Alexa's access token lasts as long as the Corral token behind it; when Alexa refreshes, this server refreshes Corral's too. If Corral has revoked access, the link ends and Alexa asks to link again. A link lives while it's used, like Corral's own connections (30 idle days).
+- **Built on** Cloudflare's [`workers-oauth-provider`](https://github.com/cloudflare/workers-oauth-provider): tokens, codes and secrets stored only as hashes, props encrypted, refresh tokens rotated.
+
+### Setting it up
+
+1. Set `BACKEND` to `corral` and `CORRAL_URL` to your Corral. The `OAUTH_KV` namespace is created on the first `pnpm deploy`.
+2. Set an admin secret: `pnpm exec wrangler secret put ADMIN_TOKEN` (24 characters or more).
+3. Make Alexa's client: `ADMIN_TOKEN=... pnpm alexa:client create https://your-bridge.example`. Keep the secret it prints; it isn't shown again.
+4. Point Alexa at it: `alexa-ai configure-account-linking --addon-id <id> --stage development --client-id <client_id>`, with the secret in `ALEXA_CLIENT_SECRET`. Set `accountLinking.enabled` in `addon.json`.
+5. Give the redirect addresses the CLI shows back to the client: `ADMIN_TOKEN=... pnpm alexa:client redirects https://your-bridge.example <client_id> <address> ...`, then `alexa-ai deploy`.
+
+While building, `ACCEPT_CORRAL_TOKENS=true` also takes a Corral personal access token at `/mcp` (for `pnpm smoke` with `CORRAL_TOKEN`). Leave it off in production: MCP servers should take only tokens they issued.
 
 ## Tools
 
@@ -58,10 +84,11 @@ The same names, arguments and answers as Corral's own MCP server, with descripti
 
 | Path | What |
 |---|---|
-| `src/index.ts` | The worker: routes, picking the household, serving `/mcp` with the MCP SDK's `createMcpHandler` |
+| `src/index.ts` | The worker: the sample, or account linking in front of a real Corral |
 | `src/server.ts` | The MCP server: Corral's tools, the `show_today` tool and the Today screen resource |
 | `src/household.ts` | The contract both households answer, and the shapes of Corral's answers |
-| `src/corral.ts` | A real Corral, reached through its MCP server with the caller's credential |
+| `src/corral.ts` | A real Corral, reached through its MCP server with the person's Corral token |
+| `src/link/` | Account linking: the OAuth provider and its routes, Corral as the sign-in, and `/admin/clients` |
 | `src/sample/` | The sample household and its data |
 | `widgets/today/` | The Today screen (MCP Apps, built into one HTML file) |
 | `preview/` | The stand-in host behind `/preview` |
@@ -73,12 +100,11 @@ The same names, arguments and answers as Corral's own MCP server, with descripti
 pnpm check
 ```
 
-Builds the screens, typechecks, and runs the tests: the sample household's answers, the 2025-11-25 handshake and tool list Alexa+ sees, the Today screen resource, the current protocol for up-to-date clients, and carrying calls to a real Corral (with its refusals and a turned-down credential).
+Builds the screens, typechecks, and runs the tests: the sample household's answers, the 2025-11-25 handshake and tool list Alexa+ sees, the Today screen resource, the current protocol for up-to-date clients, and account linking end to end against a stand-in Corral (discovery, the hand-off to Corral's sign-in, the code and token exchange, calls made with the person's Corral token, refresh, revoked access, a declined sign-in, a callback in another browser, a redirect address Alexa's client doesn't have, and the admin route).
 
 ## What's next
 
-- Alexa+ account linking: OAuth 2.1 with PKCE, protected resource metadata at the root, a fixed client for Alexa, and Corral's sign-in behind it.
-- Linking an Echo as a household screen rather than as one person.
+- Linking an Echo as a household screen rather than as one person (a choice on Corral's consent page).
 - More screens: the chore board for the barn, a list, the week.
 - An Alexa+ add-on package and certification checklist.
 

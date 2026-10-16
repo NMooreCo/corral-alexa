@@ -3,11 +3,14 @@
   "name": "corral-alexa",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
-  "compatibility_flags": ["nodejs_compat"],
+  // global_fetch_strictly_public sends calls to Corral over the public internet, even from a Worker in the same zone.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "vars": {
-    // "sample" answers from the built-in sample household; "corral" answers from a real Corral with the caller's own token.
+    // "sample" answers from the built-in sample household; "corral" answers from a real Corral after account linking.
     "BACKEND": "sample",
     "CORRAL_URL": "https://corral.narralogy.ai"
   },
+  // Account linking's grants and clients. Wrangler creates the namespace on the first deploy.
+  "kv_namespaces": [{ "binding": "OAUTH_KV" }],
   "dev": { "port": 8795 }
 }

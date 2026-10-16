@@ -1,11 +1,12 @@
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { CORRAL_TOOLS } from "../src/household.ts";
 import worker, { type Env } from "../src/index.ts";
+
+const CTX = { waitUntil() {}, passThroughOnException() {}, props: {} } as unknown as ExecutionContext;
 import { TODAY_URI } from "../src/today.ts";
 
 const SAMPLE: Env = { BACKEND: "sample" };
-const CORRAL: Env = { BACKEND: "corral", CORRAL_URL: "https://corral.example" };
 
 /** One JSON-RPC message the way Alexa+ sends it: the 2025-11-25 protocol, one POST each. */
 async function rpc(env: Env, method: string, params: Record<string, unknown> = {}, headers: Record<string, string> = {}) {
@@ -16,6 +17,7 @@ async function rpc(env: Env, method: string, params: Record<string, unknown> = {
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
     }),
     env,
+    CTX,
   );
   const text = await res.text();
   // Answered as JSON or as a one-message event stream.
@@ -24,8 +26,6 @@ async function rpc(env: Env, method: string, params: Record<string, unknown> = {
     : text;
   return { status: res.status, body: data ? (JSON.parse(data) as { result?: Record<string, any>; error?: { message: string } }) : null };
 }
-
-afterEach(() => vi.unstubAllGlobals());
 
 describe("serving Alexa+ (MCP 2025-11-25 over Streamable HTTP)", () => {
   it("agrees on 2025-11-25 and says it has tools and resources", async () => {
@@ -64,41 +64,11 @@ describe("serving Alexa+ (MCP 2025-11-25 over Streamable HTTP)", () => {
 
   it("also serves the current protocol to an up-to-date client", async () => {
     const client = new Client({ name: "test", version: "1" });
-    await client.connect(new StreamableHTTPClientTransport(new URL("https://bridge.example/mcp"), { fetch: (input, init) => worker.fetch(new Request(input, init), SAMPLE) }));
+    await client.connect(new StreamableHTTPClientTransport(new URL("https://bridge.example/mcp"), { fetch: (input, init) => worker.fetch(new Request(input, init), SAMPLE, CTX) }));
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name)).toContain("show_today");
     const res = await client.callTool({ name: "lists", arguments: {} });
     expect(res.content).toEqual([{ type: "text", text: JSON.stringify(["Groceries", "Feed store", "Hardware"]) }]);
     await client.close();
-  });
-});
-
-describe("answering from a real Corral", () => {
-  it("asks for a credential before anything else", async () => {
-    const { status } = await rpc(CORRAL, "tools/list");
-    expect(status).toBe(401);
-  });
-
-  it("carries the call to Corral's MCP server with the caller's credential, and Corral's answer back", async () => {
-    const upstream = vi.fn(async (_url: string, _init: RequestInit) =>
-      Response.json({ jsonrpc: "2.0", id: 1, result: { resultType: "complete", content: [{ type: "text", text: JSON.stringify({ list: "Groceries", items: [] }) }], isError: false } }),
-    );
-    vi.stubGlobal("fetch", upstream);
-    const { body } = await rpc(CORRAL, "tools/call", { name: "lists", arguments: { list: "Groceries" } }, { authorization: "Bearer crl_pat_test" });
-    expect(body!.result!.content).toEqual([{ type: "text", text: JSON.stringify({ list: "Groceries", items: [] }) }]);
-    const [url, init] = upstream.mock.calls[0]!;
-    expect(url).toBe("https://corral.example/mcp");
-    expect(init.headers).toMatchObject({ authorization: "Bearer crl_pat_test", "mcp-protocol-version": "2026-07-28", "mcp-method": "tools/call", "mcp-name": "lists" });
-    expect(JSON.parse(String(init.body)).params).toMatchObject({ name: "lists", arguments: { list: "Groceries" } });
-  });
-
-  it("passes Corral's refusal on, and asks to link again when Corral turns the credential down", async () => {
-    vi.stubGlobal("fetch", async () => Response.json({ jsonrpc: "2.0", id: 1, result: { resultType: "complete", content: [{ type: "text", text: "This person can't add events." }], isError: true } }));
-    const refused = await rpc(CORRAL, "tools/call", { name: "add_event", arguments: { title: "Dentist", start: "2026-10-22" } }, { authorization: "Bearer crl_pat_test" });
-    expect(refused.body!.result).toMatchObject({ isError: true, content: [{ type: "text", text: "This person can't add events." }] });
-
-    vi.stubGlobal("fetch", async () => new Response("", { status: 401 }));
-    const unlinked = await rpc(CORRAL, "tools/call", { name: "calendar", arguments: {} }, { authorization: "Bearer crl_pat_test" });
-    expect(unlinked.body!.result).toMatchObject({ isError: true, content: [{ type: "text", text: expect.stringContaining("Link the account again") }] });
   });
 });

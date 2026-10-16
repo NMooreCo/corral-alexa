@@ -1,17 +1,12 @@
-import { createMcpHandler } from "@modelcontextprotocol/server";
+import type { OAuthProvider } from "@cloudflare/workers-oauth-provider";
 import { Temporal } from "temporal-polyfill";
-import { CorralHousehold } from "./corral.ts";
-import type { Household } from "./household.ts";
+import type { Env } from "./env.ts";
+import { json, notFound, serveMcp, siteRoute } from "./http.ts";
+import { linkingProvider, protectedResource } from "./link/provider.ts";
 import { SampleHousehold } from "./sample/index.ts";
-import { SERVER_INFO, buildServer } from "./server.ts";
 import { previewHtml } from "./widgets.generated.ts";
 
-export interface Env {
-  /** "sample" answers from the built-in sample household; "corral" answers from a real Corral with the caller's own token. */
-  BACKEND?: string;
-  /** The Corral to reach in corral mode, like https://corral.narralogy.ai. */
-  CORRAL_URL?: string;
-}
+export type { Env };
 
 /**
  * The sample household lives as long as this worker instance, so changes made
@@ -29,37 +24,42 @@ function sampleHousehold(): SampleHousehold {
   return sample.household;
 }
 
-function bearer(request: Request): string | null {
-  const m = /^Bearer\s+(.+)$/i.exec(request.headers.get("authorization") ?? "");
-  return m ? m[1]!.trim() : null;
-}
+/** One OAuth provider per public address (in practice, one). */
+const providers = new Map<string, OAuthProvider<Env>>();
 
-function json(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+/**
+ * Alexa+ reads the protected resource metadata from its well-known address
+ * and doesn't take a challenge header on a 401 yet, so /mcp answers 401 bare.
+ * MCP clients that would read the header find the same metadata by its
+ * well-known address instead, as the spec has them do when it's missing.
+ */
+function withoutChallenge(res: Response): Response {
+  if (res.status !== 401 || !res.headers.has("www-authenticate")) return res;
+  const headers = new Headers(res.headers);
+  headers.delete("www-authenticate");
+  return new Response(res.body, { status: 401, headers });
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
-    const backend = env.BACKEND === "corral" ? "corral" : "sample";
-    if (url.pathname === "/" && request.method === "GET") return json(200, { ...SERVER_INFO, mcp: `${url.origin}/mcp`, backend });
-    if (url.pathname === "/health") return new Response("ok");
-    // The screen preview talks to /mcp from the browser, so it's only for the sample, which needs no credential.
-    if (url.pathname === "/preview" && backend === "sample") return new Response(previewHtml, { headers: { "content-type": "text/html; charset=utf-8" } });
-    if (url.pathname !== "/mcp") return json(404, { error: { code: "not_found", message: "Nothing here. The MCP server is at /mcp." } });
 
-    let household: Household;
-    if (backend === "corral") {
-      // Until account linking is in, the caller brings their own Corral credential and this only carries it.
-      const token = bearer(request);
-      if (!token) return json(401, { error: { code: "unauthorized", message: "Send your Corral credential as a Bearer token." } });
-      if (!env.CORRAL_URL) return json(500, { error: { code: "not_configured", message: "CORRAL_URL isn't set." } });
-      household = new CorralHousehold({ baseUrl: env.CORRAL_URL, token });
-    } else {
-      household = sampleHousehold();
+    if (env.BACKEND === "corral") {
+      if (!env.CORRAL_URL || !env.OAUTH_KV) return json(500, { error: { code: "not_configured", message: "Corral mode needs CORRAL_URL and the OAUTH_KV binding." } });
+      const base = (env.PUBLIC_URL ?? url.origin).replace(/\/+$/, "");
+      if (url.pathname === "/.well-known/oauth-protected-resource" && (request.method === "GET" || request.method === "HEAD")) return protectedResource(base);
+      let provider = providers.get(base);
+      if (!provider) providers.set(base, (provider = linkingProvider(base)));
+      const res = await provider.fetch(request, env, ctx);
+      return url.pathname === "/mcp" || url.pathname.startsWith("/mcp/") ? withoutChallenge(res) : res;
     }
 
-    const handler = createMcpHandler(() => buildServer(household), { onerror: (err) => console.error("mcp:", err.message) });
-    return handler.fetch(request);
+    // The sample needs no account and no linking.
+    const site = siteRoute(request, "sample");
+    if (site) return site;
+    // The screen preview talks to /mcp from the browser, which the sample allows without a credential.
+    if (url.pathname === "/preview") return new Response(previewHtml, { headers: { "content-type": "text/html; charset=utf-8" } });
+    if (url.pathname === "/mcp") return serveMcp(request, sampleHousehold());
+    return notFound();
   },
 };
