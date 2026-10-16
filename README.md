@@ -60,8 +60,8 @@ Alexa app --> /authorize --> Corral's consent page --> /callback --> back to Ale
 
 | Script | Worker | Address | Answers from |
 |---|---|---|---|
-| `pnpm deploy` | `corral-alexa` | `https://alexa.corral.narralogy.ai` | Corral, after account linking (`env.production`) |
-| `pnpm deploy:demo` | `corral-alexa-demo` | `https://alexa-demo.corral.narralogy.ai` | The sample household, open, with `/preview` (`env.demo`) |
+| `pnpm ship` | `corral-alexa` | `https://alexa.corral.narralogy.ai` | Corral, after account linking (`env.production`) |
+| `pnpm ship:demo` | `corral-alexa-demo` | `https://alexa-demo.corral.narralogy.ai` | The sample household, open, with `/preview` (`env.demo`) |
 
 Both are Workers custom domains (Cloudflare makes the DNS record and certificate). Production pins `PUBLIC_URL` so its OAuth issuer is always the same, and keeps its grants in its own KV namespace. To run your own, change the hostnames, `CORRAL_URL` and the KV id.
 

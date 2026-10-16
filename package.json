@@ -9,13 +9,13 @@
   "scripts": {
     "build:widgets": "node scripts/build-widgets.mjs",
     "dev": "pnpm build:widgets && wrangler dev",
-    "deploy": "pnpm build:widgets && wrangler deploy --env production",
+    "ship": "pnpm build:widgets && wrangler deploy --env production",
     "typecheck": "pnpm build:widgets && tsc -p tsconfig.json && tsc -p tsconfig.screens.json",
     "test": "pnpm build:widgets && vitest run",
     "check": "pnpm build:widgets && tsc -p tsconfig.json && tsc -p tsconfig.screens.json && vitest run",
     "smoke": "node scripts/smoke.mjs",
     "alexa:client": "node scripts/alexa-client.mjs",
-    "deploy:demo": "pnpm build:widgets && wrangler deploy --env demo"
+    "ship:demo": "pnpm build:widgets && wrangler deploy --env demo"
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "1.2.3",

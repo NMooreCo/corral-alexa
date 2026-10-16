@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   // The top level is for `pnpm dev` on this machine. Deploys always name an environment:
-  // `pnpm deploy` (production, linked to a real Corral) or `pnpm deploy:demo` (the sample household).
+  // `pnpm ship` (production, linked to a real Corral) or `pnpm ship:demo` (the sample household).
   "name": "corral-alexa-local",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
