@@ -50,6 +50,7 @@ const mcpLog = $("mcp-log");
 const modelLog = $("model-log");
 const passcodeForm = $<HTMLFormElement>("passcode-form");
 const passcodeInput = $<HTMLInputElement>("passcode");
+const passcodeNote = $("passcode-note");
 const themeEl = $<HTMLSelectElement>("theme");
 
 const state = {
@@ -226,12 +227,39 @@ themeEl.addEventListener("change", () => void mounted?.bridge.sendHostContextCha
 
 // ---------- The assistant ----------
 
+// ---------- The demo passcode ----------
+
+const PASSCODE_KEY = "corral-echo-passcode";
+// For a browser that won't store it: kept for this visit.
+let visitPasscode: string | null = null;
+// The question that was waiting on the passcode, asked again once it's in.
+let waitingQuestion: string | null = null;
+
+class PasscodeNeeded extends Error {}
+
 function passcode(): string | null {
   try {
-    return localStorage.getItem("corral-echo-passcode");
+    return localStorage.getItem(PASSCODE_KEY) ?? visitPasscode;
   } catch {
-    return null;
+    return visitPasscode;
   }
+}
+
+function rememberPasscode(value: string | null) {
+  visitPasscode = value;
+  try {
+    if (value) localStorage.setItem(PASSCODE_KEY, value);
+    else localStorage.removeItem(PASSCODE_KEY);
+  } catch {
+    // The visit's copy is enough.
+  }
+}
+
+function askForPasscode(note: string) {
+  passcodeNote.textContent = note;
+  passcodeForm.hidden = false;
+  passcodeForm.scrollIntoView({ block: "nearest" });
+  passcodeInput.focus();
 }
 
 async function callModel(): Promise<Reply> {
@@ -248,7 +276,13 @@ async function callModel(): Promise<Reply> {
   });
   const body = (await res.json().catch(() => ({}))) as Reply & { error?: { code?: string; message?: string } };
   if (!res.ok) {
-    if (body.error?.code === "passcode") passcodeForm.hidden = false;
+    if (body.error?.code === "passcode") {
+      const tried = passcode() !== null;
+      if (tried) rememberPasscode(null);
+      const note = tried ? "That passcode didn't work. Check it and try again." : "Enter the demo passcode to start.";
+      askForPasscode(note);
+      throw new PasscodeNeeded(note);
+    }
     throw new Error(body.error?.message ?? "The assistant didn't answer.");
   }
   const ms = Math.round(performance.now() - started);
@@ -296,7 +330,8 @@ async function ask(text: string) {
   caption(text, "");
   const before = state.messages.length;
   const content: Anthropic.Beta.BetaContentBlockParam[] = [];
-  if (state.screenNotes.length) content.push({ type: "text", text: `(On the screen since you last spoke: ${state.screenNotes.splice(0).join(" ")})` });
+  const notes = state.screenNotes.splice(0);
+  if (notes.length) content.push({ type: "text", text: `(On the screen since you last spoke: ${notes.join(" ")})` });
   content.push({ type: "text", text });
   state.messages.push({ role: "user", content });
   try {
@@ -319,6 +354,13 @@ async function ask(text: string) {
   } catch (err) {
     // An unanswered turn would leave the conversation half-finished: take it back.
     state.messages.length = before;
+    state.screenNotes.unshift(...notes);
+    if (err instanceof PasscodeNeeded) {
+      waitingQuestion = text;
+      caption(text, err.message);
+      setLight("idle");
+      return;
+    }
     respond(text, err instanceof Error ? err.message : "Something went wrong.");
   } finally {
     state.busy = false;
@@ -451,13 +493,16 @@ askForm.addEventListener("submit", (e) => {
 });
 passcodeForm.addEventListener("submit", (e) => {
   e.preventDefault();
-  try {
-    localStorage.setItem("corral-echo-passcode", passcodeInput.value.trim());
-  } catch {
-    // Kept for this visit only.
-  }
+  const value = passcodeInput.value.trim();
+  if (!value) return passcodeInput.focus();
+  rememberPasscode(value);
+  passcodeInput.value = "";
   passcodeForm.hidden = true;
+  const question = waitingQuestion;
+  waitingQuestion = null;
+  if (question) void ask(question);
 });
+if (document.body.dataset.passcode === "required" && !passcode()) askForPasscode("This demo needs a passcode before it can talk.");
 $("reset").addEventListener("click", () => {
   state.messages = [];
   state.screenNotes = [];

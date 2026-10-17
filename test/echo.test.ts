@@ -33,6 +33,22 @@ describe("the simulated Echo Show", () => {
     const res = await call({ BACKEND: "sample", BEDROCK_API_KEY: "key", DEMO_PASSCODE: "ranch" }, "/echo/model", turn([{ role: "user", content: "hi" }]));
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "passcode" } });
+    const wrong = turn([{ role: "user", content: "hi" }]);
+    expect((await call({ BACKEND: "sample", BEDROCK_API_KEY: "key", DEMO_PASSCODE: "ranch" }, "/echo/model", { ...wrong, headers: { ...wrong.headers, "x-demo-passcode": "Ranch" } })).status).toBe(401);
+  });
+
+  it("takes the passcode with stray spaces on either side", async () => {
+    vi.stubGlobal("fetch", async () => Response.json({ id: "msg_1", type: "message", role: "assistant", model: "m", content: [{ type: "text", text: "Hi." }], stop_reason: "end_turn", stop_sequence: null, usage: { input_tokens: 1, output_tokens: 1 } }));
+    const req = turn([{ role: "user", content: "hi" }]);
+    const res = await call({ BACKEND: "sample", BEDROCK_API_KEY: "key", DEMO_PASSCODE: "ranch " }, "/echo/model", { ...req, headers: { ...req.headers, "x-demo-passcode": " ranch" } });
+    expect(res.status).toBe(200);
+  });
+
+  it("tells the page up front whether it needs the passcode", async () => {
+    const page = async (env: Env) => (await call({ BACKEND: "sample", ...env }, "/echo")).text();
+    expect(await page({ DEMO_PASSCODE: "ranch" })).toContain('data-passcode="required"');
+    expect(await page({})).toContain('data-passcode="none"');
+    expect(await page({ DEMO_PASSCODE: "ranch" })).not.toContain("ranch");
   });
 
   it("holds a visitor to the rate limit", async () => {

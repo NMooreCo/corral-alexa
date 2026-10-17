@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Corral for Alexa+: simulated Echo Show</title>
   </head>
-  <body>
+  <body data-passcode="{{passcode}}">
     <div class="layout">
       <section class="stage" aria-label="Simulated Echo Show">
         <div class="device" id="device">
@@ -31,6 +31,15 @@
           <p class="lede">Ask about the Juniper Hollow household: the calendar, chores, lists, who's where, points and supplies. Tap the screen to check chores off.</p>
         </header>
 
+        <form class="passcode" id="passcode-form" hidden>
+          <label for="passcode">Demo passcode</label>
+          <div class="passcode-row">
+            <input id="passcode" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" />
+            <button type="submit">Save</button>
+          </div>
+          <p class="passcode-note" id="passcode-note"></p>
+        </form>
+
         <div class="talk">
           <button type="button" class="mic" id="mic" aria-pressed="false">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z" /></svg>
@@ -45,12 +54,6 @@
         </div>
 
         <div class="chips" id="chips" aria-label="Things to try"></div>
-
-        <form class="passcode" id="passcode-form" hidden>
-          <label for="passcode">Demo passcode</label>
-          <input id="passcode" type="password" autocomplete="off" />
-          <button type="submit">Save</button>
-        </form>
 
         <details open>
           <summary>MCP traffic <span class="hint">this page, as an MCP client of /mcp</span></summary>
