@@ -37,7 +37,7 @@ flowchart LR
     L["Account linking<br/>OAuth 2.1 + PKCE"]
     P["Sample household"]
   end
-  B["Claude on<br/>Amazon Bedrock"]
+  B["Claude<br/>Amazon Bedrock or the Claude API"]
   C["Corral's own MCP server<br/>the household's data and rules"]
   A -- "MCP, Streamable HTTP" --> M
   S -- "MCP, Streamable HTTP" --> M
@@ -73,18 +73,22 @@ The real Alexa+ developer tools (the MCP Toolkit, the `alexa-ai` CLI and the web
 [`/echo`](https://alexa-demo.corral.narralogy.ai/echo) stands in for Alexa+ on an Echo Show 8, as the FAQ invites: **the page is a real MCP client** of this server. It sends `initialize`, `tools/list`, `resources/read` and `tools/call` over Streamable HTTP, and shows every call in a live traffic log beside the device.
 
 - **Listening and speaking:** push-to-talk, or hands-free after "Alexa", with the browser's speech recognition and voices. Typing works everywhere.
-- **Deciding:** Claude on Amazon Bedrock (below) picks the tools and says the answer. The page runs the loop: it calls the tools Claude asks for, sends the results back together, and stops at an answer.
+- **Deciding:** Claude ([below](#the-simulators-model)) picks the tools and says the answer. The page runs the loop: it calls the tools Claude asks for, sends the results back together, and stops at an answer.
 - **Screens:** when a tool has an MCP Apps screen, the page renders it on the device as a host would, passes taps back through MCP, and tells Claude what was tapped.
 - **The light bar** shows listening, thinking and speaking; captions show what it heard and what it said.
 
-## AWS: Claude on Amazon Bedrock
+## The simulator's model
 
-The simulator's brain is **Claude Opus 5.5 on Amazon Bedrock** (`anthropic.claude-opus-5-5`), called from the Worker at `POST /echo/model`:
+The simulator's brain is **Claude Opus 5.5**, called from the Worker at `POST /echo/model` through the official Anthropic TypeScript SDK, from either of two places that speak the same Messages API:
 
-- **Endpoint and auth:** Bedrock's Messages API endpoint, `https://bedrock-mantle.{region}.api.aws/anthropic`, with a Bedrock API key as the bearer, through the official Anthropic TypeScript SDK. No AWS request signing is needed, which keeps it Workers-friendly. The key is a Worker secret and never reaches the browser.
+- **Amazon Bedrock** (`anthropic.claude-opus-5-5`): Bedrock's Messages API endpoint, `https://bedrock-mantle.{region}.api.aws/anthropic`, with a Bedrock API key (`BEDROCK_API_KEY`). No AWS request signing is needed, which keeps it Workers-friendly.
+- **The Claude API** (`claude-opus-5-5`) with `ANTHROPIC_API_KEY`, or any gateway that speaks its wire format at `ANTHROPIC_BASE_URL`.
+
+`MODEL_PROVIDER` (`bedrock` or `anthropic`) picks one; unset, it's whichever has a key, Bedrock first. The page names the one answering, and each reply in its log shows the model id. Keys are Worker secrets and never reach the browser.
+
 - **Prompt:** a fixed voice-assistant prompt plus the household Agent Skill, marked for prompt caching, then the household's time zone and the current time. Tools are the MCP server's own, as the page listed them.
 - **Speed:** low effort, for quick spoken replies.
-- **Resilience:** if the main model declines a request, the SDK's refusal-fallback middleware runs it again on Claude Opus 4.8.
+- **Resilience:** if the main model declines a request, the SDK's refusal-fallback middleware runs it again on Claude Opus 4.8 at the same place.
 - **Cost control:** a per-visitor rate limit (a Workers rate-limit binding), an optional demo passcode, and caps on conversation and tool-list size, so it can't be used as a free general chatbot.
 - `src/echo/model.ts` is the whole integration; `test/echo.test.ts` checks the request it sends.
 
@@ -125,7 +129,7 @@ pnpm dev
 
 That builds the screens and starts the Worker at `http://127.0.0.1:8795` with the sample household:
 
-- `/echo` is the simulated Echo Show. With no Bedrock key, run `pnpm dev --var MODEL_MOCK:true` to answer with a small practice model, or put `BEDROCK_API_KEY` in `.dev.vars`.
+- `/echo` is the simulated Echo Show. With no model key, run `pnpm dev --var MODEL_MOCK:true` to answer with a small practice model, or put `ANTHROPIC_API_KEY` or `BEDROCK_API_KEY` in `.dev.vars`.
 - `/mcp` is the MCP server; point any MCP client at it (for example `npx @modelcontextprotocol/inspector`).
 - `/preview` shows any screen in Echo Show 5, 8 and 15 and phone frames, light or dark.
 - `pnpm smoke [url]` talks to a running server the way Alexa+ does and prints timings.
@@ -139,7 +143,7 @@ Deploys always name an environment, so the sample household can never replace th
 | `pnpm ship` | `corral-alexa` | `https://alexa.corral.narralogy.ai` | A real Corral, after account linking |
 | `pnpm ship:demo` | `corral-alexa-demo` | `https://alexa-demo.corral.narralogy.ai` | The sample household, with `/echo` and `/preview` |
 
-The demo's simulator needs `BEDROCK_API_KEY` (and optionally `DEMO_PASSCODE`) as Worker secrets. To run your own, change the hostnames, `CORRAL_URL` and the KV id in `wrangler.jsonc`.
+The demo's simulator needs a model key as a Worker secret (`ANTHROPIC_API_KEY`, plus `ANTHROPIC_BASE_URL` for a gateway, or `BEDROCK_API_KEY`; `MODEL_PROVIDER` in `wrangler.jsonc` says which), and optionally `DEMO_PASSCODE`. To run your own, change the hostnames, `CORRAL_URL` and the KV id in `wrangler.jsonc`.
 
 ## Tests
 
@@ -154,7 +158,7 @@ Builds every page, typechecks (Worker and screens), and runs the tests:
 - every screen's resource;
 - the current protocol for up-to-date clients;
 - account linking end to end against a stand-in Corral (discovery, the hand-off to Corral's sign-in, code and token exchange, calls with the person's token, refresh, revoked access, a declined sign-in, a callback in another browser, an unknown redirect address, the admin route);
-- the simulator's model route (what it sends to Bedrock, the rate limit, the passcode, size caps).
+- the simulator's model route (what it sends to Bedrock and to the Claude API, which one it picks, the rate limit, the passcode, size caps).
 
 ## Layout
 
@@ -165,7 +169,7 @@ Builds every page, typechecks (Worker and screens), and runs the tests:
 | `src/household.ts`, `src/corral.ts`, `src/sample/` | The contract both households answer; a real Corral through its MCP server; the sample household |
 | `src/today.ts`, `src/screens.ts` | What each screen shows |
 | `src/link/` | Account linking: the OAuth provider, Corral as the sign-in, `/admin/clients` |
-| `src/echo/` | The simulator's model route (Claude on Bedrock) and the practice model |
+| `src/echo/` | The simulator's model route (Claude on Bedrock or the Claude API) and the practice model |
 | `widgets/` | The screens (MCP Apps), each built into one HTML file, on `widgets/shared` |
 | `echo/`, `preview/` | The simulated Echo Show and the screen preview |
 | `skills/corral-household/` | The Agent Skill |

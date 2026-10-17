@@ -59,6 +59,7 @@ describe("the simulated Echo Show", () => {
     });
     const res = await call({ BACKEND: "sample", BEDROCK_API_KEY: "bedrock-key", BEDROCK_REGION: "us-west-2" }, "/echo/model", turn([{ role: "user", content: "What's going on today?" }]));
     expect(res.status).toBe(200);
+    expect(res.headers.get("x-model-provider")).toBe("bedrock");
     expect(await res.json()).toMatchObject({ content: [{ type: "text", text: "Here's today." }] });
     const url = new URL(sent!.url);
     expect(url.origin + url.pathname).toBe("https://bedrock-mantle.us-west-2.api.aws/anthropic/v1/messages");
@@ -67,6 +68,33 @@ describe("the simulated Echo Show", () => {
     expect(sent!.body.system[0].text).toContain("Busy means private");
     expect(sent!.body.system[0].cache_control).toEqual({ type: "ephemeral" });
     expect(sent!.body.system[1].text).toContain("America/Denver");
+  });
+
+  it("asks the Claude API, or a gateway that speaks it, when that's the provider", async () => {
+    let sent: { url: string; headers: Headers; body: Record<string, any> } | undefined;
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      const req = new Request(input, init);
+      sent = { url: req.url, headers: req.headers, body: await req.json() };
+      return Response.json({ id: "msg_1", type: "message", role: "assistant", model: "claude-opus-5-5", content: [{ type: "text", text: "Here's today." }], stop_reason: "end_turn", stop_sequence: null, usage: { input_tokens: 10, output_tokens: 4 } });
+    });
+    const env: Env = { BACKEND: "sample", MODEL_PROVIDER: "anthropic", BEDROCK_API_KEY: "bedrock-key", ANTHROPIC_API_KEY: "gateway-key", ANTHROPIC_BASE_URL: "https://gateway.example" };
+    const res = await call(env, "/echo/model", turn([{ role: "user", content: "What's going on today?" }]));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-model-provider")).toBe("anthropic");
+    const url = new URL(sent!.url);
+    expect(url.origin + url.pathname).toBe("https://gateway.example/v1/messages");
+    expect(sent!.headers.get("x-api-key")).toBe("gateway-key");
+    expect(sent!.body).toMatchObject({ model: "claude-opus-5-5", output_config: { effort: "low" } });
+    expect(sent!.body.system[0].text).toContain("Busy means private");
+  });
+
+  it("uses whichever provider has a key, Bedrock first, and names it on the page", async () => {
+    const page = async (env: Env) => (await call({ BACKEND: "sample", ...env }, "/echo")).text();
+    expect(await page({ BEDROCK_API_KEY: "b", ANTHROPIC_API_KEY: "a" })).toContain("Claude on Amazon Bedrock decides what to do");
+    expect(await page({ ANTHROPIC_API_KEY: "a" })).toContain("Claude through the Claude API decides what to do");
+    expect(await page({ MODEL_PROVIDER: "anthropic", BEDROCK_API_KEY: "b" })).toContain("not set up on this server");
+    expect(await page({ MODEL_MOCK: "true" })).toContain("a practice model standing in for Claude");
+    expect(await page({})).not.toContain("{{model}}");
   });
 
   it("answers with the practice model when building without a key", async () => {

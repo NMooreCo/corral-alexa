@@ -4,20 +4,71 @@ import { json } from "../http.ts";
 import { skillPrompt } from "../server.ts";
 
 /**
- * The simulated Echo Show's brain: one Claude turn on Amazon Bedrock. The
- * page is the MCP client (it lists Corral's tools, calls them, and shows the
- * screens); this only asks Claude what to say or which tool to call next, so
- * the Bedrock key never leaves the server.
+ * The simulated Echo Show's brain: one Claude turn. The page is the MCP
+ * client (it lists Corral's tools, calls them, and shows the screens); this
+ * only asks Claude what to say or which tool to call next, so the model key
+ * never leaves the server.
  *
- * Claude in Amazon Bedrock serves the Messages API at
- * bedrock-mantle.{region}.api.aws/anthropic, which takes a Bedrock API key
- * as a bearer token, so the plain Anthropic SDK works here with no request
- * signing.
+ * Two places can answer, both speaking the Messages API through the plain
+ * Anthropic SDK:
+ *
+ * - Amazon Bedrock serves it at bedrock-mantle.{region}.api.aws/anthropic,
+ *   which takes a Bedrock API key as the key, so there's no request signing.
+ * - The Claude API itself, or anything that speaks its wire format (a model
+ *   gateway, say) at ANTHROPIC_BASE_URL.
+ *
+ * MODEL_PROVIDER picks one; unset, it's whichever has a key, Bedrock first.
  */
 
-const DEFAULT_MODEL = "anthropic.claude-opus-5-5";
-// If the main model ever declines, the same request runs again on this one.
-const FALLBACK_MODEL = "anthropic.claude-opus-4-8";
+interface Provider {
+  id: "bedrock" | "anthropic";
+  /** For people: "Bedrock didn't accept the simulator's key". */
+  name: string;
+  apiKey: string;
+  baseURL: string;
+  model: string;
+  // If the main model ever declines, the same request runs again on this one.
+  fallback: string;
+}
+
+function bedrock(env: Env): Provider | undefined {
+  if (!env.BEDROCK_API_KEY) return undefined;
+  return {
+    id: "bedrock",
+    name: "Bedrock",
+    apiKey: env.BEDROCK_API_KEY,
+    baseURL: `https://bedrock-mantle.${env.BEDROCK_REGION ?? "us-west-2"}.api.aws/anthropic`,
+    model: env.BEDROCK_MODEL ?? "anthropic.claude-opus-5-5",
+    fallback: "anthropic.claude-opus-4-8",
+  };
+}
+
+function anthropic(env: Env): Provider | undefined {
+  if (!env.ANTHROPIC_API_KEY) return undefined;
+  return {
+    id: "anthropic",
+    name: "The Claude API",
+    apiKey: env.ANTHROPIC_API_KEY,
+    baseURL: env.ANTHROPIC_BASE_URL ?? "https://api.anthropic.com",
+    model: env.ANTHROPIC_MODEL ?? "claude-opus-5-5",
+    fallback: "claude-opus-4-8",
+  };
+}
+
+export function modelProvider(env: Env): Provider | undefined {
+  if (env.MODEL_PROVIDER === "bedrock") return bedrock(env);
+  if (env.MODEL_PROVIDER === "anthropic") return anthropic(env);
+  return bedrock(env) ?? anthropic(env);
+}
+
+/** What the simulator's page says answers it, like "Claude on Amazon Bedrock". */
+export function modelPlace(env: Env): string {
+  if (env.MODEL_MOCK === "true") return "a practice model standing in for Claude";
+  const provider = modelProvider(env);
+  if (!provider) return "Claude (not set up on this server)";
+  return provider.id === "bedrock" ? "Claude on Amazon Bedrock" : "Claude through the Claude API";
+}
+
 const MAX_BODY = 300_000;
 const MAX_MESSAGES = 80;
 const MAX_TOOLS = 40;
@@ -58,7 +109,8 @@ function readTurn(raw: string): TurnRequest | string {
 }
 
 export async function modelTurn(request: Request, env: Env): Promise<Response> {
-  if (!env.BEDROCK_API_KEY) return json(503, { error: { code: "not_configured", message: "The simulator's model isn't set up on this server." } });
+  const provider = modelProvider(env);
+  if (!provider) return json(503, { error: { code: "not_configured", message: "The simulator's model isn't set up on this server." } });
   if (env.DEMO_PASSCODE && request.headers.get("x-demo-passcode") !== env.DEMO_PASSCODE) {
     return json(401, { error: { code: "passcode", message: "Enter the demo passcode to talk to the simulator." } });
   }
@@ -70,17 +122,16 @@ export async function modelTurn(request: Request, env: Env): Promise<Response> {
   const turn = readTurn(await request.text());
   if (typeof turn === "string") return json(400, { error: { code: "bad_request", message: turn } });
 
-  const region = env.BEDROCK_REGION ?? "us-west-2";
   const client = new Anthropic({
-    apiKey: env.BEDROCK_API_KEY,
-    baseURL: `https://bedrock-mantle.${region}.api.aws/anthropic`,
-    middleware: [betaRefusalFallbackMiddleware([{ model: FALLBACK_MODEL }])],
+    apiKey: provider.apiKey,
+    baseURL: provider.baseURL,
+    middleware: [betaRefusalFallbackMiddleware([{ model: provider.fallback }])],
     maxRetries: 1,
   });
   const ctx = turn.context ?? {};
   try {
     const message = await client.beta.messages.create({
-      model: env.BEDROCK_MODEL ?? DEFAULT_MODEL,
+      model: provider.model,
       max_tokens: 4096,
       // Spoken replies: low effort keeps the answer quick.
       output_config: { effort: "low" },
@@ -92,14 +143,14 @@ export async function modelTurn(request: Request, env: Env): Promise<Response> {
       tools: turn.tools,
       messages: turn.messages,
     });
-    return json(200, message);
+    return json(200, message, { "x-model-provider": provider.id });
   } catch (err) {
     if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
-      return json(502, { error: { code: "model_key", message: "Bedrock didn't accept the simulator's key or model access." } });
+      return json(502, { error: { code: "model_key", message: `${provider.name} didn't accept the simulator's key or model access.` } });
     }
-    if (err instanceof Anthropic.RateLimitError) return json(429, { error: { code: "rate_limited", message: "Bedrock is busy. Try again in a moment." } });
+    if (err instanceof Anthropic.RateLimitError) return json(429, { error: { code: "rate_limited", message: `${provider.name} is busy. Try again in a moment.` } });
     if (err instanceof Anthropic.BadRequestError) return json(400, { error: { code: "bad_request", message: err.message } });
-    if (err instanceof Anthropic.APIError) return json(502, { error: { code: "model_error", message: `Bedrock answered ${err.status ?? "with an error"}.` } });
+    if (err instanceof Anthropic.APIError) return json(502, { error: { code: "model_error", message: `${provider.name} answered ${err.status ?? "with an error"}.` } });
     throw err;
   }
 }

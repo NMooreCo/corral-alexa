@@ -12,7 +12,9 @@
     // "sample" answers from the built-in sample household; "corral" answers from a real Corral after account linking.
     "BACKEND": "sample",
     "CORRAL_URL": "https://corral.narralogy.ai",
-    // The simulated Echo Show's model; its key is the BEDROCK_API_KEY secret. Locally, MODEL_MOCK=true answers with a practice model.
+    // The simulated Echo Show's model: Claude on Bedrock (the BEDROCK_API_KEY secret) or the Claude API
+    // (ANTHROPIC_API_KEY, and ANTHROPIC_BASE_URL for a gateway that speaks it). MODEL_PROVIDER picks one;
+    // unset, whichever has a key, Bedrock first. Locally, MODEL_MOCK=true answers with a practice model.
     "BEDROCK_REGION": "us-west-2",
     "BEDROCK_MODEL": "anthropic.claude-opus-5-5"
   },
@@ -39,7 +41,7 @@
       "name": "corral-alexa-demo",
       "routes": [{ "pattern": "alexa-demo.corral.narralogy.ai", "custom_domain": true }],
       // No CORRAL_URL and no storage on purpose (Wrangler notes that they aren't inherited).
-      "vars": { "BACKEND": "sample", "BEDROCK_REGION": "us-west-2", "BEDROCK_MODEL": "anthropic.claude-opus-5-5" },
+      "vars": { "BACKEND": "sample", "MODEL_PROVIDER": "anthropic", "BEDROCK_REGION": "us-west-2", "BEDROCK_MODEL": "anthropic.claude-opus-5-5" },
       "kv_namespaces": [],
       "ratelimits": [{ "name": "MODEL_LIMIT", "namespace_id": "4202", "simple": { "limit": 20, "period": 60 } }],
       "observability": { "enabled": true }

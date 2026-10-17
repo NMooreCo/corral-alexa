@@ -6,8 +6,9 @@ import "./style.css";
 /**
  * A simulated Alexa+ on an Echo Show. This page is the MCP client: it
  * connects to the server's /mcp over Streamable HTTP, lists Corral's tools,
- * calls them, and renders their MCP Apps screens. Claude (on Amazon Bedrock,
- * through /echo/model) only decides what to say or which tool to call next.
+ * calls them, and renders their MCP Apps screens. Claude (on Amazon Bedrock or
+ * the Claude API, through /echo/model) only decides what to say or which tool
+ * to call next.
  */
 
 type Msg = Anthropic.Beta.BetaMessageParam;

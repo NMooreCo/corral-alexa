@@ -6,7 +6,7 @@ import { linkingProvider, protectedResource } from "./link/provider.ts";
 import { SampleHousehold } from "./sample/index.ts";
 import { echoHtml, previewHtml } from "./widgets.generated.ts";
 import { mockTurn } from "./echo/mock.ts";
-import { modelTurn } from "./echo/model.ts";
+import { modelPlace, modelTurn } from "./echo/model.ts";
 
 export type { Env };
 
@@ -62,7 +62,7 @@ export default {
     // The screen preview and the simulated Echo Show talk to /mcp from the browser, which the sample allows without a credential.
     const page = (html: string) => new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
     if (url.pathname === "/preview") return page(previewHtml);
-    if (url.pathname === "/echo" && request.method === "GET") return page(echoHtml);
+    if (url.pathname === "/echo" && request.method === "GET") return page(echoHtml.replaceAll("{{model}}", modelPlace(env)));
     if (url.pathname === "/echo/model" && request.method === "POST") return env.MODEL_MOCK === "true" ? mockTurn(request) : modelTurn(request, env);
     if (url.pathname === "/mcp") return serveMcp(request, sampleHousehold());
     return notFound();
