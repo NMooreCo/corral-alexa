@@ -4,7 +4,12 @@ import * as z from "zod/v4";
 import { UpstreamAuthError } from "./corral.ts";
 import { ToolError, type CorralTool, type Household } from "./household.ts";
 import { TODAY_URI, todayView } from "./today.ts";
-import { widgetHtml } from "./widgets.generated.ts";
+import { householdSkill, householdSkillTools, widgetHtml } from "./widgets.generated.ts";
+
+/** The household Agent Skill's guidance without its YAML header, as a prompt any MCP client can load. */
+export function skillPrompt(): string {
+  return `${householdSkill.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, "").trim()}\n\n${householdSkillTools.trim()}`;
+}
 
 export const SERVER_INFO = { name: "corral", title: "Corral", version: "0.1.0" };
 
@@ -154,6 +159,13 @@ export function buildServer(household: Household): McpServer {
     "refresh_today",
     { title: "Refresh today", description: "The Today screen's own refresh.", inputSchema: z.object({}), annotations: readOnly("Refresh today"), _meta: { ui: { resourceUri: TODAY_URI, visibility: ["app"] } } },
     today,
+  );
+
+  // The same guidance as skills/corral-household, for clients that load prompts.
+  server.registerPrompt(
+    "household-assistant",
+    { title: "Household assistant", description: "How to run a family's day through Corral's tools by voice: confirm changes, respect approvals, keep private events private, speak briefly." },
+    () => ({ description: "Corral household assistant", messages: [{ role: "user", content: { type: "text", text: skillPrompt() } }] }),
   );
 
   registerAppResource(server, "Today", TODAY_URI, { description: "Today at a glance, for screens like the Echo Show." }, async () => ({

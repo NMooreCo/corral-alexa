@@ -45,6 +45,17 @@ describe("serving Alexa+ (MCP 2025-11-25 over Streamable HTTP)", () => {
     expect(tools.find((t) => t.name === "complete_task")?.annotations?.readOnlyHint).toBe(false);
   });
 
+  it("offers the household Agent Skill as a prompt", async () => {
+    const list = await rpc(SAMPLE, "prompts/list");
+    expect(list.body!.result!.prompts.map((p: { name: string }) => p.name)).toEqual(["household-assistant"]);
+    const got = await rpc(SAMPLE, "prompts/get", { name: "household-assistant" });
+    const text = got.body!.result!.messages[0].content.text as string;
+    expect(text).toMatch(/^# Corral household assistant/);
+    expect(text).toContain("Busy means private");
+    expect(text).toContain("# Corral's tools");
+    expect(text).not.toContain("name: corral-household");
+  });
+
   it("serves the Today screen as one self-contained MCP Apps page", async () => {
     const { body } = await rpc(SAMPLE, "resources/read", { uri: TODAY_URI });
     const [page] = body!.result!.contents as { uri: string; mimeType: string; text: string }[];
