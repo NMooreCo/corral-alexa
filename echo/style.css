@@ -398,16 +398,16 @@ summary {
   font-weight: 700;
 }
 
-.who.assistant,
-.who.claude {
+.who[data-who="assistant"],
+.who[data-who="claude"] {
   color: var(--alexa);
 }
 
-.who.screen {
+.who[data-who="screen"] {
   color: var(--accent);
 }
 
-.who.page {
+.who[data-who="page"] {
   color: var(--muted);
 }
 

@@ -98,7 +98,9 @@ function addLog(list: HTMLElement, who: string, text: string, meta = "", tone = 
   time.className = "when";
   time.textContent = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" });
   const tag = document.createElement("span");
-  tag.className = `who ${who}`;
+  // A data attribute, not a class: a class named "screen" would pick up the device screen's styles.
+  tag.className = "who";
+  tag.dataset.who = who;
   tag.textContent = who;
   const body = document.createElement("span");
   body.className = "what";
