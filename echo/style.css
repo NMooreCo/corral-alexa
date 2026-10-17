@@ -307,13 +307,26 @@ footer button {
   border-color: var(--accent);
 }
 
+/* Over the device's screen, so it's in view at any size. */
 .passcode {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: rgb(5 8 7 / 0.72);
+}
+
+.passcode-card {
   display: grid;
   gap: 8px;
+  width: min(420px, 100%);
   padding: 14px;
   border-radius: 14px;
   background: var(--panel);
   border: 1px solid var(--alexa);
+  color: var(--ink);
 }
 
 .passcode label {

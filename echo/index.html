@@ -21,6 +21,16 @@
             </div>
             <div class="lightbar" id="lightbar" data-state="idle"></div>
           </div>
+          <form class="passcode" id="passcode-form" hidden>
+            <div class="passcode-card">
+              <label for="passcode">Demo passcode</label>
+              <div class="passcode-row">
+                <input id="passcode" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" />
+                <button type="submit">Save</button>
+              </div>
+              <p class="passcode-note" id="passcode-note"></p>
+            </div>
+          </form>
         </div>
         <p class="device-note">A simulated Alexa+ on an Echo Show 8. The page is a real MCP client of this server; {{model}} decides what to do.</p>
       </section>
@@ -30,15 +40,6 @@
           <h1>Corral for Alexa+</h1>
           <p class="lede">Ask about the Juniper Hollow household: the calendar, chores, lists, who's where, points and supplies. Tap the screen to check chores off.</p>
         </header>
-
-        <form class="passcode" id="passcode-form" hidden>
-          <label for="passcode">Demo passcode</label>
-          <div class="passcode-row">
-            <input id="passcode" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" />
-            <button type="submit">Save</button>
-          </div>
-          <p class="passcode-note" id="passcode-note"></p>
-        </form>
 
         <div class="talk">
           <button type="button" class="mic" id="mic" aria-pressed="false">
