@@ -64,6 +64,11 @@ class FakeCorral {
     }
     if (url.pathname === "/mcp") {
       this.mcpTokens.push(req.headers.get("authorization") ?? "");
+      const rpc = (await req.clone().json()) as { method?: string };
+      // What Corral's MCP server says about the household, read once for names and the time zone.
+      if (rpc.method === "server/discover") {
+        return Response.json({ jsonrpc: "2.0", id: 1, result: { resultType: "complete", instructions: "Corral runs the Test household: its calendar, chores and tasks. The household's time zone is America/Denver; it's now 2026-10-16T10:30-06:00[America/Denver]." } });
+      }
       if (this.mcpAnswer === "unauthorized") return new Response("", { status: 401 });
       if (this.mcpAnswer === "refused") return Response.json({ jsonrpc: "2.0", id: 1, result: { resultType: "complete", content: [{ type: "text", text: "This person can't see lists." }], isError: true } });
       return Response.json({ jsonrpc: "2.0", id: 1, result: { resultType: "complete", content: [{ type: "text", text: JSON.stringify(["Groceries"]) }], isError: false } });
@@ -195,7 +200,8 @@ describe("linking an Alexa account to Corral", () => {
     const res = await listTool(tokens.access_token);
     expect(res.status).toBe(200);
     expect(await res.text()).toContain("Groceries");
-    expect(corral.mcpTokens).toEqual(["Bearer corral-access-1"]);
+    expect(corral.mcpTokens.length).toBeGreaterThan(0);
+    expect(corral.mcpTokens.every((t) => t === "Bearer corral-access-1")).toBe(true);
   });
 
   it("says Corral's refusal back to the model, and asks to link again when Corral turns the token down", async () => {
@@ -294,6 +300,6 @@ describe("a Corral personal access token at /mcp", () => {
     expect((await listTool(pat)).status).toBe(401);
     env.ACCEPT_CORRAL_TOKENS = "true";
     expect((await listTool(pat)).status).toBe(200);
-    expect(corral.mcpTokens).toEqual([`Bearer ${pat}`]);
+    expect(corral.mcpTokens.every((t) => t === `Bearer ${pat}`)).toBe(true);
   });
 });

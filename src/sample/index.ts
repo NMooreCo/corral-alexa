@@ -25,6 +25,10 @@ export class SampleHousehold implements Household {
     return this.state.name;
   }
 
+  async about() {
+    return { name: this.state.name, timeZone: this.state.timeZone };
+  }
+
   async call(tool: CorralTool, args: Args): Promise<unknown> {
     switch (tool) {
       case "calendar":

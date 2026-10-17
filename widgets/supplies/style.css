@@ -1,0 +1,73 @@
+/* The supplies screen, on top of shared/base.css. */
+
+.supplies {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.supply {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--card);
+}
+
+.supply.low {
+  border-color: var(--late);
+  background: var(--late-soft);
+}
+
+.supply .top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.supply .title {
+  font-size: 1.15rem;
+  margin-right: auto;
+}
+
+.amount {
+  font-size: 1.8rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.bar {
+  height: 12px;
+  border-radius: 999px;
+  background: var(--busy);
+  overflow: hidden;
+}
+
+.bar span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--forest);
+}
+
+.supply.low .bar span {
+  background: var(--late);
+}
+
+.add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.add button {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--late);
+  background: var(--card);
+  color: var(--ink);
+  cursor: pointer;
+}

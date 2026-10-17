@@ -21,7 +21,13 @@ async function page(dir, outName) {
   return readFile(path.join(outDir, "index.html"), "utf8");
 }
 
-const names = (await readdir(path.join(root, "widgets"), { withFileTypes: true })).filter((d) => d.isDirectory()).map((d) => d.name).sort();
+// Every folder with an index.html is a screen; widgets/shared is code they share.
+const entries = await readdir(path.join(root, "widgets"), { withFileTypes: true });
+const names = [];
+for (const d of entries) {
+  if (d.isDirectory() && (await readFile(path.join(root, "widgets", d.name, "index.html")).catch(() => null))) names.push(d.name);
+}
+names.sort();
 const widgets = {};
 for (const name of names) widgets[name] = await page(path.join("widgets", name), path.join("widgets", name));
 const preview = await page("preview", "preview");

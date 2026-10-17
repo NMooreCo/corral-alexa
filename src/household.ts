@@ -29,10 +29,43 @@ export const CORRAL_TOOLS = [
 export type CorralTool = (typeof CORRAL_TOOLS)[number];
 
 export interface Household {
-  /** The household's name, when known, for screens. */
+  /** The household's name, when already known, for screens and the server's instructions. */
   readonly name?: string;
+  /** The household's name and time zone, looked up if need be. */
+  about(): Promise<HouseholdAbout>;
   /** Calls one of Corral's tools. Throws ToolError for an answer the model should hear and can act on. */
   call(tool: CorralTool, args: Record<string, unknown>): Promise<unknown>;
+}
+
+export interface HouseholdAbout {
+  name?: string;
+  /** An IANA zone, like "America/Denver". */
+  timeZone?: string;
+}
+
+/** A tracked supply as Corral's supplies tool says it. */
+export interface CorralSupply {
+  id: string;
+  name: string;
+  quantity: number;
+  unit: string;
+  /** Like "6 bags". */
+  onHand: string;
+  daysLeft?: number;
+  /** A date, like "2026-10-25". */
+  runsOut?: string;
+  /** Its unit changed since anyone counted it. */
+  needsFreshCount?: boolean;
+  low: boolean;
+  /** The list it's already on, if any. */
+  onList: string | null;
+}
+
+/** A list item as Corral's lists tool says it. */
+export interface CorralListItem {
+  text: string;
+  quantity: string | null;
+  waitingForApproval: boolean;
 }
 
 /** A refusal or a mistake in the call, said for the model (and through it, the person), like Corral's tool errors. */

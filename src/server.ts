@@ -2,7 +2,8 @@ import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from "@model
 import { McpServer, type CallToolResult } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
 import { UpstreamAuthError } from "./corral.ts";
-import { ToolError, type CorralTool, type Household } from "./household.ts";
+import { ToolError, type CorralTool, type Household, type HouseholdAbout } from "./household.ts";
+import { LIST_URI, SUPPLIES_URI, WEEK_URI, listView, suppliesView, weekView } from "./screens.ts";
 import { TODAY_URI, todayView } from "./today.ts";
 import { householdSkill, householdSkillTools, widgetHtml } from "./widgets.generated.ts";
 
@@ -93,12 +94,13 @@ const TOOLS: ToolDef[] = [
   },
 ];
 
-function instructions(household: Household): string {
+function instructions(about: HouseholdAbout): string {
   return [
-    `Corral runs ${household.name ? `the ${household.name} household` : "this household"}: its calendar, chores, lists, whereabouts, points and supplies.`,
+    `Corral runs ${about.name ? `the ${about.name} household` : "this household"}: its calendar, chores, lists, whereabouts, points and supplies.`,
+    ...(about.timeZone ? [`The household's time zone is ${about.timeZone}.`] : []),
     "Look things up with the read tools before changing anything, and use the ids they return.",
     "Changes happen right away, so confirm with the person first. Some changes go to a parent to approve instead; the answer says so and who.",
-    "Speak briefly: the next thing or two, not a whole list. When someone wants to see the day, use show_today.",
+    "Speak briefly: the next thing or two, not a whole list. To show something on a screen, use show_today, show_week, show_list or show_supplies.",
   ].join(" ");
 }
 
@@ -114,8 +116,8 @@ async function answer(run: () => Promise<unknown>): Promise<CallToolResult> {
 }
 
 /** One MCP server for one request, answering from `household`. */
-export function buildServer(household: Household): McpServer {
-  const server = new McpServer(SERVER_INFO, { instructions: instructions(household) });
+export async function buildServer(household: Household): Promise<McpServer> {
+  const server = new McpServer(SERVER_INFO, { instructions: instructions(await household.about()) });
 
   for (const t of TOOLS) {
     server.registerTool(
@@ -130,35 +132,66 @@ export function buildServer(household: Household): McpServer {
     );
   }
 
-  const today = async (): Promise<CallToolResult> => {
+  const readOnly = (title: string) => ({ title, readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+  /** A tool's answer as a screen's view: the JSON for the model and structuredContent for the screen. */
+  const asView = async (make: () => Promise<Record<string, unknown>>): Promise<CallToolResult> => {
     try {
-      const view = await todayView(household);
+      const view = await make();
       return { content: [{ type: "text", text: JSON.stringify(view) }], structuredContent: view };
     } catch (err) {
       return answer(() => Promise.reject(err));
     }
   };
-  const readOnly = (title: string) => ({ title, readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+  /** A screen: the tool that shows it and the MCP Apps page it shows. Every page is self-contained, so it reaches no other origin. */
+  const screen = (name: string, title: string, description: string, input: z.ZodObject, uri: string, html: string, make: (args: Record<string, unknown>) => Promise<Record<string, unknown>>) => {
+    registerAppTool(server, name, { title, description, inputSchema: input, annotations: readOnly(title), _meta: { ui: { resourceUri: uri } } }, (args: unknown) => asView(() => make((args ?? {}) as Record<string, unknown>)));
+    registerAppResource(server, title, uri, { description }, async () => ({
+      contents: [{ uri, mimeType: RESOURCE_MIME_TYPE, text: html, _meta: { ui: { csp: { connectDomains: [], resourceDomains: [] }, prefersBorder: false } } }],
+    }));
+  };
 
-  registerAppTool(
-    server,
+  screen(
     "show_today",
-    {
-      title: "Show today",
-      description: "Show today on the screen: the calendar, chores (tap one to check it off) and who's where. Use it when someone asks what's going on today or wants to see the day.",
-      inputSchema: z.object({}),
-      annotations: readOnly("Show today"),
-      _meta: { ui: { resourceUri: TODAY_URI } },
-    },
-    today,
+    "Show today",
+    "Show today on the screen: the calendar, chores (tap one to check it off) and who's where. Use it when someone asks what's going on today or wants to see the day.",
+    z.object({}),
+    TODAY_URI,
+    widgetHtml.today,
+    () => todayView(household),
   );
-
-  // The screen keeps itself current through this; only the screen calls it, so the assistant never sees it.
+  // The Today screen keeps itself current through this; only the screen calls it, so the assistant never sees it.
   registerAppTool(
     server,
     "refresh_today",
     { title: "Refresh today", description: "The Today screen's own refresh.", inputSchema: z.object({}), annotations: readOnly("Refresh today"), _meta: { ui: { resourceUri: TODAY_URI, visibility: ["app"] } } },
-    today,
+    () => asView(() => todayView(household)),
+  );
+  screen(
+    "show_list",
+    "Show a list",
+    "Show a shopping or to-do list on the screen (tap an item to check it off). Use it when someone wants to see a list, or after adding several things so they can see it.",
+    z.object({ list: z.string().describe("A list name; default the first list").optional() }),
+    LIST_URI,
+    widgetHtml.list,
+    (a) => listView(household, typeof a.list === "string" ? a.list : undefined),
+  );
+  screen(
+    "show_week",
+    "Show the week",
+    "Show seven days of the calendar on the screen, starting today or on a given date. Use it when someone asks about the week, the weekend or the days ahead.",
+    z.object({ from: date("default today").optional() }),
+    WEEK_URI,
+    widgetHtml.week,
+    (a) => weekView(household, typeof a.from === "string" ? a.from : undefined),
+  );
+  screen(
+    "show_supplies",
+    "Show supplies",
+    "Show tracked supplies on the screen (feed, hay, pet food and so on): how much is left, how many days that lasts, and what's low. Use it when someone asks about supplies or after a count.",
+    z.object({}),
+    SUPPLIES_URI,
+    widgetHtml.supplies,
+    () => suppliesView(household),
   );
 
   // The same guidance as skills/corral-household, for clients that load prompts.
@@ -167,11 +200,6 @@ export function buildServer(household: Household): McpServer {
     { title: "Household assistant", description: "How to run a family's day through Corral's tools by voice: confirm changes, respect approvals, keep private events private, speak briefly." },
     () => ({ description: "Corral household assistant", messages: [{ role: "user", content: { type: "text", text: skillPrompt() } }] }),
   );
-
-  registerAppResource(server, "Today", TODAY_URI, { description: "Today at a glance, for screens like the Echo Show." }, async () => ({
-    // Everything is inside the page, so it reaches nothing else.
-    contents: [{ uri: TODAY_URI, mimeType: RESOURCE_MIME_TYPE, text: widgetHtml.today, _meta: { ui: { csp: { connectDomains: [], resourceDomains: [] }, prefersBorder: false } } }],
-  }));
 
   return server;
 }

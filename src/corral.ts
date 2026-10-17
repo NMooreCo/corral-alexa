@@ -1,4 +1,8 @@
-import { ToolError, type CorralTool, type Household } from "./household.ts";
+import { ToolError, type CorralTool, type Household, type HouseholdAbout } from "./household.ts";
+
+/** What Corral's instructions said about each credential's household, for ten minutes. */
+const aboutCache = new Map<string, { at: number; about: HouseholdAbout }>();
+const ABOUT_TTL_MS = 10 * 60 * 1000;
 
 /** The protocol this bridge speaks to Corral: one POST per call, no handshake. */
 const UPSTREAM_VERSION = "2026-07-28";
@@ -34,7 +38,29 @@ export class CorralHousehold implements Household {
     this.#fetch = opts.fetch ?? ((input, init) => fetch(input, init));
   }
 
-  async call(tool: CorralTool, args: Record<string, unknown>): Promise<unknown> {
+  /** The household's name and time zone, from the instructions Corral's MCP server gives (cached briefly). */
+  get name(): string | undefined {
+    return aboutCache.get(this.#token)?.about.name;
+  }
+
+  async about(): Promise<HouseholdAbout> {
+    const kept = aboutCache.get(this.#token);
+    if (kept && Date.now() - kept.at < ABOUT_TTL_MS) return kept.about;
+    try {
+      const body = (await this.#rpc("server/discover", {})) as { result?: { instructions?: string } };
+      const text = body.result?.instructions ?? "";
+      const about: HouseholdAbout = {
+        name: /Corral runs the (.+?) household/.exec(text)?.[1],
+        timeZone: /time zone is ([A-Za-z_]+\/[A-Za-z_/+-]+)/.exec(text)?.[1],
+      };
+      aboutCache.set(this.#token, { at: Date.now(), about });
+      return about;
+    } catch {
+      return {};
+    }
+  }
+
+  async #rpc(method: string, params: Record<string, unknown>, name?: string): Promise<unknown> {
     const res = await this.#fetch(this.#url, {
       method: "POST",
       headers: {
@@ -42,16 +68,15 @@ export class CorralHousehold implements Household {
         "content-type": "application/json",
         accept: "application/json, text/event-stream",
         "mcp-protocol-version": UPSTREAM_VERSION,
-        "mcp-method": "tools/call",
-        "mcp-name": tool,
+        "mcp-method": method,
+        ...(name ? { "mcp-name": name } : {}),
       },
       body: JSON.stringify({
         jsonrpc: "2.0",
         id: ++this.#id,
-        method: "tools/call",
+        method,
         params: {
-          name: tool,
-          arguments: args,
+          ...params,
           _meta: {
             "io.modelcontextprotocol/protocolVersion": UPSTREAM_VERSION,
             "io.modelcontextprotocol/clientInfo": CLIENT_INFO,
@@ -62,7 +87,11 @@ export class CorralHousehold implements Household {
     });
     if (res.status === 401 || res.status === 403) throw new UpstreamAuthError("Corral didn't accept this connection's sign-in.");
     if (!res.ok) throw new ToolError("Corral didn't answer just now. Try again in a moment.");
-    const body = (await res.json()) as { result?: { content?: { type: string; text?: string }[]; isError?: boolean }; error?: { message?: string } };
+    return res.json();
+  }
+
+  async call(tool: CorralTool, args: Record<string, unknown>): Promise<unknown> {
+    const body = (await this.#rpc("tools/call", { name: tool, arguments: args }, tool)) as { result?: { content?: { type: string; text?: string }[]; isError?: boolean }; error?: { message?: string } };
     if (body.error) throw new ToolError(body.error.message ?? "Corral couldn't do that.");
     const text = body.result?.content?.find((c) => c.type === "text")?.text ?? "";
     if (body.result?.isError) throw new ToolError(text || "Corral couldn't do that.");

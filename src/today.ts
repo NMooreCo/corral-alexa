@@ -18,12 +18,13 @@ export type TodayView = {
  * whole screen.
  */
 export async function todayView(household: Household): Promise<TodayView> {
-  const [events, tasks, whereabouts] = await Promise.all([
+  const [about, events, tasks, whereabouts] = await Promise.all([
+    household.about(),
     part<CorralEvent[]>(household.call("calendar", {})),
     part<CorralTask[]>(household.call("tasks", { include_done: true })),
     part<CorralWhere[]>(household.call("whereabouts", {})),
   ]);
-  return { household: household.name ?? null, events, tasks, whereabouts };
+  return { household: about.name ?? null, events, tasks, whereabouts };
 }
 
 async function part<T extends unknown[]>(answer: Promise<unknown>): Promise<T> {

@@ -37,7 +37,7 @@ describe("serving Alexa+ (MCP 2025-11-25 over Streamable HTTP)", () => {
   it("lists Corral's tools and the Today screen tool, pointing at its screen", async () => {
     const { body } = await rpc(SAMPLE, "tools/list");
     const tools = body!.result!.tools as { name: string; annotations?: { readOnlyHint?: boolean }; _meta?: { ui?: { resourceUri?: string; visibility?: string[] } } }[];
-    expect(tools.map((t) => t.name).sort()).toEqual([...CORRAL_TOOLS, "show_today", "refresh_today"].sort());
+    expect(tools.map((t) => t.name).sort()).toEqual([...CORRAL_TOOLS, "show_today", "refresh_today", "show_list", "show_week", "show_supplies"].sort());
     expect(tools.find((t) => t.name === "show_today")?._meta?.ui?.resourceUri).toBe(TODAY_URI);
     // The screen's own refresh is the screen's alone: hosts keep it from the model.
     expect(tools.find((t) => t.name === "refresh_today")?._meta?.ui?.visibility).toEqual(["app"]);
@@ -68,6 +68,39 @@ describe("serving Alexa+ (MCP 2025-11-25 over Streamable HTTP)", () => {
     const { body } = await rpc(SAMPLE, "tools/call", { name: "show_today", arguments: {} });
     expect(body!.result!.structuredContent).toMatchObject({ household: "Juniper Hollow", events: expect.any(Array), tasks: expect.any(Array), whereabouts: expect.any(Array) });
     expect(body!.result!.structuredContent.whereabouts).toHaveLength(5);
+  });
+
+  it("gives every screen tool its own self-contained page", async () => {
+    const { body } = await rpc(SAMPLE, "tools/list");
+    const screens = (body!.result!.tools as { name: string; _meta?: { ui?: { resourceUri?: string; visibility?: string[] } } }[]).filter((t) => t._meta?.ui?.resourceUri && !t._meta.ui.visibility);
+    expect(screens.map((t) => t.name).sort()).toEqual(["show_list", "show_supplies", "show_today", "show_week"]);
+    for (const t of screens) {
+      const read = await rpc(SAMPLE, "resources/read", { uri: t._meta!.ui!.resourceUri });
+      const [page] = read.body!.result!.contents as { mimeType: string; text: string }[];
+      expect(page!.mimeType).toBe("text/html;profile=mcp-app");
+      expect(page!.text).toMatch(/^<!doctype html>/i);
+      expect(page!.text).not.toMatch(/<script[^>]+src=/);
+    }
+  });
+
+  it("shows a list, the week and supplies", async () => {
+    const list = (await rpc(SAMPLE, "tools/call", { name: "show_list", arguments: { list: "grocery" } })).body!.result!.structuredContent;
+    expect(list).toMatchObject({ household: "Juniper Hollow", list: "Groceries", lists: ["Groceries", "Feed store", "Hardware"] });
+    expect(list.items.length).toBeGreaterThan(0);
+
+    const week = (await rpc(SAMPLE, "tools/call", { name: "show_week", arguments: {} })).body!.result!.structuredContent;
+    expect(week.days).toHaveLength(7);
+    expect(week.from).toBe(week.today);
+    expect(week.days.flatMap((d: { events: unknown[] }) => d.events).length).toBeGreaterThan(0);
+
+    const supplies = (await rpc(SAMPLE, "tools/call", { name: "show_supplies", arguments: {} })).body!.result!.structuredContent;
+    expect(supplies.supplies.map((s: { name: string }) => s.name)).toContain("Horse feed");
+    expect(supplies.lists).toContain("Feed store");
+  });
+
+  it("names the household's time zone in its instructions", async () => {
+    const { body } = await rpc(SAMPLE, "initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "t", version: "1" } });
+    expect(body!.result!.instructions).toContain("The household's time zone is America/Denver.");
   });
 
   it("says Corral's refusal back to the model as a tool error", async () => {

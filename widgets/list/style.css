@@ -1,0 +1,33 @@
+/* The list screen, on top of shared/base.css. */
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.tabs button {
+  font: inherit;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.tabs button[aria-current="true"] {
+  background: var(--forest);
+  border-color: var(--forest);
+  color: var(--card);
+  font-weight: 700;
+}
+
+.items {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+
+.items .title {
+  font-size: 1.2rem;
+}

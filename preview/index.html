@@ -9,6 +9,7 @@
     <header class="bar">
       <strong>Corral screen preview</strong>
       <span class="note">An MCP Apps host in device-sized frames, talking to this server's /mcp. It stands in for Alexa+ while building.</span>
+      <label>Screen <select id="screen"></select></label>
       <label>Device
         <select id="device">
           <option value="1280x800">Echo Show 8 (1280 x 800)</option>
@@ -24,7 +25,7 @@
         </select>
       </label>
       <label><input id="actual" type="checkbox" /> Actual size</label>
-      <button id="reload" type="button">Show today again</button>
+      <button id="reload" type="button">Show it again</button>
     </header>
     <main>
       <div id="stage"><div id="frame"></div></div>
