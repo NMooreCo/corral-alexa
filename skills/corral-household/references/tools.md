@@ -33,3 +33,6 @@ The same names, arguments and answers as Corral's own MCP server. Answers are JS
 | Tool | Shows |
 |---|---|
 | `show_today` | The Today screen: calendar with what's on now and next, chores to tap off, who's where. It keeps itself current. |
+| `show_week` | Seven days of the calendar (`from`, default today), today marked, who's driving. |
+| `show_list` | One list (`list`, default the first) with items to tap off and the other lists to switch to. |
+| `show_supplies` | Each supply's amount, days left and whether it's low; a low one goes on a list in one tap. |
