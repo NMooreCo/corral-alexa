@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Corral for Alexa+: simulated Echo Show</title>
+  </head>
+  <body>
+    <div class="layout">
+      <section class="stage" aria-label="Simulated Echo Show">
+        <div class="device" id="device">
+          <div class="screen" id="screen">
+            <div class="idle" id="idle">
+              <div class="idle-clock" id="idle-clock"></div>
+              <div class="idle-hint">Try "Alexa, what's going on today?"</div>
+            </div>
+            <div class="app-host" id="app-host"></div>
+            <div class="caption" id="caption" hidden>
+              <p class="heard" id="heard"></p>
+              <p class="said" id="said"></p>
+            </div>
+            <div class="lightbar" id="lightbar" data-state="idle"></div>
+          </div>
+        </div>
+        <p class="device-note">A simulated Alexa+ on an Echo Show 8. The page is a real MCP client of this server; Claude on Amazon Bedrock decides what to do.</p>
+      </section>
+
+      <aside class="panel">
+        <header>
+          <h1>Corral for Alexa+</h1>
+          <p class="lede">Ask about the Juniper Hollow household: the calendar, chores, lists, who's where, points and supplies. Tap the screen to check chores off.</p>
+        </header>
+
+        <div class="talk">
+          <button type="button" class="mic" id="mic" aria-pressed="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z" /></svg>
+            <span id="mic-label">Talk</span>
+          </button>
+          <form class="ask" id="ask-form">
+            <input id="ask-input" type="text" placeholder="Or type what you'd say" autocomplete="off" aria-label="What you'd say" />
+            <button type="submit">Ask</button>
+          </form>
+          <label class="toggle"><input type="checkbox" id="handsfree" /> Hands-free: start with "Alexa"</label>
+          <p class="note" id="voice-note"></p>
+        </div>
+
+        <div class="chips" id="chips" aria-label="Things to try"></div>
+
+        <form class="passcode" id="passcode-form" hidden>
+          <label for="passcode">Demo passcode</label>
+          <input id="passcode" type="password" autocomplete="off" />
+          <button type="submit">Save</button>
+        </form>
+
+        <details open>
+          <summary>MCP traffic <span class="hint">this page, as an MCP client of /mcp</span></summary>
+          <ol class="log" id="mcp-log"></ol>
+        </details>
+        <details open>
+          <summary>Assistant <span class="hint">Claude on Amazon Bedrock</span></summary>
+          <ol class="log" id="model-log"></ol>
+        </details>
+
+        <footer>
+          <button type="button" id="reset">New conversation</button>
+          <label>Screen <select id="theme"><option value="dark">Dark</option><option value="light">Light</option></select></label>
+        </footer>
+      </aside>
+    </div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

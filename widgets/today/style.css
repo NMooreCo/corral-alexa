@@ -48,7 +48,6 @@ body {
 }
 
 [data-display="fullscreen"] main {
-  min-height: 100vh;
   padding: 28px 32px;
 }
 

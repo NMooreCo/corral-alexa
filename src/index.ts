@@ -4,7 +4,9 @@ import type { Env } from "./env.ts";
 import { json, notFound, serveMcp, siteRoute } from "./http.ts";
 import { linkingProvider, protectedResource } from "./link/provider.ts";
 import { SampleHousehold } from "./sample/index.ts";
-import { previewHtml } from "./widgets.generated.ts";
+import { echoHtml, previewHtml } from "./widgets.generated.ts";
+import { mockTurn } from "./echo/mock.ts";
+import { modelTurn } from "./echo/model.ts";
 
 export type { Env };
 
@@ -57,8 +59,11 @@ export default {
     // The sample needs no account and no linking.
     const site = siteRoute(request, "sample");
     if (site) return site;
-    // The screen preview talks to /mcp from the browser, which the sample allows without a credential.
-    if (url.pathname === "/preview") return new Response(previewHtml, { headers: { "content-type": "text/html; charset=utf-8" } });
+    // The screen preview and the simulated Echo Show talk to /mcp from the browser, which the sample allows without a credential.
+    const page = (html: string) => new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
+    if (url.pathname === "/preview") return page(previewHtml);
+    if (url.pathname === "/echo" && request.method === "GET") return page(echoHtml);
+    if (url.pathname === "/echo/model" && request.method === "POST") return env.MODEL_MOCK === "true" ? mockTurn(request) : modelTurn(request, env);
     if (url.pathname === "/mcp") return serveMcp(request, sampleHousehold());
     return notFound();
   },

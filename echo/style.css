@@ -1,0 +1,401 @@
+:root {
+  --bg: #0d1110;
+  --panel: #151b19;
+  --panel-2: #1c2421;
+  --ink: #eef2ee;
+  --muted: #9aa6a0;
+  --line: #2a3430;
+  --accent: #8cc4a3;
+  --alexa: #2fd4ff;
+  --bad: #f2a65a;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 400px;
+  gap: 24px;
+  padding: 24px;
+  min-height: 100vh;
+}
+
+@media (max-width: 1100px) {
+  .layout {
+    grid-template-columns: 1fr;
+    padding: 16px;
+  }
+}
+
+/* ---------- The device ---------- */
+
+.stage {
+  min-width: 0;
+}
+
+.device {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 22px;
+  background: #050606;
+  box-shadow: 0 0 0 14px #1d1f1f, 0 0 0 15px #2c2f2f, 0 30px 80px rgb(0 0 0 / 0.55);
+}
+
+.screen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1280px;
+  height: 800px;
+  transform-origin: top left;
+  overflow: hidden;
+  background: #0b0f0d;
+}
+
+.idle {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  gap: 12px;
+  background: radial-gradient(ellipse at 30% 20%, #1b2a24, #0b0f0d 70%);
+}
+
+.idle-clock {
+  font-size: 140px;
+  font-weight: 300;
+  letter-spacing: -2px;
+}
+
+.idle-hint {
+  font-size: 30px;
+  color: var(--muted);
+}
+
+.app-host,
+.app-host iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 80px 56px 44px;
+  background: linear-gradient(transparent, rgb(5 8 7 / 0.92) 45%);
+  pointer-events: none;
+}
+
+.caption p {
+  margin: 0;
+}
+
+.heard {
+  font-size: 26px;
+  color: #b9c4be;
+}
+
+.said {
+  margin-top: 8px !important;
+  font-size: 40px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: #fff;
+}
+
+/* The light bar along the bottom edge: cyan while listening, moving while thinking, glowing while speaking. */
+.lightbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 10px;
+  opacity: 0;
+  transition: opacity 0.25s;
+  background: var(--alexa);
+}
+
+.lightbar[data-state="listening"] {
+  opacity: 1;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.lightbar[data-state="thinking"] {
+  opacity: 1;
+  background: linear-gradient(90deg, #0a3b4a, var(--alexa), #0a3b4a);
+  background-size: 50% 100%;
+  animation: sweep 1s linear infinite;
+}
+
+.lightbar[data-state="speaking"] {
+  opacity: 1;
+  box-shadow: 0 0 24px var(--alexa);
+  animation: pulse 0.7s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    filter: brightness(0.55);
+  }
+}
+
+@keyframes sweep {
+  to {
+    background-position: 200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lightbar {
+    animation: none !important;
+  }
+}
+
+.device-note {
+  margin: 28px 4px 0;
+  color: var(--muted);
+}
+
+/* ---------- The panel ---------- */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+h1 {
+  margin: 0 0 4px;
+  font-size: 1.35rem;
+}
+
+.lede {
+  margin: 0;
+  color: var(--muted);
+}
+
+.talk {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+
+.mic {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 52px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--alexa);
+  color: #00222c;
+  font: inherit;
+  font-weight: 700;
+  font-size: 1.05rem;
+  cursor: pointer;
+}
+
+.mic svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+}
+
+.mic[aria-pressed="true"] {
+  box-shadow: 0 0 0 4px rgb(47 212 255 / 0.35);
+}
+
+.mic:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.ask {
+  display: flex;
+  gap: 8px;
+}
+
+.ask input,
+.passcode input,
+select {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink);
+  font: inherit;
+}
+
+button {
+  font: inherit;
+}
+
+.ask button,
+.passcode button,
+footer button {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.toggle {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+}
+
+.note {
+  margin: 0;
+  color: var(--bad);
+}
+
+.note:empty {
+  display: none;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chips button {
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.chips button:hover,
+.chips button:focus-visible {
+  border-color: var(--accent);
+}
+
+.passcode {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+details {
+  border-radius: 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  padding: 10px 12px;
+}
+
+summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.hint {
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-left: 6px;
+}
+
+.log {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  max-height: 260px;
+  overflow: auto;
+  font: 12.5px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.log li {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 2px 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.log li.bad {
+  outline: 1px solid var(--bad);
+}
+
+.log .when {
+  color: var(--muted);
+}
+
+.log .who {
+  font-weight: 700;
+}
+
+.who.assistant,
+.who.claude {
+  color: var(--alexa);
+}
+
+.who.screen {
+  color: var(--accent);
+}
+
+.who.page {
+  color: var(--muted);
+}
+
+.log .what {
+  overflow-wrap: anywhere;
+}
+
+.log .meta {
+  grid-column: 1 / -1;
+  color: var(--muted);
+}
+
+footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+}
+
+footer label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}

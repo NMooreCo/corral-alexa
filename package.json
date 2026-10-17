@@ -18,6 +18,7 @@
     "ship:demo": "pnpm build:widgets && wrangler deploy --env demo"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
     "@cloudflare/workers-oauth-provider": "1.2.3",
     "@modelcontextprotocol/core": "2.3.1",
     "@modelcontextprotocol/ext-apps": "2.0.3",

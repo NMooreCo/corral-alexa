@@ -330,8 +330,18 @@ export class SampleHousehold implements Household {
   }
 
   private list(said: string) {
-    const s = said.trim().toLowerCase();
-    const list = this.state.lists.find((l) => l.name.toLowerCase() === s) ?? this.state.lists.find((l) => l.name.toLowerCase().includes(s) || s.includes(l.name.toLowerCase()));
+    // "grocery", "the groceries list" and "Groceries" are all the same list.
+    const plain = (v: string) =>
+      v
+        .toLowerCase()
+        .replace(/\b(the|list)\b/g, "")
+        .replace(/[^a-z ]/g, "")
+        .trim()
+        .split(/\s+/)
+        .map((w) => w.replace(/ies$/, "y").replace(/s$/, ""))
+        .join(" ");
+    const s = plain(said);
+    const list = this.state.lists.find((l) => plain(l.name) === s) ?? this.state.lists.find((l) => s && (plain(l.name).includes(s) || s.includes(plain(l.name))));
     if (!list) throw new ToolError(`There's no list called "${said}". Lists: ${this.state.lists.map((l) => l.name).join(", ")}.`);
     return list;
   }

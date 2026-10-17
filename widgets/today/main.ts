@@ -48,7 +48,8 @@ function applyContext(ctx: McpUiHostContext | undefined) {
   render();
 }
 
-const canFullscreen = () => context?.availableDisplayModes?.includes("fullscreen") ?? false;
+// Offered only where the host can switch both ways; a host that's always full screen needs no button.
+const canFullscreen = () => (context?.availableDisplayModes?.includes("fullscreen") && context.availableDisplayModes.includes("inline")) ?? false;
 const isFullscreen = () => context?.displayMode === "fullscreen";
 
 async function toggleFullscreen() {

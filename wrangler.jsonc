@@ -11,10 +11,15 @@
   "vars": {
     // "sample" answers from the built-in sample household; "corral" answers from a real Corral after account linking.
     "BACKEND": "sample",
-    "CORRAL_URL": "https://corral.narralogy.ai"
+    "CORRAL_URL": "https://corral.narralogy.ai",
+    // The simulated Echo Show's model; its key is the BEDROCK_API_KEY secret. Locally, MODEL_MOCK=true answers with a practice model.
+    "BEDROCK_REGION": "us-west-2",
+    "BEDROCK_MODEL": "anthropic.claude-opus-5-5"
   },
   // Account linking's grants and clients, simulated locally by `wrangler dev`.
   "kv_namespaces": [{ "binding": "OAUTH_KV" }],
+  // At most 20 simulator model calls a minute per visitor.
+  "ratelimits": [{ "name": "MODEL_LIMIT", "namespace_id": "4201", "simple": { "limit": 20, "period": 60 } }],
   "dev": { "port": 8795 },
   "env": {
     // Linked to Corral: account linking in front, every call made with the person's own Corral token.
@@ -29,13 +34,14 @@
       "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "2873e0d58fb5483183130ef91bd17ba8" }],
       "observability": { "enabled": true }
     },
-    // The sample household, open to anyone, with /preview: for judges and demos, never any real household's data.
+    // The sample household, open to anyone, with /preview and the simulated Echo Show at /echo: for judges and demos, never any real household's data.
     "demo": {
       "name": "corral-alexa-demo",
       "routes": [{ "pattern": "alexa-demo.corral.narralogy.ai", "custom_domain": true }],
       // No CORRAL_URL and no storage on purpose (Wrangler notes that they aren't inherited).
-      "vars": { "BACKEND": "sample" },
+      "vars": { "BACKEND": "sample", "BEDROCK_REGION": "us-west-2", "BEDROCK_MODEL": "anthropic.claude-opus-5-5" },
       "kv_namespaces": [],
+      "ratelimits": [{ "name": "MODEL_LIMIT", "namespace_id": "4202", "simple": { "limit": 20, "period": 60 } }],
       "observability": { "enabled": true }
     }
   }

@@ -125,6 +125,15 @@ describe("the sample household's lists and supplies", () => {
     expect(groceries.items.find((i) => i.text === "Ice cream")?.waitingForApproval).toBe(true);
   });
 
+  it("knows a list however it's said", async () => {
+    const h = household();
+    for (const said of ["grocery", "the grocery list", "Groceries", "groceries list"]) {
+      expect(await h.call("lists", { list: said })).toMatchObject({ list: "Groceries" });
+    }
+    expect(await h.call("lists", { list: "feed" })).toMatchObject({ list: "Feed store" });
+    await expect(h.call("lists", { list: "camping" })).rejects.toThrow(/no list called "camping"/);
+  });
+
   it("adds to a list and checks an item off by its words", async () => {
     const h = household();
     expect(await h.call("add_list_item", { list: "Groceries", text: "eggs", quantity: "a dozen" })).toEqual({ status: "done", summary: "Added eggs to Groceries" });
