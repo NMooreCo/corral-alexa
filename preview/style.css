@@ -80,11 +80,29 @@ main {
   box-shadow: 0 0 0 10px #111, 0 10px 40px rgb(0 0 0 / 0.35);
 }
 
+#frame {
+  display: flex;
+  flex-direction: column;
+  background: #0b0f0d;
+}
+
 #frame iframe {
   width: 100%;
-  height: 100%;
+  flex: 1;
   border: 0;
   display: block;
+}
+
+/* Inline: the assistant's words above the screen, as in a conversation. */
+#frame .said {
+  margin: 0;
+  padding: 14px 20px;
+  color: #eef2ee;
+  font-size: 22px;
+}
+
+#frame.fullscreen .said {
+  display: none;
 }
 
 aside {

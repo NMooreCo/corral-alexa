@@ -24,6 +24,8 @@ const resource = await client.readResource({ uri });
 const html = (resource.contents[0] as { text: string }).text;
 
 let bridge: AppBridge | null = null;
+/** Inline sits under a strip where the assistant's words would be; full screen is the whole display. */
+let displayMode: "inline" | "fullscreen" = "inline";
 
 function size(): { width: number; height: number } {
   const [width, height] = deviceEl.value.split("x").map(Number) as [number, number];
@@ -34,7 +36,8 @@ function context() {
   const { width, height } = size();
   return {
     theme: themeEl.value as "light" | "dark",
-    displayMode: "inline" as const,
+    displayMode,
+    availableDisplayModes: ["inline" as const, "fullscreen" as const],
     containerDimensions: { width, height },
     platform: "web" as const,
     locale: "en-US",
@@ -59,12 +62,22 @@ async function mount() {
   const iframe = document.createElement("iframe");
   iframe.title = "Today";
   iframe.setAttribute("sandbox", "allow-scripts");
-  frameEl.append(iframe);
+  const strip = document.createElement("p");
+  strip.className = "said";
+  strip.textContent = "Here's today.";
+  frameEl.append(strip, iframe);
+  frameEl.classList.toggle("fullscreen", displayMode === "fullscreen");
   bridge = new AppBridge(client, { name: "Corral preview", version: "0.1.0" }, { serverTools: {}, logging: {}, updateModelContext: { text: {} } }, { hostContext: context() });
   bridge.oninitialized = async () => {
     const result = await client.callTool({ name: "show_today", arguments: {} });
     await bridge!.sendToolInput({ arguments: {} });
     await bridge!.sendToolResult(result as Parameters<AppBridge["sendToolResult"]>[0]);
+  };
+  bridge.onrequestdisplaymode = async ({ mode }) => {
+    if (mode === "inline" || mode === "fullscreen") displayMode = mode;
+    frameEl.classList.toggle("fullscreen", displayMode === "fullscreen");
+    void bridge?.sendHostContextChange({ displayMode });
+    return { mode: displayMode };
   };
   bridge.onupdatemodelcontext = async (params) => {
     for (const c of params.content ?? []) {

@@ -1,37 +1,63 @@
-import { App, applyDocumentTheme, applyHostStyleVariables, type McpUiHostContext } from "@modelcontextprotocol/ext-apps";
+import { App, applyDocumentTheme, applyHostFonts, applyHostStyleVariables, type McpUiHostContext } from "@modelcontextprotocol/ext-apps";
 import type { CallToolResult } from "@modelcontextprotocol/server";
-import type { CorralTask, CorralWhere } from "../../src/household.ts";
+import type { CorralEvent, CorralTask, CorralWhere } from "../../src/household.ts";
 import type { TodayView } from "../../src/today.ts";
 import "./style.css";
 
 /**
  * The Today screen: today's calendar, chores and who's where, sized to read
- * from across a kitchen. Tapping a chore checks it off (or back on) through
- * the same Corral tools the assistant uses, so Corral's rules still apply.
+ * from across a kitchen. It keeps itself current (a refresh every minute
+ * while it's on screen), marks what's on now and next, and checks chores off
+ * through the same Corral tools the assistant uses, so Corral's rules still
+ * apply and the assistant hears what happened.
  */
 
-const app = new App({ name: "Corral Today", version: "0.1.0" });
+const REFRESH_MS = 60_000;
+const app = new App({ name: "Corral Today", version: "0.2.0" });
 const root = document.getElementById("app")!;
 const toastEl = document.getElementById("toast")!;
 let view: TodayView | null = null;
-let timeZone: string | undefined;
+let context: McpUiHostContext | undefined;
 const pending = new Set<string>();
+let visible = true;
 
 app.ontoolresult = (result) => show(result as CallToolResult);
-app.onhostcontextchanged = (ctx) => applyContext(ctx);
+app.onhostcontextchanged = (ctx) => applyContext({ ...context, ...ctx });
+app.onteardown = async () => {
+  clearInterval(refreshTimer);
+  clearInterval(clockTimer);
+  observer.disconnect();
+  return {};
+};
 await app.connect();
 applyContext(app.getHostContext());
 
+// ---------- Host ----------
+
 function applyContext(ctx: McpUiHostContext | undefined) {
   if (!ctx) return;
+  context = ctx;
   if (ctx.theme) applyDocumentTheme(ctx.theme);
   if (ctx.styles?.variables) applyHostStyleVariables(ctx.styles.variables);
-  if (ctx.timeZone) timeZone = ctx.timeZone;
+  if (ctx.styles?.css?.fonts) applyHostFonts(ctx.styles.css.fonts);
+  document.documentElement.dataset.display = ctx.displayMode ?? "inline";
   if (ctx.safeAreaInsets) {
     const { top, right, bottom, left } = ctx.safeAreaInsets;
     document.body.style.padding = `${top}px ${right}px ${bottom}px ${left}px`;
   }
   render();
+}
+
+const canFullscreen = () => context?.availableDisplayModes?.includes("fullscreen") ?? false;
+const isFullscreen = () => context?.displayMode === "fullscreen";
+
+async function toggleFullscreen() {
+  try {
+    const { mode } = await app.requestDisplayMode({ mode: isFullscreen() ? "inline" : "fullscreen" });
+    applyContext({ ...context, displayMode: mode });
+  } catch {
+    toast("This screen can't change size here.");
+  }
 }
 
 function show(result: CallToolResult) {
@@ -42,11 +68,38 @@ function show(result: CallToolResult) {
   }
 }
 
-// ---------- Words ----------
+// ---------- Staying current ----------
+
+/** The screen's own refresh, through a tool only it can call (the assistant never sees it). */
+async function refresh() {
+  try {
+    show(await app.callServerTool({ name: "refresh_today", arguments: {} }));
+  } catch {
+    render();
+  }
+}
+
+const refreshTimer = setInterval(() => {
+  if (visible && document.visibilityState === "visible") void refresh();
+}, REFRESH_MS);
+// The clock and "now" move even between refreshes.
+const clockTimer = setInterval(() => visible && render(), 15_000);
+// Scrolled out of a conversation or hidden: stop asking; back in view: catch up at once.
+const observer = new IntersectionObserver(([entry]) => {
+  const was = visible;
+  visible = entry?.isIntersecting ?? true;
+  if (visible && !was) void refresh();
+});
+observer.observe(root);
+document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && void refresh());
+
+// ---------- Words and time ----------
+
+const timeZone = () => context?.timeZone;
 
 /** Corral says times like "Fri, Oct 16, 3:30 PM"; today's own date is left off. */
 function todayLabel(): string {
-  return new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone });
+  return new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: timeZone() });
 }
 
 function withoutToday(label: string): string {
@@ -56,8 +109,38 @@ function withoutToday(label: string): string {
 }
 
 function eventTime(when: string): string {
-  if (when.endsWith("(all day)")) return "All day";
-  return withoutToday(when);
+  return when.endsWith("(all day)") ? "All day" : withoutToday(when);
+}
+
+/** Minutes after midnight for "3:30 PM", or null. */
+function minutesOf(clock: string | undefined): number | null {
+  const m = /^(\d{1,2}):(\d{2}) (AM|PM)$/.exec(clock?.trim() ?? "");
+  if (!m) return null;
+  return ((Number(m[1]) % 12) + (m[3] === "PM" ? 12 : 0)) * 60 + Number(m[2]);
+}
+
+function nowMinutes(): number {
+  const parts = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", hour12: false, timeZone: timeZone() }).formatToParts(new Date());
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
+  return (get("hour") % 24) * 60 + get("minute");
+}
+
+/** Which of today's timed events is on now, and which is next. */
+function nowAndNext(events: CorralEvent[]): { now: Set<CorralEvent>; next: CorralEvent | null } {
+  const now = new Set<CorralEvent>();
+  let next: CorralEvent | null = null;
+  const t = nowMinutes();
+  for (const e of events) {
+    const label = eventTime(e.when);
+    if (label === "All day" || label.includes(",")) continue;
+    const [from, to] = label.split(" to ");
+    const start = minutesOf(from);
+    const end = minutesOf(to);
+    if (start === null || end === null) continue;
+    if (start <= t && t < end) now.add(e);
+    else if (start > t && !next) next = e;
+  }
+  return { now, next };
 }
 
 function firstName(name: string): string {
@@ -84,11 +167,20 @@ function escape(s: string): string {
 function render() {
   if (!view) return;
   const left = view.tasks.filter((t) => t.status !== "done" && t.status !== "skipped").length;
-  const date = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone });
+  const late = view.tasks.filter((t) => t.status === "overdue").length;
+  const date = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: timeZone() });
+  const clock = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: timeZone() });
+  const { now, next } = nowAndNext(view.events);
   root.innerHTML = `
     <header>
-      <h1>${escape(date)}</h1>
-      ${view.household ? `<p class="household">${escape(view.household)}</p>` : ""}
+      <div>
+        <h1>${escape(date)}</h1>
+        ${view.household ? `<p class="household">${escape(view.household)}</p>` : ""}
+      </div>
+      <div class="header-end">
+        <span class="clock" aria-label="Time">${escape(clock)}</span>
+        ${canFullscreen() ? `<button type="button" class="size" data-action="fullscreen">${isFullscreen() ? "Exit full screen" : "Full screen"}</button>` : ""}
+      </div>
     </header>
     <div class="columns">
       <section aria-labelledby="h-cal">
@@ -100,18 +192,19 @@ function render() {
                   const busy = !e.event;
                   // "Maya, Leo, Alex drives": whoever drives is named once, as the driver.
                   const line = [...e.people.filter((p) => !e.drivers.includes(p)).map(firstName), ...e.drivers.map((d) => `${firstName(d)} drives`)].join(", ");
-                  return `<li class="${busy ? "busy" : ""}">
-                    <span class="time">${escape(eventTime(e.when))}</span>
+                  const badge = now.has(e) ? `<span class="badge now">Now</span>` : e === next ? `<span class="badge next">Next</span>` : "";
+                  return `<li class="${busy ? "busy" : ""}${now.has(e) ? " is-now" : ""}">
+                    <span class="time">${escape(eventTime(e.when))}${badge}</span>
                     <span class="title">${escape(busy ? "Busy" : e.title)}</span>
                     ${line || e.location ? `<span class="meta">${escape([line, e.location].filter(Boolean).join(" · "))}</span>` : ""}
                   </li>`;
                 })
                 .join("")}</ol>`
-            : `<p class="empty">Nothing on the calendar.</p>`
+            : `<p class="empty">Nothing on the calendar today.</p>`
         }
       </section>
       <section aria-labelledby="h-chores">
-        <h2 id="h-chores">Chores <span class="count">${left ? `${left} left` : "all done"}</span></h2>
+        <h2 id="h-chores">Chores <span class="count">${left ? `${left} left${late ? `, ${late} late` : ""}` : "all done"}</span></h2>
         ${
           view.tasks.length
             ? `<ul class="chores">${view.tasks
@@ -139,10 +232,12 @@ function render() {
     </div>`;
 }
 
-// ---------- Checking off ----------
+// ---------- Tapping ----------
 
 root.addEventListener("click", (e) => {
-  const button = (e.target as HTMLElement).closest<HTMLButtonElement>("button[data-task]");
+  const target = e.target as HTMLElement;
+  if (target.closest("[data-action=fullscreen]")) return void toggleFullscreen();
+  const button = target.closest<HTMLButtonElement>("button[data-task]");
   if (button?.dataset.task) void toggle(button.dataset.task);
 });
 
@@ -159,22 +254,16 @@ async function toggle(id: string) {
     const said = res.content?.find((c) => c.type === "text");
     const text = said && "text" in said ? said.text : "";
     if (res.isError) throw new Error(text || "That didn't work.");
-    const summary = (JSON.parse(text) as { summary?: string }).summary;
+    const summary = (JSON.parse(text) as { summary?: string }).summary ?? t.title;
     // Tell the assistant, so "who did the eggs?" right after has the answer.
-    void app.updateModelContext({ content: [{ type: "text", text: `On the screen: ${summary ?? t.title}.` }] }).catch(() => {});
+    void app
+      .updateModelContext({ content: [{ type: "text", text: `---\nscreen: corral-today\naction: ${doing ? "checked off" : "put back"}\ntask: ${JSON.stringify(t.title)}\n---\nOn the screen: ${summary}.` }] })
+      .catch(() => {});
   } catch (err) {
     toast(err instanceof Error ? err.message : "That didn't work.");
   } finally {
     pending.delete(id);
     await refresh();
-  }
-}
-
-async function refresh() {
-  try {
-    show(await app.callServerTool({ name: "show_today", arguments: {} }));
-  } catch {
-    render();
   }
 }
 

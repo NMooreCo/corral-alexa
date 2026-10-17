@@ -36,9 +36,11 @@ describe("serving Alexa+ (MCP 2025-11-25 over Streamable HTTP)", () => {
 
   it("lists Corral's tools and the Today screen tool, pointing at its screen", async () => {
     const { body } = await rpc(SAMPLE, "tools/list");
-    const tools = body!.result!.tools as { name: string; annotations?: { readOnlyHint?: boolean }; _meta?: { ui?: { resourceUri?: string } } }[];
-    expect(tools.map((t) => t.name).sort()).toEqual([...CORRAL_TOOLS, "show_today"].sort());
+    const tools = body!.result!.tools as { name: string; annotations?: { readOnlyHint?: boolean }; _meta?: { ui?: { resourceUri?: string; visibility?: string[] } } }[];
+    expect(tools.map((t) => t.name).sort()).toEqual([...CORRAL_TOOLS, "show_today", "refresh_today"].sort());
     expect(tools.find((t) => t.name === "show_today")?._meta?.ui?.resourceUri).toBe(TODAY_URI);
+    // The screen's own refresh is the screen's alone: hosts keep it from the model.
+    expect(tools.find((t) => t.name === "refresh_today")?._meta?.ui?.visibility).toEqual(["app"]);
     expect(tools.find((t) => t.name === "calendar")?.annotations?.readOnlyHint).toBe(true);
     expect(tools.find((t) => t.name === "complete_task")?.annotations?.readOnlyHint).toBe(false);
   });
@@ -46,7 +48,7 @@ describe("serving Alexa+ (MCP 2025-11-25 over Streamable HTTP)", () => {
   it("serves the Today screen as one self-contained MCP Apps page", async () => {
     const { body } = await rpc(SAMPLE, "resources/read", { uri: TODAY_URI });
     const [page] = body!.result!.contents as { uri: string; mimeType: string; text: string }[];
-    expect(page).toMatchObject({ uri: TODAY_URI, mimeType: "text/html;profile=mcp-app" });
+    expect(page).toMatchObject({ uri: TODAY_URI, mimeType: "text/html;profile=mcp-app", _meta: { ui: { csp: { connectDomains: [], resourceDomains: [] } } } });
     expect(page!.text).toMatch(/^<!doctype html>/i);
     expect(page!.text).not.toMatch(/<script[^>]+src=/);
   });

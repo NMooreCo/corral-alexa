@@ -125,6 +125,16 @@ export function buildServer(household: Household): McpServer {
     );
   }
 
+  const today = async (): Promise<CallToolResult> => {
+    try {
+      const view = await todayView(household);
+      return { content: [{ type: "text", text: JSON.stringify(view) }], structuredContent: view };
+    } catch (err) {
+      return answer(() => Promise.reject(err));
+    }
+  };
+  const readOnly = (title: string) => ({ title, readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+
   registerAppTool(
     server,
     "show_today",
@@ -132,21 +142,23 @@ export function buildServer(household: Household): McpServer {
       title: "Show today",
       description: "Show today on the screen: the calendar, chores (tap one to check it off) and who's where. Use it when someone asks what's going on today or wants to see the day.",
       inputSchema: z.object({}),
-      annotations: { title: "Show today", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      annotations: readOnly("Show today"),
       _meta: { ui: { resourceUri: TODAY_URI } },
     },
-    async () => {
-      try {
-        const view = await todayView(household);
-        return { content: [{ type: "text", text: JSON.stringify(view) }], structuredContent: view };
-      } catch (err) {
-        return answer(() => Promise.reject(err));
-      }
-    },
+    today,
+  );
+
+  // The screen keeps itself current through this; only the screen calls it, so the assistant never sees it.
+  registerAppTool(
+    server,
+    "refresh_today",
+    { title: "Refresh today", description: "The Today screen's own refresh.", inputSchema: z.object({}), annotations: readOnly("Refresh today"), _meta: { ui: { resourceUri: TODAY_URI, visibility: ["app"] } } },
+    today,
   );
 
   registerAppResource(server, "Today", TODAY_URI, { description: "Today at a glance, for screens like the Echo Show." }, async () => ({
-    contents: [{ uri: TODAY_URI, mimeType: RESOURCE_MIME_TYPE, text: widgetHtml.today }],
+    // Everything is inside the page, so it reaches nothing else.
+    contents: [{ uri: TODAY_URI, mimeType: RESOURCE_MIME_TYPE, text: widgetHtml.today, _meta: { ui: { csp: { connectDomains: [], resourceDomains: [] }, prefersBorder: false } } }],
   }));
 
   return server;
