@@ -41,6 +41,8 @@ export interface AutomationView {
   id: string;
   name: string;
   enabled: boolean;
+  /** What starts it, for a screen's icon. */
+  kind: AutomationTrigger["kind"];
   /** "Every day at 7:00 AM and 3:00 PM". */
   when: string;
   /** "Run the greenhouse misters for 2 minutes". */
@@ -233,6 +235,7 @@ export class Automations {
       id: r.id,
       name: r.name,
       enabled: r.enabled,
+      kind: r.when.kind,
       when: this.#whenWords(r.when, named),
       then: r.then.map((s) => stepWords(s, named(s.device))),
       next: r.enabled ? this.#nextWords(r.when) : null,
