@@ -44,6 +44,7 @@ main {
   border-radius: 22px;
   border: 1px solid var(--line);
   background: var(--card);
+  overflow-y: auto;
   opacity: 0.55;
   transform: scale(0.97);
   transition:
@@ -168,5 +169,20 @@ main {
   }
   .headline {
     font-size: 1.5rem;
+  }
+}
+
+/* An Echo Show 5 is short: tighter cards so a card's lines fit. */
+@media (max-height: 520px) {
+  .card {
+    padding: 16px 22px;
+    gap: 8px;
+  }
+  .headline {
+    font-size: 1.45rem;
+  }
+  .lines {
+    font-size: 1rem;
+    gap: 6px;
   }
 }

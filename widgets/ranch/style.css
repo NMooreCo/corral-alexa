@@ -177,7 +177,7 @@
 }
 
 .devices {
-  font-size: 0.7em;
+  font-size: 0.9em;
 }
 
 .devices h2 {
@@ -413,6 +413,7 @@
     height: 100%;
   }
   .devices {
+    font-size: 0.7em;
     max-height: 100%;
     overflow-y: auto;
     overscroll-behavior: contain;
