@@ -5,6 +5,7 @@ import type { AnimalReport, TrackerReport } from "./trackers.ts";
 import type { Device } from "./types.ts";
 import type { Forecast } from "./weather.ts";
 import { duration, num } from "./words.ts";
+import type { AutomationView } from "./automations.ts";
 
 /** The Ranch screen and the morning briefing: what each shows, made from the same tools the assistant uses. */
 
@@ -44,7 +45,13 @@ export interface RanchView {
   animals: { feed: string; live: boolean; outside: string[]; lowBattery: string[] };
   /** How many things need attention, across devices and animals. */
   attention: number;
+  automations: AutomationView[];
+  /** Which part of the screen to open on, when the tool that showed it says. */
+  tab?: RanchTab;
 }
+
+/** The ranch's parts, each a tab on the screen. */
+export type RanchTab = "ranch" | "animals" | "automations";
 
 /** A part a screen can do without (the forecast, say) is left out rather than failing the screen. */
 async function optional<T>(p: Promise<T>): Promise<T | null> {
@@ -111,8 +118,10 @@ export function drawMap(ranch: Ranch, report: TrackerReport | null): RanchView["
   return { width: frame.width, height: frame.height, fence: pathOf(frame, property.fence), zones, pins, scale: scaleBar(frame.width, frame.metersPerUnit, units) };
 }
 
-export async function ranchView(ranch: Ranch, household: Household): Promise<RanchView> {
-  const [about, devices, report, weather] = await Promise.all([household.about(), ranch.devices.all(), optional(ranch.animals()), optional(soon(ranch.weather()))]);
+export async function ranchView(ranch: Ranch, household: Household, tab?: RanchTab): Promise<RanchView> {
+  // Anything due runs first, so the screen shows what it did.
+  await ranch.tick();
+  const [about, devices, report, weather, automations] = await Promise.all([household.about(), ranch.devices.all(), optional(ranch.animals()), optional(soon(ranch.weather())), ranch.automations.list()]);
   const attention = devices.filter((d) => d.attention.length).length + (report ? report.outsideFence.length + report.lowBattery.length : 0);
   return {
     household: about.name ?? null,
@@ -126,6 +135,8 @@ export async function ranchView(ranch: Ranch, household: Household): Promise<Ran
     places: byPlace(devices, ranch.config.briefingPlaces),
     animals: report ? { feed: report.feed, live: report.live, outside: report.outsideFence, lowBattery: report.lowBattery } : { feed: "No collar feed", live: false, outside: [], lowBattery: [] },
     attention,
+    automations,
+    ...(tab ? { tab } : {}),
   };
 }
 
@@ -133,13 +144,19 @@ export async function ranchView(ranch: Ranch, household: Household): Promise<Ran
 export function ranchSummary(view: RanchView) {
   const all = view.places.flatMap((p) => p.devices);
   return {
-    shown: "The Ranch screen: the property map with each collar, and every device by place.",
+    shown:
+      view.tab === "automations"
+        ? "The Ranch screen, on its Automations tab: each automation, on or off, with what it does and when it next runs."
+        : view.tab === "animals"
+          ? "The Ranch screen, on its Animals tab: the property map large, and each collar with where it is and its battery."
+          : "The Ranch screen: the property map with each collar, and every device by place. Its tabs also show the animals and the automations.",
     weather: view.weather,
     outsideFence: view.animals.outside,
     lowCollarBattery: view.animals.lowBattery,
     running: all.filter((d) => d.run).map((d) => `${d.name}: ${duration(d.run!.secondsLeft)} left, until ${d.run!.endsLabel}`),
     on: all.filter((d) => d.state === "on" && !d.run).map((d) => d.name),
     needsAttention: all.flatMap((d) => d.attention.map((a) => `${d.name}: ${a}`)),
+    automations: view.automations.map((a) => `${a.name} (${a.enabled ? "on" : "off"}): ${a.when}`),
   };
 }
 

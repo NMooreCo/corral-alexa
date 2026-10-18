@@ -121,15 +121,20 @@ export class DeviceHub {
 
   /** Switches a device on (for a run, or with no end when it may stay on) or off, inside its limits. */
   async set(args: SwitchArgs): Promise<SwitchAnswer> {
-    const all = await this.all();
-    const d = this.match(all, String(args.device ?? ""));
-    if (args.state !== "on" && args.state !== "off") throw new ToolError('The state is "on" or "off".');
-    if (!d.switchable) throw new ToolError(`The ${d.name} only reports readings; there's nothing to switch.`);
-    const request = this.#request(d, args.state, args.seconds, args.minutes);
+    const { device: d, request } = await this.check(args);
     const source = this.#sources.find((s) => d.id.startsWith(`${s.id}.`));
     if (!source) throw new ToolError(`Nothing controls the ${d.name} right now.`);
     const after = await source.set(d.id, request);
     return this.#answer(after, request);
+  }
+
+  /** Which device a switch means and the run it would get, inside its limits, without switching anything. */
+  async check(args: SwitchArgs): Promise<{ device: Device; request: SwitchRequest }> {
+    const all = await this.all();
+    const d = this.match(all, String(args.device ?? ""));
+    if (args.state !== "on" && args.state !== "off") throw new ToolError('The state is "on" or "off".');
+    if (!d.switchable) throw new ToolError(`The ${d.name} only reports readings; there's nothing to switch.`);
+    return { device: d, request: this.#request(d, args.state, args.seconds, args.minutes) };
   }
 
   #request(d: Device, state: "on" | "off", seconds: unknown, minutes: unknown): SwitchRequest {

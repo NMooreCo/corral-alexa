@@ -64,6 +64,60 @@ export const SET_DEVICE = {
   }),
 };
 
+export const AUTOMATIONS = {
+  name: "automations",
+  title: "Ranch automations",
+  description:
+    "The ranch's automations: each one's name, whether it's on, when it runs (a daily schedule, a freeze in tonight's forecast, or a device's reading dropping), what it switches, when it next runs, and what it did last time.",
+  input: z.object({}),
+};
+
+export const SET_AUTOMATION = {
+  name: "set_automation",
+  title: "Turn an automation on or off",
+  description: "Turn one of the ranch's automations on or off. Confirm with the person first, saying what it does. Shows the Ranch screen on its Automations tab.",
+  input: z.object({
+    automation: z.string().describe("The automation's name or id from the automations tool"),
+    enabled: z.boolean().describe("true to turn it on, false to turn it off"),
+  }),
+};
+
+const WHEN = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("schedule"), times: z.array(z.string()).describe(`Times each day in the household's time zone, like ["07:00", "15:00"]`) }),
+  z.object({
+    kind: z.literal("freeze"),
+    below: z.number().describe("Act when tonight's forecast low is at or below this, in the household's units"),
+    at: z.string().describe('When each day to check the forecast and act, like "17:00" (the default)').optional(),
+  }),
+  z.object({
+    kind: z.literal("reading"),
+    device: z.string().describe("The device whose reading to watch"),
+    reading: z.string().describe('The reading, like "Water temperature"'),
+    below: z.number().describe("Act whenever the reading is below this"),
+  }),
+]);
+
+export const ADD_AUTOMATION = {
+  name: "add_automation",
+  title: "Add an automation",
+  description:
+    "Add an automation that switches ranch devices on its own: every day at set times, when tonight's forecast low is at or below a temperature, or whenever a device's reading drops below a value. Each device's limits apply: a device with a run limit needs a run inside it, or gets its default. Confirm the whole rule with the person first. It starts on, and shows the Ranch screen on its Automations tab.",
+  input: z.object({
+    name: z.string().describe('A short name, like "Freeze protection"'),
+    when: WHEN,
+    then: z
+      .array(
+        z.object({
+          device: z.string().describe("The device's name or id"),
+          state: z.enum(["on", "off"]),
+          seconds: z.number().describe("Run for this many seconds").optional(),
+          minutes: z.number().describe("Run for this many minutes").optional(),
+        }),
+      )
+      .describe("The devices to switch, in order"),
+  }),
+};
+
 /** What the server's instructions add when the household has a ranch. */
 export const RANCH_INSTRUCTIONS =
-  "It also runs the ranch: devices (switch one only after the person says yes; each device's own limits are enforced), the forecast for the household's location, and the animals' GPS collars. show_ranch puts the property map and devices on the screen, and show_briefing the morning briefing.";
+  "It also runs the ranch: devices (switch one only after the person says yes; each device's own limits are enforced), automations that switch devices on their own (on a schedule, before a freeze, or when a reading drops), the forecast for the household's location, and the animals' GPS collars. show_ranch puts the property map and devices on the screen (with tabs for the animals and the automations), and show_briefing the morning briefing.";

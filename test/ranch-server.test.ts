@@ -176,6 +176,28 @@ describe("who may switch the ranch's devices", () => {
     const parent = JSON.parse((await as("Nick")("devices", { device: "coop heat lamp" })).content[0].text);
     expect(Array.isArray(parent)).toBe(true);
   });
+
+  it("lets the same people change the automations, and shows the change on the Automations tab", async () => {
+    const kid = await as("Jak")("set_automation", { automation: "Freeze protection", enabled: true });
+    expect(kid.isError).toBe(true);
+    expect(kid.content[0].text).toContain("Nick, Holly or Jordan can.");
+    expect(JSON.parse((await as("Jak")("automations")).content[0].text).changing).toContain("Nick, Holly or Jordan can.");
+
+    const parent = await as("Nick")("set_automation", { automation: "Freeze protection", enabled: true });
+    expect(parent.isError).toBeFalsy();
+    expect(JSON.parse(parent.content[0].text)).toMatchObject({ name: "Freeze protection", enabled: true });
+    expect(parent.structuredContent).toMatchObject({ tab: "automations" });
+    expect(parent.structuredContent.automations.find((a: { name: string }) => a.name === "Freeze protection")).toMatchObject({ enabled: true });
+
+    const added = await as("Holly")("add_automation", { name: "Evening misting", when: { kind: "schedule", times: ["18:00"] }, then: [{ device: "greenhouse misters", state: "on", minutes: 1 }] });
+    expect(added.isError).toBeFalsy();
+    expect(JSON.parse(added.content[0].text)).toMatchObject({ name: "Evening misting", when: "Every day at 6:00 PM", then: ["Run the greenhouse misters for 1 minute"] });
+  });
+
+  it("opens the Ranch screen on the tab asked for", async () => {
+    expect((await as("Nick")("show_ranch", { view: "animals" })).structuredContent).toMatchObject({ tab: "animals" });
+    expect((await as("Nick")("show_ranch")).structuredContent.tab).toBeUndefined();
+  });
 });
 
 describe("starting the household over", () => {

@@ -1,4 +1,5 @@
 import type { Temporal } from "temporal-polyfill";
+import type { AutomationSpec } from "./automations.ts";
 
 /**
  * The ranch's generic shapes. Devices, readings, limits, trackers and the
@@ -150,4 +151,6 @@ export interface RanchConfig {
   staleFixMinutes: number;
   /** Places that get their own card in the morning briefing, like "Greenhouse". */
   briefingPlaces: string[];
+  /** The household's automations: when to switch which devices. */
+  automations?: AutomationSpec[];
 }

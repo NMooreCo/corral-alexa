@@ -83,6 +83,24 @@ export function sampleRanchConfig(timeZone = "America/Denver"): RanchConfig {
     lowBatteryAt: 20,
     staleFixMinutes: 30,
     briefingPlaces: ["Greenhouse"],
+    // Heat when a freeze is coming (off until someone turns it on), water on a schedule, and a tank that never freezes over.
+    automations: [
+      {
+        id: "freeze-protection",
+        name: "Freeze protection",
+        enabled: false,
+        when: { kind: "freeze", below: 25, at: "17:00" },
+        then: [
+          { device: "sample.tank-heater-horses", state: "on" },
+          { device: "sample.tank-heater-goats", state: "on" },
+          { device: "sample.barn-heater", state: "on" },
+          { device: "sample.coop-lamp", state: "on" },
+        ],
+      },
+      { id: "greenhouse-misting", name: "Greenhouse misting", enabled: true, when: { kind: "schedule", times: ["07:00", "15:00"] }, then: [{ device: "greenhouse.valve1", state: "on", minutes: 2 }] },
+      { id: "garden-watering", name: "Garden watering", enabled: true, when: { kind: "schedule", times: ["06:00"] }, then: [{ device: "sample.drip", state: "on", minutes: 20 }] },
+      { id: "horse-tank", name: "Keep the horse tank thawed", enabled: true, when: { kind: "reading", device: "sample.tank-heater-horses", reading: "water", below: 34 }, then: [{ device: "sample.tank-heater-horses", state: "on" }] },
+    ],
   };
 }
 
@@ -437,6 +455,7 @@ export function sampleRanch(opts: SampleRanchOptions = {}): Ranch {
     trackers: new SampleCollars({ now, timeZone: config.timeZone }),
     now,
     fetch: opts.fetch,
+    history: true,
   });
 }
 

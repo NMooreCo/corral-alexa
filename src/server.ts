@@ -5,8 +5,8 @@ import { APPROVALS_URI, approvalsView } from "./approvals.ts";
 import { UpstreamAuthError } from "./corral.ts";
 import { APPROVAL_TOOLS, ToolError, type Household, type HouseholdAbout, type HouseholdTool } from "./household.ts";
 import type { Ranch } from "./ranch/index.ts";
-import { RANCH_INSTRUCTIONS, RANCH_TOOLS, SET_DEVICE } from "./ranch/tools.ts";
-import { BRIEFING_URI, RANCH_URI, briefingView, ranchSummary, ranchView, type RanchView } from "./ranch/views.ts";
+import { ADD_AUTOMATION, AUTOMATIONS, RANCH_INSTRUCTIONS, RANCH_TOOLS, SET_AUTOMATION, SET_DEVICE } from "./ranch/tools.ts";
+import { BRIEFING_URI, RANCH_URI, briefingView, ranchSummary, ranchView, type RanchTab, type RanchView } from "./ranch/views.ts";
 import { LIST_URI, SUPPLIES_URI, WEEK_URI, listView, suppliesView, weekView } from "./screens.ts";
 import { TODAY_URI, todayView } from "./today.ts";
 import { householdSkill, householdSkillTools, widgetHtml } from "./widgets.generated.ts";
@@ -262,6 +262,7 @@ export async function buildServer(household: Household, ranch?: Ranch): Promise<
         { title: t.title, description: t.description, inputSchema: t.input, annotations: { ...readOnly(t.title), openWorldHint: t.openWorld } },
         (args) =>
           answer(async () => {
+            await ranch.tick();
             const out = await t.run(ranch, args as Record<string, unknown>);
             // Someone who may not switch devices hears so (and who can) before anything is offered.
             const refusal = t.name === "devices" ? household.refusal?.("switch_device") : null;
@@ -269,18 +270,53 @@ export async function buildServer(household: Household, ranch?: Ranch): Promise<
           }),
       );
     }
-    const ranchNow = () => ranchView(ranch, household) as unknown as Promise<Record<string, unknown>>;
+    const ranchNow = (tab?: RanchTab) => ranchView(ranch, household, tab) as unknown as Promise<Record<string, unknown>>;
     const sayRanch = (v: Record<string, unknown>) => ranchSummary(v as unknown as RanchView);
     screen(
       "show_ranch",
       "Show the ranch",
-      "Show the ranch on the screen: a map of the property with the fence, its zones and each collared animal (one outside the fence stands out), and every device by place, which people can tap to switch. Use it when someone asks about the ranch, the animals, the greenhouse or a device.",
-      z.object({}),
+      "Show the ranch on the screen: a map of the property with the fence, its zones and each collared animal (one outside the fence stands out), and every device by place, which people can tap to switch. Its tabs show the animals (a big map and each collar) and the automations. Use it when someone asks about the ranch, the animals, the greenhouse, a device or the automations.",
+      z.object({ view: z.enum(["ranch", "animals", "automations"]).describe('Which tab to open on: "ranch" (the default), "animals" or "automations"').optional() }),
       RANCH_URI,
       widgetHtml.ranch,
-      ranchNow,
+      (args) => ranchNow(typeof args.view === "string" ? (args.view as RanchTab) : undefined),
       sayRanch,
     );
+    server.registerTool(AUTOMATIONS.name, { title: AUTOMATIONS.title, description: AUTOMATIONS.description, inputSchema: AUTOMATIONS.input, annotations: readOnly(AUTOMATIONS.title) }, () =>
+      answer(async () => {
+        await ranch.tick();
+        const list = await ranch.automations.list();
+        // Someone who may not change automations hears so (and who can) before anything is offered.
+        const refusal = household.refusal?.("switch_device");
+        return refusal ? { changing: refusal, automations: list } : list;
+      }),
+    );
+    // Changing an automation shows the Ranch screen on its Automations tab, so the change is in front of whoever asked.
+    const automationTool = (def: { name: string; title: string; description: string; input: z.ZodObject }, run: (args: Record<string, unknown>) => Promise<unknown>) =>
+      registerAppTool(
+        server,
+        def.name,
+        {
+          title: def.title,
+          description: def.description,
+          inputSchema: def.input,
+          annotations: { title: def.title, readOnlyHint: false, destructiveHint: false, idempotentHint: def.name === SET_AUTOMATION.name, openWorldHint: true },
+          _meta: { ui: { resourceUri: RANCH_URI } },
+        },
+        async (args: unknown) => {
+          // The same people who may switch devices may change what switches them.
+          const refusal = household.refusal?.("switch_device");
+          if (refusal) return answer(() => Promise.reject(new ToolError(refusal)));
+          try {
+            const change = await run((args ?? {}) as Record<string, unknown>);
+            return { content: [{ type: "text", text: JSON.stringify(change) }], structuredContent: await ranchNow("automations") };
+          } catch (err) {
+            return answer(() => Promise.reject(err));
+          }
+        },
+      );
+    automationTool(SET_AUTOMATION, (a) => ranch.automations.set(a.automation, a.enabled));
+    automationTool(ADD_AUTOMATION, (a) => ranch.automations.add(a));
     // The Ranch screen keeps itself current through this; only the screen calls it.
     registerAppTool(
       server,

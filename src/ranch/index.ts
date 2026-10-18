@@ -5,6 +5,7 @@ import { trackerReport, type TrackerReport } from "./trackers.ts";
 import type { DeviceSource, RanchConfig, TrackerFeed } from "./types.ts";
 import { forecast, type Forecast } from "./weather.ts";
 import { now as clockNow } from "../clock.ts";
+import { Automations } from "./automations.ts";
 
 /**
  * A household's ranch: its configuration (where it is, its property map, its
@@ -16,15 +17,33 @@ export class Ranch {
   readonly config: RanchConfig;
   readonly devices: DeviceHub;
   readonly trackers: TrackerFeed;
+  readonly automations: Automations;
   readonly #now: () => Temporal.Instant;
   readonly #fetch?: typeof fetch;
 
-  constructor(opts: { config: RanchConfig; sources: DeviceSource[]; trackers: TrackerFeed; now?: () => Temporal.Instant; fetch?: typeof fetch }) {
+  /** With `history`, scheduled automations start as having run at their last time (a sample's past). */
+  constructor(opts: { config: RanchConfig; sources: DeviceSource[]; trackers: TrackerFeed; now?: () => Temporal.Instant; fetch?: typeof fetch; history?: boolean }) {
     this.config = opts.config;
     this.devices = new DeviceHub(opts.sources);
     this.trackers = opts.trackers;
     this.#now = opts.now ?? clockNow;
     this.#fetch = opts.fetch;
+    this.automations = new Automations(
+      opts.config.automations ?? [],
+      {
+        devices: this.devices,
+        timeZone: opts.config.timeZone,
+        units: opts.config.units,
+        now: this.#now,
+        tonightLow: async () => (await this.weather().catch(() => null))?.tonight.lowValue ?? null,
+      },
+      { history: opts.history },
+    );
+  }
+
+  /** Runs any automation that came due since the ranch was last looked at. */
+  tick(): Promise<void> {
+    return this.automations.tick();
   }
 
   now(): Temporal.Instant {
