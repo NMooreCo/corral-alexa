@@ -173,3 +173,9 @@ main > section + section {
     min-width: 0;
   }
 }
+
+/* Readable from across the room once it's decided. */
+.request.decided .badge {
+  font-size: 0.95rem;
+  padding: 4px 14px;
+}
