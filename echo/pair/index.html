@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Corral for Alexa+: two Echo Shows, one household</title>
+  </head>
+  <body>
+    <header class="bar">
+      <div class="title">
+        <h1>One household, two Echo Shows</h1>
+        <p><span id="household-name">The sample household</span> has a kitchen Echo Show and a barn Echo Show on one Corral. A change on either shows on both within a few seconds.</p>
+      </div>
+      <div class="actions">
+        <span class="sync" id="sync" aria-live="polite" title="The household's change counter, which both screens watch">Connecting</span>
+        <button type="button" id="start-over">Start the day over</button>
+        <a id="one-device" href="/echo">One device</a>
+      </div>
+    </header>
+    <main class="devices">
+      <iframe id="kitchen" title="Kitchen: Echo Show 8" allow="microphone; autoplay"></iframe>
+      <iframe id="barn" title="Barn: Echo Show 5" allow="microphone; autoplay"></iframe>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

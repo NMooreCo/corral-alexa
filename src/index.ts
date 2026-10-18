@@ -1,31 +1,15 @@
 import type { OAuthProvider } from "@cloudflare/workers-oauth-provider";
-import { Temporal } from "temporal-polyfill";
 import type { Env } from "./env.ts";
-import { json, notFound, serveMcp, siteRoute } from "./http.ts";
+import { json, notFound, siteRoute } from "./http.ts";
 import { linkingProvider, protectedResource } from "./link/provider.ts";
-import { SampleHousehold } from "./sample/index.ts";
-import { SPEAKER_HEADER, speakerOf } from "./sample/roles.ts";
-import { echoHtml, previewHtml } from "./widgets.generated.ts";
+import { householdRoute } from "./sample/routes.ts";
+import { echoHtml, echoPairHtml, previewHtml } from "./widgets.generated.ts";
 import { mockTurn } from "./echo/mock.ts";
 import { echoPage, modelTurn } from "./echo/model.ts";
 
 export type { Env };
-
-/**
- * The sample household lives as long as this worker instance, so changes made
- * through it stick around for a demo. It starts over when its day changes, to
- * keep its times around today.
- */
-let sample: { day: string; household: SampleHousehold } | undefined;
-
-function sampleHousehold(): SampleHousehold {
-  const dayOf = (h: SampleHousehold) => Temporal.Now.zonedDateTimeISO(h.state.timeZone).toPlainDate().toString();
-  if (!sample || dayOf(sample.household) !== sample.day) {
-    const household = new SampleHousehold();
-    sample = { day: dayOf(household), household };
-  }
-  return sample.household;
-}
+// The sample household's Durable Object (sample mode only; corral mode never binds it).
+export { SampleHouseholdObject } from "./sample/durable.ts";
 
 /** One OAuth provider per public address (in practice, one). */
 const providers = new Map<string, OAuthProvider<Env>>();
@@ -63,10 +47,13 @@ export default {
     // The screen preview and the simulated Echo Show talk to /mcp from the browser, which the sample allows without a credential.
     const page = (html: string) => new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
     if (url.pathname === "/preview") return page(previewHtml);
-    if (url.pathname === "/echo" && request.method === "GET") return page(echoPage(echoHtml, env));
+    // /echo?devices=2 is two Echo Shows, a kitchen's and a barn's, on one shared household.
+    if (url.pathname === "/echo" && request.method === "GET") return page(echoPage(url.searchParams.get("devices") === "2" ? echoPairHtml : echoHtml, env));
     if (url.pathname === "/echo/model" && request.method === "POST") return env.MODEL_MOCK === "true" ? mockTurn(request) : modelTurn(request, env);
-    // There's no sign-in here, so the simulator says who Alexa recognized; only the sample reads it, and a name it doesn't know is a guest.
-    if (url.pathname === "/mcp") return serveMcp(request, sampleHousehold().as(speakerOf(request.headers.get(SPEAKER_HEADER))));
+    // /mcp and the household's own routes, through the household's Durable Object. There's no sign-in here,
+    // so the simulator says who Alexa recognized in a header the household reads per request.
+    const household = await householdRoute(request, env);
+    if (household) return household;
     return notFound();
   },
 };

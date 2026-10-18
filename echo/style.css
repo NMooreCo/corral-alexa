@@ -25,7 +25,12 @@ body {
   min-height: 100%;
   background: var(--bg);
   color: var(--ink);
-  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font:
+    15px/1.45 system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
 }
 
 .layout {
@@ -55,7 +60,10 @@ body {
   overflow: hidden;
   border-radius: 22px;
   background: #050606;
-  box-shadow: 0 0 0 14px #1d1f1f, 0 0 0 15px #2c2f2f, 0 30px 80px rgb(0 0 0 / 0.55);
+  box-shadow:
+    0 0 0 14px #1d1f1f,
+    0 0 0 15px #2c2f2f,
+    0 30px 80px rgb(0 0 0 / 0.55);
 }
 
 .screen {
@@ -375,7 +383,11 @@ summary {
   gap: 6px;
   max-height: 260px;
   overflow: auto;
-  font: 12.5px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
+  font:
+    12.5px/1.4 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
 }
 
 .log li {
@@ -577,7 +589,9 @@ footer label {
   opacity: 1;
   padding: 10px 26px 10px 10px;
   font-size: 30px;
-  box-shadow: 0 0 0 2px var(--tone), 0 8px 30px rgb(0 0 0 / 0.4);
+  box-shadow:
+    0 0 0 2px var(--tone),
+    0 8px 30px rgb(0 0 0 / 0.4);
 }
 
 .speaker-chip.greeting .avatar {
@@ -601,4 +615,99 @@ footer label {
   color: var(--alexa);
   font-size: 0.8rem;
   font-weight: 700;
+}
+
+footer a {
+  color: var(--accent);
+}
+
+/* ---------- One of two devices (/echo?devices=2) ---------- */
+
+.device-label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 12px;
+  color: var(--muted);
+}
+
+.device-label strong {
+  color: var(--ink);
+  font-size: 1.05rem;
+}
+
+.embedded .layout {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 0 12px;
+}
+
+.embedded .stage {
+  flex: none;
+  padding: 12px 15px 15px;
+}
+
+.embedded .device {
+  margin: 0 auto;
+}
+
+.embedded .device-label {
+  margin-bottom: 18px;
+}
+
+.embedded .device-note,
+.embedded .panel > header,
+.embedded .toggle,
+.embedded footer,
+.embedded details:has(#model-log) {
+  display: none;
+}
+
+.embedded .panel {
+  flex: 1;
+  min-height: 0;
+  gap: 8px;
+  padding: 0 15px;
+}
+
+.embedded .talk {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+}
+
+.embedded .talk .note {
+  grid-column: 1 / -1;
+}
+
+.embedded .mic {
+  min-height: 42px;
+  padding: 0 16px;
+  font-size: 0.95rem;
+}
+
+.embedded .chips {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.embedded .chips button {
+  flex: none;
+}
+
+/* The log takes what's left under the talk bar; fit() in main.ts sets its height. */
+.embedded .log {
+  max-height: 120px;
+}
+
+/* Stacked on a phone or a tablet: the screen and the talk bar only. In a tall column, the suggestions and the log too (main.ts sets roomy). */
+html:not(.roomy) .embedded .chips,
+html:not(.roomy) .embedded details {
+  display: none !important;
 }

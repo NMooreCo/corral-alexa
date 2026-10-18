@@ -23,9 +23,10 @@ export class SampleHousehold implements Household {
   readonly decidesRequests = true;
   readonly #now: () => Temporal.Instant;
 
-  constructor(opts: { now?: () => Temporal.Instant; timeZone?: string } = {}) {
+  /** A fresh household laid out around today, or `state` as it was kept. */
+  constructor(opts: { now?: () => Temporal.Instant; timeZone?: string; state?: SampleState } = {}) {
     this.#now = opts.now ?? (() => Temporal.Now.instant());
-    this.state = seed(this.#now(), opts.timeZone);
+    this.state = opts.state ?? seed(this.#now(), opts.timeZone);
   }
 
   get name(): string {

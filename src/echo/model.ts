@@ -78,7 +78,7 @@ const MAX_BODY = 300_000;
 const MAX_MESSAGES = 80;
 const MAX_TOOLS = 40;
 
-const VOICE = `You are the voice of a smart display in a family's kitchen: a simulated Alexa+ on an Echo Show, connected to the family's Corral over MCP. What you say is spoken aloud and shown as a caption.
+const VOICE = `You are the voice of a smart display in a family's home (the kitchen, unless it says otherwise below): a simulated Alexa+ on an Echo Show, connected to the family's Corral over MCP. What you say is spoken aloud and shown as a caption.
 
 - Speak in plain sentences: no markdown, no bullet points, no emoji, no headings.
 - One or two short sentences unless they ask for more.
@@ -90,7 +90,8 @@ const VOICE = `You are the voice of a smart display in a family's kitchen: a sim
 interface TurnRequest {
   messages: Anthropic.Beta.BetaMessageParam[];
   tools: Anthropic.Beta.BetaTool[];
-  context?: { instructions?: string; now?: string; timeZone?: string };
+  /** About this turn: the server's instructions, the time, and where the display is ("barn", say). */
+  context?: { instructions?: string; now?: string; timeZone?: string; place?: string };
 }
 
 function clip(v: unknown, max: number): string {
@@ -144,7 +145,17 @@ export async function modelTurn(request: Request, env: Env): Promise<Response> {
       system: [
         // The same every turn, so tools and this block are cached.
         { type: "text", text: `${VOICE}\n\n${skillPrompt()}`, cache_control: { type: "ephemeral" } },
-        { type: "text", text: [`The household's time zone is ${clip(ctx.timeZone, 64) || "unknown"}. It's now ${clip(ctx.now, 64) || "unknown"}.`, clip(ctx.instructions, 2000)].filter(Boolean).join("\n") },
+        {
+          type: "text",
+          text: [
+            `The household's time zone is ${clip(ctx.timeZone, 64) || "unknown"}. It's now ${clip(ctx.now, 64) || "unknown"}.`,
+            // The simulator can show two displays on one household, a kitchen's and a barn's.
+            clip(ctx.place, 40).trim() ? `This display is in the ${clip(ctx.place, 40).trim().toLowerCase()}.` : "",
+            clip(ctx.instructions, 2000),
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        },
       ],
       tools: turn.tools,
       messages: turn.messages,

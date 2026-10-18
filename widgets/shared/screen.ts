@@ -37,6 +37,16 @@ export interface Screen<V> {
   toggleFullscreen(): Promise<void>;
 }
 
+/**
+ * How often a screen asks whether the household changed. The server is
+ * stateless and can't push, so a change made anywhere (another Echo Show,
+ * the assistant, a tap) reaches this screen through a cheap counter,
+ * household_version, which only screens call; when it moves, the screen
+ * refreshes. A server without the counter (one linked to a real Corral)
+ * keeps the slower refresh alone.
+ */
+const SYNC_MS = 3_000;
+
 export async function startScreen<V>(opts: ScreenOptions<V>): Promise<Screen<V>> {
   const app = new App({ name: opts.name, version: "0.2.0" });
   let view: V | null = null;
@@ -103,6 +113,38 @@ export async function startScreen<V>(opts: ScreenOptions<V>): Promise<Screen<V>>
 
   const onScreen = () => visible && document.visibilityState === "visible";
   if (opts.refresh) timers.push(setInterval(() => onScreen() && void refreshNow(), opts.refreshMs ?? 60_000));
+
+  // The household's change counter: the last one seen, whether this server has one, and how many asks in a row failed.
+  let seen: number | undefined;
+  let offered = true;
+  let misses = 0;
+  let skipped = 0;
+  let syncing = false;
+  const sync = async () => {
+    if (!opts.refresh || !offered || syncing) return;
+    // After a few failures in a row, ask about once a minute until it answers again.
+    if (misses >= 3 && ++skipped % 20 !== 0) return;
+    syncing = true;
+    try {
+      const res = await app.callServerTool({ name: "household_version", arguments: {} });
+      const version = (res.structuredContent as { version?: unknown } | undefined)?.version;
+      if (res.isError || typeof version !== "number") return void (offered = false);
+      misses = 0;
+      const changed = seen !== undefined && version !== seen;
+      seen = version;
+      if (changed) await refreshNow();
+    } catch (err) {
+      // A server without the counter says the tool isn't there (invalid params); anything else may pass.
+      if ((err as { code?: unknown } | null)?.code === -32602) offered = false;
+      else misses++;
+    } finally {
+      syncing = false;
+    }
+  };
+  if (opts.refresh) {
+    void sync();
+    timers.push(setInterval(() => onScreen() && void sync(), SYNC_MS));
+  }
   // Clocks and "now" move between refreshes.
   timers.push(setInterval(() => onScreen() && rerender(), 15_000));
   observer.observe(document.body);
