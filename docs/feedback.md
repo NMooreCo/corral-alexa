@@ -39,6 +39,9 @@ Written while building, so each entry is what actually happened. For the Devpost
 | Publish Alexa's account-linking redirect URIs, or support Client ID Metadata Documents | Removes the create-placeholder-then-update dance for the fixed client | Important |
 | Say whether a `WWW-Authenticate` header on a 401 is ignored or breaks linking | It's the MCP spec's primary discovery signal; servers shouldn't have to strip it for one client | Important |
 | An Alexa+ identity for shared devices (a household screen rather than one person) in account linking | A kitchen Echo is used by the whole family; linking it as one adult's account reads that adult's private things aloud | Nice to have |
+| A per-request "who's speaking" claim for multi-user devices (signed, in `_meta` or a header), or guidance that each recognized voice links separately | Alexa+ knows voices, but MCP identity is one bearer token per connection, so a family's rules can't follow the person speaking (F12) | Important |
+| A standard change signal for stateless MCP servers and MCP Apps (a change token in a tool result's `_meta` that hosts watch or poll) | Every app with shared state on two devices reinvents a poll (F11) | Nice to have |
+| A way to mark a tool as an action that updates a screen, as distinct from one that opens a screen | Hosts and previews that open screens by calling their tools with no arguments call actions like `set_device` too (F14) | Nice to have |
 
 ## Friction log
 
@@ -128,3 +131,52 @@ Written while building, so each entry is what actually happened. For the Devpost
 - **Severity:** Low.
 - **Workaround:** tested taps through the bridge in unit tests, and read `AppBridge`'s debug messages in the console to confirm a screen initialized and received its data.
 - **Suggestion:** a test harness for MCP Apps (drive a screen through `AppBridge` and read what it rendered), or a documented debug mode for hosts.
+
+### F11. No way to tell a screen its data changed
+
+- **Task:** keep a kitchen and a barn Echo Show in step on one household.
+- **Actual:** a stateless MCP server can't push: notifications and resource subscriptions need a session, and MCP Apps has no server-to-screen hint. Every screen polls.
+- **Severity:** Medium.
+- **Workaround:** a screen-only `household_version` tool that each screen asks every 3 seconds while it's visible, refreshing when the counter moves.
+- **Suggestion:** a standard change token in a tool result's `_meta` that hosts can watch or poll for the app.
+
+### F12. No standard for who's speaking on a shared device
+
+- **Task:** let the family's rules follow the person talking to a kitchen Echo (a kid's request waits for a parent; a guest changes nothing).
+- **Actual:** MCP identity is the bearer token, one account per connection. Voice ID knows who's talking, but neither MCP nor the Alexa+ docs describe passing a recognized person per request.
+- **Severity:** Medium.
+- **Workaround:** the simulator sends the speaker in a header that only the sample household reads; linked to a real Corral, each person would link their own account.
+- **Suggestion:** a signed per-request speaker claim for multi-user devices, or guidance that each recognized voice links separately.
+
+### F13. Changing a header mid-connection in the MCP client SDK
+
+- **Actual:** `StreamableHTTPClientTransport` takes `requestInit` once, at construction. Switching the speaker without reconnecting works only because 2.3.1 rebuilds each request's headers from `requestInit.headers`, which isn't documented; reconnecting instead would orphan every `AppBridge` holding the old client.
+- **Severity:** Low.
+- **Workaround:** a test guards the behavior so an upgrade can't silently pin the first speaker.
+- **Suggestion:** document per-request headers, or accept a headers function.
+
+### F14. Actions that update a screen look like screens
+
+- **Actual:** `set_device` shows the Ranch screen so a run started by voice counts down there, but nothing distinguishes "an action that updates this screen" from "a tool that opens this screen". A host or preview that opens screens by calling their tools with no arguments calls the action too, and gets an error.
+- **Severity:** Low.
+- **Workaround:** our preview skips screen tools with required arguments.
+
+### F15. `content` versus `structuredContent` for a large view
+
+- **Actual:** the spec says structured content should also come back as text. For the Ranch screen that's kilobytes of map geometry the model shouldn't read, so `show_ranch` sends a short summary as text. It isn't clear whether Alexa+ gives `structuredContent` to the model, which decides whether that's a waste or a necessity.
+- **Severity:** Low.
+- **Suggestion:** say what Alexa+ shows the model from a tool result with a screen.
+
+### F16. Wrangler: a LAN fetch hangs under `global_fetch_strictly_public`
+
+- **Task:** reach our greenhouse controller on the home network from `wrangler dev`.
+- **Actual:** with the flag set, a fetch to a LAN address neither failed nor honored `AbortSignal.timeout`; it hung until the caller gave up, and nothing pointed at the flag, so the controller looked down.
+- **Severity:** Medium.
+- **Workaround:** `pnpm dev:lan` runs locally without the flag.
+- **Suggestion:** fail at once with an error naming the flag.
+
+### F17. Wrangler: Durable Object config across environments, and Windows
+
+- **Actual:** `durable_objects` bindings aren't inherited by environments while `exports` and `migrations` are, so an environment with no Durable Object must empty both, and Wrangler still warns about the binding it left out on purpose. The docs prefer `exports`, but most examples still show `migrations`. On Windows, stopping `wrangler dev` left `workerd` processes holding the port, and the next run printed "Ready" while the old one kept answering with old settings.
+- **Severity:** Low.
+- **Suggestion:** a way to say "no Durable Object here on purpose", examples that use `exports`, and stopping child processes with `wrangler dev`.
