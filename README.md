@@ -31,6 +31,8 @@ On a ranch it also runs the place: **"Alexa, run the greenhouse misters for 30 s
 | "It's going down to 12 tonight. Get the place ready." | One turn reads the forecast, every device, the collars, who's home and supplies; one question turns on the tank heaters and coop lamp and gives whoever's home a task to bring in the animals outside the fence; then it offers low propane for the list. |
 | "Good morning." | The **briefing**: swipeable cards for today, the weather, late chores, low supplies, the animals, the greenhouse and devices needing attention. It says the two or three that matter. |
 | "Are the animals in?" | Where each collared animal is on the property map: inside the fence or not, which pasture, how far out and which way. |
+| (tapping the rail on the Today screen) | Today, the Ranch, the **Animals** (the map large, every collar's place and battery) and the **Automations** are tabs on one screen, so a tap moves between them without asking the assistant. |
+| "Do all of that on its own whenever it's going to freeze." | It confirms, then turns on the **freeze protection** automation: at 5 PM, when tonight's low is 25°F or colder, the tank heaters, barn heater and coop lamp come on by themselves. Misting and watering run on schedules the same way. |
 
 ## How it works
 
@@ -97,7 +99,8 @@ Ranch tools sit beside Corral's, and they're generic: what a device is called, w
 | `set_device` | Switch a device on or off, or run it for some seconds or minutes. It enforces each device's own limits: a device with a cap always runs for a set time and a longer run is refused with the limit. It shows the Ranch screen, so a run started by voice counts down there. The skill confirms first. |
 | `weather` | A real forecast from [Open-Meteo](https://open-meteo.com/) (free, no key) for the household's own location and elevation: now, today, tonight's low with a plain freeze flag, wind, precipitation and snow, the next four days. Cached ten minutes; an older forecast (and how old) when it can't refresh. |
 | `trackers` | Where each animal in a GPS collar is on the household's property map: inside the fence or not, which zone, how far out and which way, collar battery, signal and last fix |
-| `show_ranch` | **The Ranch screen**: the property drawn as an SVG map (fence, zones, a pin per collar, anyone outside the fence pulsing) beside a tile per device that switches it, with a countdown on any run. It refreshes itself through a screen-only tool and tells the assistant what was tapped. |
+| `show_ranch` | **The Ranch screen**: the property drawn as an SVG map (fence, zones, a pin per collar, anyone outside the fence pulsing) beside a tile per device that switches it, with a countdown on any run. It shares a rail of tabs with Today (Animals and Automations too), opens on the tab asked for, refreshes itself through a screen-only tool and tells the assistant what was tapped. |
+| `automations`, `set_automation`, `add_automation` | The ranch's automations: list them in words (when, what they switch, next and last run), turn one on or off, or add one that runs on a schedule, before a freeze in tonight's forecast, or when a reading drops. Every switch goes through the devices' own limits, and only the people who may switch devices may change them. Changing one shows the Automations tab. |
 | `show_briefing` | **The briefing**: a carousel of cards (swipe on touch, buttons otherwise) that tells the assistant which card is showing |
 
 **Connector-shaped.** Devices come from sources, collars from a feed, and the tools only see the generic shapes:

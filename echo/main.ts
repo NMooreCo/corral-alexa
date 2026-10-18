@@ -787,6 +787,8 @@ interface DemoBeat {
   say: string;
   ifAsked?: boolean;
   linger?: number;
+  /** Longer still when a recording taps through the screen's tabs here (?taps=1). */
+  taps?: number;
   /** Part of the short demo too (?demo=short), the headline beats only. */
   short?: boolean;
 }
@@ -797,7 +799,7 @@ interface DemoBeat {
  * beat finds them outside the fence in an evening take.
  */
 const DEMO: DemoBeat[] = [
-  { as: "Nick", say: "What do I need to know today?", linger: 6000, short: true },
+  { as: "Nick", say: "What's going on tonight?", linger: 6000, taps: 14000, short: true },
   { as: "Jak", say: "I emptied the dishwasher." },
   { as: "Eli", say: "Can I have a sleepover at Ava's on Friday?", short: true },
   { as: "Eli", say: "Yes please.", ifAsked: true, short: true },
@@ -805,12 +807,17 @@ const DEMO: DemoBeat[] = [
   { as: "Nick", say: "Approve the sleepover.", short: true },
   { as: "Nick", say: "Run the greenhouse misters for 30 seconds.", short: true },
   { as: "Nick", say: "Yes.", ifAsked: true, linger: 6000, short: true },
-  { as: "Jak", say: "Can you turn on the coop heat lamp?" },
+  { as: "Jak", say: "Can you turn on the coop heat lamp?", short: true },
   { as: "Jak", say: "Yes please.", ifAsked: true },
   { as: "Nick", say: "It's going down to 12 tonight. Get the place ready.", linger: 3000, short: true },
   { as: "Nick", say: "Yes, do all of that.", ifAsked: true, linger: 4000, short: true },
-  { as: "Nick", say: "Yes, and add dog food too.", ifAsked: true, linger: 3000, short: true },
+  { as: "Nick", say: "Yes please.", ifAsked: true, linger: 3000, short: true },
+  { as: "Nick", say: "Do all of that on its own whenever it's going to freeze.", linger: 3000, short: true },
+  { as: "Nick", say: "Yes.", ifAsked: true, linger: 5000, short: true },
 ];
+
+/** A recording that taps through the screen's tabs itself asks for longer pauses where it does (?taps=1). */
+const tapping = new URLSearchParams(location.search).has("taps");
 
 const playButton = $<HTMLButtonElement>("play-demo");
 let demo: { stop: boolean } | null = null;
@@ -852,7 +859,7 @@ async function playDemo(short = false) {
       await ask(beat.say);
       await untilQuiet();
       if (!passcodeForm.hidden) break;
-      await pause(beat.linger ?? 2500);
+      await pause((beat.linger ?? 2500) + (tapping ? (beat.taps ?? 0) : 0));
     }
   } finally {
     demo = null;
