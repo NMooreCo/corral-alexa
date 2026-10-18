@@ -17,8 +17,22 @@ type ModelTool = Anthropic.Beta.BetaTool;
 type Reply = Anthropic.Beta.BetaMessage;
 type ToolResult = Awaited<ReturnType<Client["callTool"]>>;
 
-const SCREEN_W = 1280;
-const SCREEN_H = 800;
+// ---------- Which device this is ----------
+
+// /echo is an Echo Show 8 in the kitchen. /echo?devices=2 puts two of these pages side by side on one household,
+// each with ?embed=1, a place and a model (?place=Barn&show=5). ?household= names a sample household other than the shared one.
+const params = new URLSearchParams(location.search);
+const SHOWS: Record<string, { name: string; width: number; height: number }> = {
+  "5": { name: "Echo Show 5", width: 960, height: 480 },
+  "8": { name: "Echo Show 8", width: 1280, height: 800 },
+};
+const show = SHOWS[params.get("show") ?? "8"] ?? SHOWS["8"]!;
+const place = (params.get("place") ?? "").trim().slice(0, 40);
+const embedded = params.get("embed") === "1";
+const householdParam = params.get("household");
+
+const SCREEN_W = show.width;
+const SCREEN_H = show.height;
 const MAX_STEPS = 8;
 const SUGGESTIONS = [
   "What's going on today?",
@@ -30,6 +44,10 @@ const SUGGESTIONS = [
   "Where's Maya right now?",
   "How many points does Leo have?",
 ];
+// What to try on a display somewhere else on the place.
+const PLACE_SUGGESTIONS: Record<string, string[]> = {
+  barn: ["Jordan fed the horses.", "We used two bales of hay.", "What chores are left today?"],
+};
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const deviceEl = $("device");
@@ -64,12 +82,42 @@ const state = {
 
 // ---------- The device frame ----------
 
+const stageEl = deviceEl.parentElement!;
+screenEl.style.width = `${SCREEN_W}px`;
+screenEl.style.height = `${SCREEN_H}px`;
+
+/**
+ * One of two devices also fits the height it's given: what's left after its
+ * label, the talk bar, and, in a tall column (two devices side by side), the
+ * suggestions and a few rows of the traffic log. Stacked on a phone or a
+ * tablet, it's the screen and the talk bar alone.
+ */
+function roomForDevice(): number {
+  const roomy = innerHeight > 520 && innerHeight > innerWidth * 0.85;
+  document.documentElement.classList.toggle("roomy", roomy);
+  const talk = document.querySelector<HTMLElement>(".talk")!;
+  const stageChrome = stageEl.offsetHeight - deviceEl.offsetHeight;
+  let panel = talk.offsetHeight;
+  if (roomy) panel += 8 + $("chips").offsetHeight + 8 + 150;
+  // The gap between the stage and the panel, and the space under the panel (see .embedded .layout).
+  return Math.max(90, innerHeight - stageChrome - panel - 10 - 12);
+}
+
 function fit() {
-  const scale = Math.min(1, deviceEl.clientWidth / SCREEN_W);
+  const room = embedded ? roomForDevice() : Infinity;
+  // The bezel is drawn outside the device, inside the stage's padding.
+  const width = embedded ? stageEl.clientWidth - 30 : deviceEl.clientWidth;
+  const scale = Math.min(1, width / SCREEN_W, room / SCREEN_H);
   screenEl.style.transform = `scale(${scale})`;
   deviceEl.style.height = `${SCREEN_H * scale}px`;
+  if (embedded) {
+    deviceEl.style.width = `${SCREEN_W * scale}px`;
+    // The traffic log fills the rest, down to the log box's padding and the space under the panel.
+    mcpLog.style.maxHeight = `${Math.max(60, innerHeight - mcpLog.getBoundingClientRect().top - 10 - 12)}px`;
+  }
 }
-new ResizeObserver(fit).observe(deviceEl);
+new ResizeObserver(fit).observe(embedded ? stageEl : deviceEl);
+if (embedded) addEventListener("resize", fit);
 
 function tick() {
   $("idle-clock").textContent = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: householdTimeZone() });
@@ -131,7 +179,9 @@ const loggingFetch: typeof fetch = async (input, init) => {
   }
   const res = await fetch(input, init);
   const ms = Math.round(performance.now() - started);
-  if (label !== "GET") addLog(mcpLog, state.actor, label, `${res.status} · ${ms} ms`, res.ok ? "" : "bad");
+  // Screens ask the household's change counter every few seconds; those stay out of the log unless one fails.
+  const poll = label.startsWith("tools/call household_version") && res.ok;
+  if (label !== "GET" && !poll) addLog(mcpLog, state.actor, label, `${res.status} · ${ms} ms`, res.ok ? "" : "bad");
   return res;
 };
 
@@ -147,9 +197,16 @@ function householdTimeZone(): string {
   return /time zone is ([A-Za-z_]+\/[A-Za-z_/]+)/.exec(instructions)?.[1] ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
+/** One of this server's household routes, for the household this page is on. */
+function householdUrl(path: string): URL {
+  const url = new URL(path, location.origin);
+  if (householdParam) url.searchParams.set("household", householdParam);
+  return url;
+}
+
 async function connect() {
   state.actor = "page";
-  await client.connect(new StreamableHTTPClientTransport(new URL("/mcp", location.origin), { fetch: loggingFetch }));
+  await client.connect(new StreamableHTTPClientTransport(householdUrl("/mcp"), { fetch: loggingFetch }));
   instructions = client.getInstructions() ?? "";
   const { tools } = await client.listTools();
   for (const t of tools) {
@@ -236,6 +293,8 @@ const PASSCODE_KEY = "corral-echo-passcode";
 let visitPasscode: string | null = null;
 // The question that was waiting on the passcode, asked again once it's in.
 let waitingQuestion: string | null = null;
+// Starting the household over was waiting on the passcode.
+let waitingStartOver = false;
 
 class PasscodeNeeded extends Error {}
 
@@ -273,7 +332,7 @@ async function callModel(): Promise<Reply> {
     body: JSON.stringify({
       messages: state.messages,
       tools: modelTools,
-      context: { instructions, timeZone, now: new Date().toLocaleString("en-US", { timeZone, dateStyle: "full", timeStyle: "short" }) },
+      context: { instructions, timeZone, now: new Date().toLocaleString("en-US", { timeZone, dateStyle: "full", timeStyle: "short" }), ...(place ? { place } : {}) },
     }),
   });
   const body = (await res.json().catch(() => ({}))) as Reply & { error?: { code?: string; message?: string } };
@@ -503,16 +562,60 @@ passcodeForm.addEventListener("submit", (e) => {
   const question = waitingQuestion;
   waitingQuestion = null;
   if (question) void ask(question);
+  if (waitingStartOver) void startOver();
+});
+// Saved on the other device in the two-device view: this one has it too.
+addEventListener("storage", (e) => {
+  if (e.key === PASSCODE_KEY && e.newValue) passcodeForm.hidden = true;
 });
 if (document.body.dataset.passcode === "required" && !passcode()) askForPasscode("This demo needs a passcode before it can talk.");
-$("reset").addEventListener("click", () => {
+function newConversation() {
   state.messages = [];
   state.screenNotes = [];
   stopSpeaking();
   caption("", "");
   addLog(modelLog, "page", "New conversation");
+}
+$("reset").addEventListener("click", newConversation);
+
+/** Starts the shared household over for every device on it (a fresh demo take), then this one's conversation and screen. */
+async function startOver() {
+  waitingStartOver = false;
+  const res = await fetch(householdUrl("/household/reset"), { method: "POST", headers: passcode() ? { "x-demo-passcode": passcode()! } : {} }).catch(() => null);
+  if (res?.status === 401) {
+    const tried = passcode() !== null;
+    if (tried) rememberPasscode(null);
+    waitingStartOver = true;
+    return askForPasscode(tried ? "That passcode didn't work. Check it and try again." : "Enter the demo passcode to start the household over.");
+  }
+  if (!res?.ok) return caption("", "Couldn't start the household over. Try again.");
+  newConversation();
+  addLog(modelLog, "page", "Started the household over");
+  await home().catch(() => {});
+}
+$("start-over").addEventListener("click", () => void startOver());
+$<HTMLAnchorElement>("two-devices").href = `/echo?devices=2${householdParam ? `&household=${encodeURIComponent(householdParam)}` : ""}`;
+
+// In the two-device view, the page around both devices starts their conversations over and shows the passcode box.
+addEventListener("message", (e) => {
+  if (e.source !== parent || e.origin !== location.origin) return;
+  const msg = e.data as { type?: string; action?: string; note?: string } | null;
+  if (msg?.type !== "corral-echo") return;
+  if (msg.action === "new-conversation") newConversation();
+  if (msg.action === "home") void home().catch(() => {});
+  if (msg.action === "passcode") askForPasscode(msg.note ?? "Enter the demo passcode.");
 });
-for (const s of SUGGESTIONS) {
+
+$("device-model").textContent = show.name;
+if (embedded) {
+  document.body.classList.add("embedded");
+  $("device-label").hidden = false;
+  $("device-place").textContent = place || "Kitchen";
+  $("device-show").textContent = show.name;
+  document.title = `${place || "Kitchen"} ${show.name}: Corral for Alexa+`;
+}
+const tries = PLACE_SUGGESTIONS[place.toLowerCase()] ?? SUGGESTIONS;
+for (const s of embedded ? tries.slice(0, 3) : tries) {
   const b = document.createElement("button");
   b.type = "button";
   b.textContent = s;
@@ -522,16 +625,19 @@ for (const s of SUGGESTIONS) {
 
 // ---------- Start ----------
 
+/** The add-on's screen is the kitchen board until someone asks for something else. */
+async function home() {
+  const today = [...uiByTool.keys()].find((n) => n === "show_today");
+  if (!today) return;
+  state.actor = "page";
+  const result = await client.callTool({ name: today, arguments: {} });
+  state.actor = "screen";
+  await showScreen(uiByTool.get(today)!, {}, result);
+}
+
 try {
   await connect();
-  // The add-on's screen is the kitchen board until someone asks for something else.
-  const today = [...uiByTool.keys()].find((n) => n === "show_today");
-  if (today) {
-    state.actor = "page";
-    const result = await client.callTool({ name: today, arguments: {} });
-    state.actor = "screen";
-    await showScreen(uiByTool.get(today)!, {}, result);
-  }
+  await home();
 } catch (err) {
   caption("", `Couldn't reach the server: ${err instanceof Error ? err.message : err}`);
 }

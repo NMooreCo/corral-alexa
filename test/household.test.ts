@@ -262,6 +262,44 @@ describe("the sample household's Durable Object", () => {
   });
 });
 
+describe("the two-device view", () => {
+  it("serves a kitchen Echo Show 8 and a barn Echo Show 5 on one household at /echo?devices=2", async () => {
+    const res = await call({ BACKEND: "sample" }, "/echo?devices=2");
+    expect(res.headers.get("content-type")).toContain("text/html");
+    const html = await res.text();
+    expect(html).toContain("One household, two Echo Shows");
+    // Each device is the simulator's own page in a frame: its own MCP client, conversation and screen.
+    expect(html).toMatch(/<iframe id="kitchen"[^>]*allow="microphone/);
+    expect(html).toMatch(/<iframe id="barn"[^>]*allow="microphone/);
+    expect(html).toContain("embed");
+    // One device is still the default.
+    expect(await (await call({ BACKEND: "sample" }, "/echo")).text()).not.toContain("One household, two Echo Shows");
+  });
+
+  it("tells the model which room the display is in", async () => {
+    const systems: string[] = [];
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      const body = (await new Request(input, init).json()) as { system: { text: string }[] };
+      systems.push(body.system.map((s) => s.text).join("\n"));
+      return Response.json({ id: "msg_1", type: "message", role: "assistant", model: "m", content: [{ type: "text", text: "Done." }], stop_reason: "end_turn", stop_sequence: null, usage: { input_tokens: 1, output_tokens: 1 } });
+    });
+    try {
+      const turn = (context: Record<string, string>) => ({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ messages: [{ role: "user", content: "Jordan fed the horses." }], tools: [], context: { timeZone: "America/Denver", ...context } }),
+      });
+      const env: Env = { BACKEND: "sample", ANTHROPIC_API_KEY: "key" };
+      expect((await call(env, "/echo/model", turn({ place: "Barn" }))).status).toBe(200);
+      expect((await call(env, "/echo/model", turn({}))).status).toBe(200);
+      expect(systems[0]).toContain("This display is in the barn.");
+      expect(systems[1]).not.toContain("This display is in");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
 describe("corral mode", () => {
   it("never asks for a sample household, whatever the path", async () => {
     const forbidden = forbiddenHouseholds();

@@ -32,6 +32,8 @@ const widgets = {};
 for (const name of names) widgets[name] = await page(path.join("widgets", name), path.join("widgets", name));
 const preview = await page("preview", "preview");
 const echo = await page("echo", "echo");
+// Two simulated Echo Shows on one household (/echo?devices=2), each the page above in a frame.
+const echoPair = await page(path.join("echo", "pair"), "echo-pair");
 // The household Agent Skill, which the server also offers as an MCP prompt.
 const skill = await readFile(path.join(root, "skills", "corral-household", "SKILL.md"), "utf8");
 const skillTools = await readFile(path.join(root, "skills", "corral-household", "references", "tools.md"), "utf8");
@@ -41,9 +43,10 @@ const out = [
   `export const widgetHtml = ${JSON.stringify(widgets, null, 2)} as const;`,
   `export const previewHtml: string = ${JSON.stringify(preview)};`,
   `export const echoHtml: string = ${JSON.stringify(echo)};`,
+  `export const echoPairHtml: string = ${JSON.stringify(echoPair)};`,
   `export const householdSkill: string = ${JSON.stringify(skill)};`,
   `export const householdSkillTools: string = ${JSON.stringify(skillTools)};`,
   "",
 ].join("\n");
 await writeFile(path.join(root, "src", "widgets.generated.ts"), out);
-console.log(`Built ${names.length} widget${names.length === 1 ? "" : "s"} (${names.join(", ")}), the preview and the simulated Echo Show`);
+console.log(`Built ${names.length} widget${names.length === 1 ? "" : "s"} (${names.join(", ")}), the preview and the simulated Echo Show (one device and two)`);

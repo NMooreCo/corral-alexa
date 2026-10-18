@@ -433,3 +433,98 @@ footer label {
   gap: 8px;
   align-items: center;
 }
+
+footer a {
+  color: var(--accent);
+}
+
+/* ---------- One of two devices (/echo?devices=2) ---------- */
+
+.device-label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 12px;
+  color: var(--muted);
+}
+
+.device-label strong {
+  color: var(--ink);
+  font-size: 1.05rem;
+}
+
+.embedded .layout {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 0 12px;
+}
+
+.embedded .stage {
+  flex: none;
+  padding: 12px 15px 15px;
+}
+
+.embedded .device {
+  margin: 0 auto;
+}
+
+.embedded .device-label {
+  margin-bottom: 18px;
+}
+
+.embedded .device-note,
+.embedded .panel > header,
+.embedded .toggle,
+.embedded footer,
+.embedded details:has(#model-log) {
+  display: none;
+}
+
+.embedded .panel {
+  flex: 1;
+  min-height: 0;
+  gap: 8px;
+  padding: 0 15px;
+}
+
+.embedded .talk {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+}
+
+.embedded .talk .note {
+  grid-column: 1 / -1;
+}
+
+.embedded .mic {
+  min-height: 42px;
+  padding: 0 16px;
+  font-size: 0.95rem;
+}
+
+.embedded .chips {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.embedded .chips button {
+  flex: none;
+}
+
+/* The log takes what's left under the talk bar; fit() in main.ts sets its height. */
+.embedded .log {
+  max-height: 120px;
+}
+
+/* Stacked on a phone or a tablet: the screen and the talk bar only. In a tall column, the suggestions and the log too (main.ts sets roomy). */
+html:not(.roomy) .embedded .chips,
+html:not(.roomy) .embedded details {
+  display: none !important;
+}

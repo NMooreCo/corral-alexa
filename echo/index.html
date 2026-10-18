@@ -8,6 +8,7 @@
   <body data-passcode="{{passcode}}">
     <div class="layout">
       <section class="stage" aria-label="Simulated Echo Show">
+        <p class="device-label" id="device-label" hidden><strong id="device-place"></strong> <span id="device-show"></span></p>
         <div class="device" id="device">
           <div class="screen" id="screen">
             <div class="idle" id="idle">
@@ -32,7 +33,7 @@
             </div>
           </form>
         </div>
-        <p class="device-note">A simulated Alexa+ on an Echo Show 8. The page is a real MCP client of this server; {{model}} decides what to do.</p>
+        <p class="device-note">A simulated Alexa+ on an <span id="device-model">Echo Show 8</span>. The page is a real MCP client of this server; {{model}} decides what to do.</p>
       </section>
 
       <aside class="panel">
@@ -67,6 +68,8 @@
 
         <footer>
           <button type="button" id="reset">New conversation</button>
+          <button type="button" id="start-over">Start the household over</button>
+          <a id="two-devices" href="/echo?devices=2">Two devices</a>
           <label>Screen <select id="theme"><option value="dark">Dark</option><option value="light">Light</option></select></label>
         </footer>
       </aside>
