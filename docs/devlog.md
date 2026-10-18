@@ -40,3 +40,12 @@ What we did, in order, with what went wrong and what we decided. Product frictio
   - At three minutes the cut had to lose Sam's "Anything waiting for me?" and the last "Yes, add both."
   - One honest moment stayed in: asked to get ready for 12 degrees, the model said the forecast only shows 48 and planned for 12 anyway.
   - The real misters and the Claude connector clip still need filming at home.
+
+## Sunday, October 18, 2026
+
+- **Remade the video as a promo.** The first cut was accurate but slow. The new one opens cold on the freeze, then cuts on the beat, zooms into the screens, and shows the five MCP reads as they happen. It runs 2:20.
+  - Alexa talked too much for a voice product, so the simulator now keeps answers to a sentence or two, about 30 words, and the freeze routine's confirmation names only who's outside the fence and what's off.
+  - Playwright's video and Chromium's screencast both capture at the page's CSS size, even with a 2x device scale. For sharp zooms we recorded a 2560 x 1600 window with the page at 200%, which keeps the 1280 x 800 layout at twice the pixels. The zoom has to go on the top page only, or the MCP Apps frames inside it zoom twice.
+  - The recording hides the device's own captions, so the captions drawn over the video are exactly the words that play. Some answers play only their first sentence or two.
+  - The music is original, synthesized in code, and the motion graphics are Remotion.
+  - Two ranch tests failed before 10 AM, because "tonight" means the night that's ending until then. They now run at 8 PM at the ranch.
