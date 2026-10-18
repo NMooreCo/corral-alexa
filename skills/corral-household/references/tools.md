@@ -28,6 +28,17 @@ The same names, arguments and answers as Corral's own MCP server. Answers are JS
 | `check_list_item` | `text` (required), `list` | Found by its words. |
 | `update_supply` | `supply` (name or id), `change` (`used`, `added`, `count`), `amount`, `where` | "Out of" is a count of 0. |
 
+## The ranch
+
+Devices, readings and limits are the household's own configuration; these tools work the same for any of them.
+
+| Tool | Arguments | Answers |
+|---|---|---|
+| `devices` | `place` (like "Greenhouse" or "Barn"), `device` (a name or id) | Per device: `id`, `name`, `place`, `kind`, `switchable`, `state` (`on`, `off`, `unknown` when it isn't answering, or null for a sensor), `run` ("28 seconds left, until 6:42 PM"), `readings` (label to words, like "Propane": "18%"), `maxRun`, `defaultRun`, `ifUnreachable` (`switches itself off` or `stays on`), `attention`, `note`, `live` (real hardware rather than a simulation) |
+| `set_device` | `device` (name or id), `state` (`on` or `off`), `seconds`, `minutes` | `{ "status": "done", "summary": ..., "note"?: ..., "device": ... }`. A run past the device's `maxRun` is refused with the limit. Shows the Ranch screen. Confirm first. |
+| `weather` | none | `now` (temperature, feels like, conditions, wind, humidity), `today` (high, low, conditions, precipitation, snow, wind), `tonight` (`low`, `lowestAround`, `freeze`, `hardFreeze`), `days` (the next four), `nextFreeze`, `stale` when it couldn't refresh |
+| `trackers` | `animal` (a name, or a kind like "goats") | `animals` (each `animal`, `species`, `collar`, `battery`, `batteryLow`, `signal`, `lastSeen`, `stale`, `insideFence`, `zone`, and `outside.words` like "about 220 ft outside the fence to the north-east, nearest the North pasture"), plus `outsideFence`, `lowBattery` and `stale` as lists of names |
+
 ## Screens (MCP Apps)
 
 | Tool | Shows |
@@ -36,3 +47,5 @@ The same names, arguments and answers as Corral's own MCP server. Answers are JS
 | `show_week` | Seven days of the calendar (`from`, default today), today marked, who's driving. |
 | `show_list` | One list (`list`, default the first) with items to tap off and the other lists to switch to. |
 | `show_supplies` | Each supply's amount, days left and whether it's low; a low one goes on a list in one tap. |
+| `show_ranch` | A map of the property (fence, zones, a pin per collar, anyone outside the fence standing out) and a tile per device that switches it, with runs counting down. It keeps itself current. |
+| `show_briefing` | The morning briefing as swipeable cards; you're told which card is showing. |

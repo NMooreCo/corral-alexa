@@ -127,7 +127,7 @@ function mark() {
   toldTimer = setTimeout(() => {
     if (lastTold === c.id) return;
     lastTold = c.id;
-    screen.tell("showing card", { card: c.title, position: `${index + 1} of ${screen.view()?.cards.length ?? 0}` }, `On the screen: the briefing's ${c.title} card. ${c.headline}`);
+    screen.tell("showing card", { card: c.title, position: `${index + 1} of ${screen.view()?.cards.length ?? 0}` }, `On the screen: the briefing's ${c.title} card. ${c.headline.replace(/[^.!?]$/, "$&.")}`);
   }, 900);
 }
 
