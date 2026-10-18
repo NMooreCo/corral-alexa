@@ -102,3 +102,29 @@ Written while building, so each entry is what actually happened. For the Devpost
 - **Severity:** Low.
 - **Workaround:** moved to the v2 SDK (`@modelcontextprotocol/server` 2.3.1).
 - **Suggestion:** a note in the MCP Apps quickstart naming the SDK version each release pairs with.
+
+### F8. A new Bedrock account has no Claude quota
+
+- **Task:** call Claude Opus 5.5 on Amazon Bedrock from the simulator, through Bedrock's Messages API endpoint with a Bedrock API key.
+- **Steps:** a new AWS account; created a Bedrock API key; called `anthropic.claude-opus-5-5`; then tried Opus 4.8 and Haiku 4.5; upgraded the account from the Free plan to Paid.
+- **Expected:** a first call that works, or an error that names the fix.
+- **Actual:** Opus 5.5 and 4.8 answered "not available for this account"; Haiku 4.5 first needed a use-case form, then answered ThrottlingException. After the upgrade, every Claude model's tokens-per-minute and requests-per-minute quota still showed 0. Nothing on the model catalog page, in the API key flow or in the error said a quota request was the next step.
+- **Severity:** High (the AWS integration was built and tested but couldn't go live in time to know).
+- **Workaround:** made the provider a setting; the demo runs on the Claude API until the quota arrives.
+- **Suggestion:** give new accounts a small default Claude quota, or say "your quota for this model is 0; request an increase" in the error and on the model's page.
+
+### F9. The quota form and what it covers
+
+- **Task:** ask for a small Opus 5.5 quota for a demo.
+- **Actual:** the form won't accept less than the AWS default (30,000,000 tokens a minute), so a modest ask isn't possible; there are two Opus 5.5 token quotas (global and regional cross-region) and it isn't clear which one the Messages API endpoint draws on; no requests-per-minute quota is listed for Opus 5.5 even though older models have one. Both requests went to Pending with no estimate.
+- **Severity:** Medium.
+- **Workaround:** requested both token quotas at the minimum the form allows.
+- **Suggestion:** let the form take any value up to the default, and say which quota each endpoint uses.
+
+### F10. Testing sandboxed MCP Apps screens
+
+- **Task:** check the screens in the simulator with browser automation (clicks and screenshots), as part of verifying each change.
+- **Actual:** a screen runs in a sandboxed `srcdoc` frame (`allow-scripts`, no same origin), as it should, so automation can't click inside it or read its DOM, and screenshots of it sometimes came back blank. A bug that hid the screen looked the same as the capture failing.
+- **Severity:** Low.
+- **Workaround:** tested taps through the bridge in unit tests, and read `AppBridge`'s debug messages in the console to confirm a screen initialized and received its data.
+- **Suggestion:** a test harness for MCP Apps (drive a screen through `AppBridge` and read what it rendered), or a documented debug mode for hosts.
