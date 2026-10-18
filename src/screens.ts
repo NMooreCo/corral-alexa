@@ -1,5 +1,6 @@
 import { Temporal } from "temporal-polyfill";
 import { ToolError, type CorralEvent, type CorralListItem, type CorralSupply, type Household } from "./household.ts";
+import { todayIn } from "./clock.ts";
 
 /**
  * The views behind the list, week and supplies screens, each made from
@@ -29,7 +30,7 @@ export async function listView(household: Household, list?: string): Promise<Lis
 export async function weekView(household: Household, from?: string): Promise<WeekView> {
   const about = await household.about();
   const zone = about.timeZone ?? "UTC";
-  const today = Temporal.Now.plainDateISO(zone);
+  const today = todayIn(zone);
   let start = today;
   if (from) {
     try {

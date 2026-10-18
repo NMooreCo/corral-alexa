@@ -3,6 +3,7 @@ import type { Household, HouseholdAbout, HouseholdTool } from "../household.ts";
 import { SampleHousehold } from "./index.ts";
 import { seed, type SampleState } from "./seed.ts";
 import type { KeptSample, SampleStore } from "./store.ts";
+import { now as clockNow } from "../clock.ts";
 
 /** What a shared sample household says about itself: its name, its day and its change counter. */
 export interface SampleStatus {
@@ -27,7 +28,7 @@ export class SharedSample implements Household {
 
   constructor(store: SampleStore, opts: { now?: () => Temporal.Instant; timeZone?: string } = {}) {
     this.#store = store;
-    this.#now = opts.now ?? (() => Temporal.Now.instant());
+    this.#now = opts.now ?? clockNow;
     this.#timeZone = opts.timeZone;
   }
 

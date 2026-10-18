@@ -2,6 +2,7 @@ import { Temporal } from "temporal-polyfill";
 import { ToolError } from "../household.ts";
 import type { RanchLocation, Units } from "./types.ts";
 import { ago, clockAt, num } from "./words.ts";
+import { now as clockNow } from "../clock.ts";
 
 /**
  * The forecast for a household's own location, from Open-Meteo (free, no
@@ -128,7 +129,7 @@ export function forecastUrl(o: Pick<WeatherOptions, "location" | "timeZone" | "u
 
 /** The forecast for the household's location, at most ten minutes old when Open-Meteo answers. */
 export async function forecast(o: WeatherOptions): Promise<Forecast> {
-  const now = (o.now ?? (() => Temporal.Now.instant()))();
+  const now = (o.now ?? clockNow)();
   const url = forecastUrl(o);
   const kept = cache.get(url);
   if (kept && Date.now() - kept.at < FRESH_MS) return summarize(kept.data, o, now, kept.at, false);

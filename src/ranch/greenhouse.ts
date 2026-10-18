@@ -3,6 +3,7 @@ import { ToolError } from "../household.ts";
 import { attentionOf, runOf } from "./devices.ts";
 import type { Device, DeviceLimits, DeviceSource, Reading, SwitchRequest, Units } from "./types.ts";
 import { ago, fromCelsius, readingText, tempUnit } from "./words.ts";
+import { now as clockNow } from "../clock.ts";
 
 /**
  * A connector for an ESP32 greenhouse controller running the v0.1 valve
@@ -99,7 +100,7 @@ export class GreenhouseController implements DeviceSource {
       cacheMs: 2000,
       ...opts,
       fetch: opts.fetch ?? ((input, init) => fetch(input, init)),
-      now: opts.now ?? (() => Temporal.Now.instant()),
+      now: opts.now ?? clockNow,
     };
     this.#base = controllerBase(opts.url);
   }

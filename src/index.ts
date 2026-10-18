@@ -6,6 +6,7 @@ import { householdRoute } from "./sample/routes.ts";
 import { echoHtml, echoPairHtml, previewHtml } from "./widgets.generated.ts";
 import { mockTurn } from "./echo/mock.ts";
 import { echoPage, modelTurn } from "./echo/model.ts";
+import { shiftClock } from "./clock.ts";
 
 export type { Env };
 // The sample household's Durable Object (sample mode only; corral mode never binds it).
@@ -30,6 +31,7 @@ function withoutChallenge(res: Response): Response {
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    if (env.BACKEND !== "corral") shiftClock(env.CLOCK_SHIFT_MINUTES);
 
     if (env.BACKEND === "corral") {
       if (!env.CORRAL_URL || !env.OAUTH_KV) return json(500, { error: { code: "not_configured", message: "Corral mode needs CORRAL_URL and the OAUTH_KV binding." } });

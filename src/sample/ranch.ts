@@ -6,6 +6,7 @@ import { GreenhouseController, type GreenhouseConfig } from "../ranch/greenhouse
 import { Ranch, localGreenhouse, type GreenhouseEnv } from "../ranch/index.ts";
 import type { Device, DeviceLimits, DeviceSource, LatLon, RanchConfig, Reading, SwitchRequest, SwitchState, TrackerFeed, TrackerFix, Units, Zone } from "../ranch/types.ts";
 import { fromCelsius, readingText, tempUnit } from "../ranch/words.ts";
+import { now as clockNow } from "../clock.ts";
 
 /**
  * Juniper Hollow's ranch, made up for the demo: a fenced property in the
@@ -416,7 +417,7 @@ export interface SampleRanchOptions {
 
 export function sampleRanch(opts: SampleRanchOptions = {}): Ranch {
   const config = sampleRanchConfig(opts.timeZone);
-  const now = opts.now ?? (() => Temporal.Now.instant());
+  const now = opts.now ?? clockNow;
   const real = opts.greenhouse;
   const key = real?.key ?? "sample-greenhouse";
   const greenhouse = new GreenhouseController({

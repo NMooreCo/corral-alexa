@@ -4,6 +4,7 @@ import { isLocalHost } from "./greenhouse.ts";
 import { trackerReport, type TrackerReport } from "./trackers.ts";
 import type { DeviceSource, RanchConfig, TrackerFeed } from "./types.ts";
 import { forecast, type Forecast } from "./weather.ts";
+import { now as clockNow } from "../clock.ts";
 
 /**
  * A household's ranch: its configuration (where it is, its property map, its
@@ -22,7 +23,7 @@ export class Ranch {
     this.config = opts.config;
     this.devices = new DeviceHub(opts.sources);
     this.trackers = opts.trackers;
-    this.#now = opts.now ?? (() => Temporal.Now.instant());
+    this.#now = opts.now ?? clockNow;
     this.#fetch = opts.fetch;
   }
 

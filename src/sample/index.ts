@@ -4,6 +4,7 @@ import { ToolError, type CorralChange, type CorralEvent, type CorralTask, type C
 import { clock, dollars, isAllDay, unitAmount, whenLabel } from "./labels.ts";
 import { actorFor, actorOf, approversOf, either, personNamed, refusalFor, type PlanChange, type SampleActor } from "./roles.ts";
 import { seed, type SampleEvent, type SamplePerson, type SampleRequest, type SampleState, type SampleStay, type SampleTask } from "./seed.ts";
+import { now as clockNow } from "../clock.ts";
 
 type Args = Record<string, unknown>;
 
@@ -25,7 +26,7 @@ export class SampleHousehold implements Household {
 
   /** A fresh household laid out around today, or `state` as it was kept. */
   constructor(opts: { now?: () => Temporal.Instant; timeZone?: string; state?: SampleState } = {}) {
-    this.#now = opts.now ?? (() => Temporal.Now.instant());
+    this.#now = opts.now ?? clockNow;
     this.state = opts.state ?? seed(this.#now(), opts.timeZone);
   }
 

@@ -189,6 +189,7 @@ pnpm dev
 That builds the screens and starts the Worker at `http://127.0.0.1:8795` with the sample household:
 
 - `/echo` is the simulated Echo Show, and `/echo?devices=2` two of them on one household. With no model key, run `pnpm dev --var MODEL_MOCK:true` to answer with a small practice model, or put `ANTHROPIC_API_KEY` or `BEDROCK_API_KEY` in `.dev.vars`.
+- To record at another hour, `pnpm dev --var CLOCK_SHIFT_MINUTES:780` runs the sample household 13 hours ahead (evening, when two dogs wander off). It's for local development only and is never deployed; the browser's clock has to move with it (the video recorder does that with Playwright's clock).
 - The household lives in a local Durable Object, kept in `.wrangler/state` across restarts. `GET /household` says its day and change counter; `curl -X POST http://127.0.0.1:8795/household/reset` starts it over. `?household=<id>` on `/echo` or `/mcp` uses a separate household.
 - `pnpm dev:lan` is the same with the real greenhouse controller on the LAN ([the local greenhouse connector](#the-local-greenhouse-connector)).
 - `/mcp` is the MCP server; point any MCP client at it (for example `npx @modelcontextprotocol/inspector`).

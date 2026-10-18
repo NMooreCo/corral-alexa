@@ -35,6 +35,8 @@ export interface Env {
   MODEL_LIMIT?: RateLimit;
   /** "true" answers the simulator with a practice model instead, for building without a model key. Never deployed. */
   MODEL_MOCK?: string;
+  /** Local development only: runs the sample household this many minutes ahead (or behind), to record a demo at another hour. Never deployed. */
+  CLOCK_SHIFT_MINUTES?: string;
   /** Sample mode: the shared sample households, one Durable Object each. Never bound in corral mode. */
   SAMPLE_HOUSEHOLDS?: DurableObjectNamespace<SampleHouseholdObject>;
   /**

@@ -5,6 +5,7 @@ import { SampleRanchHolder } from "./ranch.ts";
 import { SPEAKER_HEADER, speakerOf } from "./roles.ts";
 import { SharedSample, type SampleStatus } from "./shared.ts";
 import { sqlStore } from "./store.ts";
+import { shiftClock } from "../clock.ts";
 
 /**
  * One sample household as a Durable Object (sample mode only). The Worker
@@ -21,6 +22,7 @@ export class SampleHouseholdObject extends DurableObject<Env> {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    shiftClock(env.CLOCK_SHIFT_MINUTES);
     // Making the table is synchronous, so it's done before any request reaches the object.
     this.#household = new SharedSample(sqlStore(ctx.storage.sql));
   }
