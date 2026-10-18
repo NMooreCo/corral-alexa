@@ -180,4 +180,19 @@ describe("the sample household's whereabouts", () => {
     const [leo] = (await household().call("whereabouts", { person: "Leo", at: "2026-10-16T18:00" })) as CorralWhere[];
     expect(leo).toMatchObject({ location: "Home" });
   });
+
+  it("follows the calendar, so a weekend practice puts Maya at the field", async () => {
+    const [maya] = (await household(SATURDAY).call("whereabouts", { person: "Maya", at: "2026-10-17T16:35" })) as CorralWhere[];
+    expect(maya).toEqual({ name: "Maya Rivera", location: "Riverside Fields", until: "Sat, Oct 17, 4:45 PM", then: "Home" });
+  });
+
+  it("never says where a private event is", async () => {
+    const [sam] = (await household().call("whereabouts", { person: "Sam", at: "2026-10-16T12:30" })) as CorralWhere[];
+    expect(sam).toMatchObject({ location: "Home" });
+  });
+
+  it("puts someone at an event's place on a day their usual schedule has them elsewhere", async () => {
+    const [jordan] = (await household(SATURDAY).call("whereabouts", { person: "Jordan" })) as CorralWhere[];
+    expect(jordan).toEqual({ name: "Jordan Blake", location: "Barn", until: "Sat, Oct 17, 11:00 AM", then: "Off the ranch" });
+  });
 });

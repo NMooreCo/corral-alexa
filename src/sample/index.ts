@@ -1,7 +1,7 @@
 import { Temporal } from "temporal-polyfill";
 import { ToolError, type CorralChange, type CorralEvent, type CorralTask, type CorralTool, type CorralWhere, type Household } from "../household.ts";
 import { clock, dollars, isAllDay, unitAmount, whenLabel } from "./labels.ts";
-import { seed, type SamplePerson, type SampleState, type SampleTask } from "./seed.ts";
+import { seed, type SamplePerson, type SampleState, type SampleStay, type SampleTask } from "./seed.ts";
 
 type Args = Record<string, unknown>;
 
@@ -128,14 +128,47 @@ export class SampleHousehold implements Household {
       }
     }
     return (p ? [p] : this.state.people).map((person) => {
-      const stays = this.state.stays.filter((s) => s.person === person.id);
+      const stays = this.timeline(person.id);
       const i = stays.findIndex((s) => Temporal.Instant.compare(s.start, at) <= 0 && Temporal.Instant.compare(at, s.end) < 0);
       const stay = stays[i];
-      const next = stays[i + 1];
+      // Only a stretch that follows straight on says where they go next; past the schedule's end, nobody knows.
+      const next = stay && stays[i + 1]?.start.equals(stay.end) ? stays[i + 1] : undefined;
       if (!stay) return { name: person.name, location: "Not known", until: null };
       const until = next ? whenLabel(stay.end.toZonedDateTimeISO(this.state.timeZone).toString()) : null;
       return { name: person.name, location: stay.location, until, ...(next && next.location !== stay.location ? { then: next.location } : {}) };
     });
+  }
+
+  /**
+   * Where someone is over time: their usual stays, with the timed events they
+   * go to laid over them, so the calendar and whereabouts never disagree. A
+   * private event never says where; back-to-back stretches at one place are one.
+   */
+  private timeline(person: string): SampleStay[] {
+    const before = (a: Temporal.Instant, b: Temporal.Instant) => Temporal.Instant.compare(a, b) < 0;
+    let stays = this.state.stays.filter((s) => s.person === person).map((s) => ({ ...s }));
+    for (const e of this.state.events) {
+      if (!e.location || e.private || isAllDay(e.start) || !e.people.includes(person)) continue;
+      const start = Temporal.ZonedDateTime.from(e.start).toInstant();
+      const end = Temporal.ZonedDateTime.from(e.end).toInstant();
+      const kept: SampleStay[] = [];
+      for (const s of stays) {
+        if (!before(start, s.end) || !before(s.start, end)) kept.push(s);
+        else {
+          if (before(s.start, start)) kept.push({ ...s, end: start });
+          if (before(end, s.end)) kept.push({ ...s, start: end });
+        }
+      }
+      kept.push({ person, location: e.location, start, end });
+      stays = kept.sort((a, b) => Temporal.Instant.compare(a.start, b.start));
+    }
+    const merged: SampleStay[] = [];
+    for (const s of stays) {
+      const last = merged.at(-1);
+      if (last && last.location === s.location && last.end.equals(s.start)) last.end = s.end;
+      else merged.push(s);
+    }
+    return merged;
   }
 
   private lists(args: Args) {
