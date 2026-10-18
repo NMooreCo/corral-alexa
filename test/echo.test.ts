@@ -124,11 +124,11 @@ describe("the simulated Echo Show", () => {
   it("plays the approval demo with the practice model too: a kid's sleepover for the coming Friday, then a parent's approvals", async () => {
     const env: Env = { BACKEND: "sample", MODEL_MOCK: "true" };
     const said = (who: string, text: string) => [{ role: "user", content: [{ type: "text", text: who }, { type: "text", text }] }];
-    const asked = await (await call(env, "/echo/model", turn(said("(Alexa recognized the voice: Maya Rivera, Kid.)", "Can I have a sleepover at Ava's on Friday?")))).json() as { content: { input: { start: string } }[] };
+    const asked = await (await call(env, "/echo/model", turn(said("(Alexa recognized the voice: Eli Rivera, Kid.)", "Can I have a sleepover at Ava's on Friday?")))).json() as { content: { input: { start: string } }[] };
     const use = asked.content[0]!;
-    expect(use).toMatchObject({ type: "tool_use", name: "add_event", input: { title: "Sleepover at Ava's", people: ["maya rivera"] } });
+    expect(use).toMatchObject({ type: "tool_use", name: "add_event", input: { title: "Sleepover at Ava's", people: ["eli rivera"] } });
     expect(new Date(`${use.input.start}T12:00:00Z`).getUTCDay()).toBe(5);
-    const waiting = await (await call(env, "/echo/model", turn(said("(Alexa recognized the voice: Sam Rivera, Parent.)", "Anything waiting for me?")))).json();
+    const waiting = await (await call(env, "/echo/model", turn(said("(Alexa recognized the voice: Nick Rivera, Parent.)", "Anything waiting for me?")))).json();
     expect(waiting).toMatchObject({ content: [{ type: "tool_use", name: "show_approvals" }] });
   });
 });

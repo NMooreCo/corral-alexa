@@ -39,15 +39,15 @@ const SPEAKER_HEADER = "x-demo-person";
 /** Things to try. One with `as` is said by that person: the picker switches to them first. */
 const SUGGESTIONS: (string | { text: string; as: string })[] = [
   "What's going on today?",
-  { text: "Can I have a sleepover at Ava's on Friday?", as: "Maya" },
-  { text: "Anything waiting for me?", as: "Sam" },
+  { text: "Can I have a sleepover at Ava's on Friday?", as: "Eli" },
+  { text: "Anything waiting for me?", as: "Nick" },
   "Did anyone collect the eggs yet?",
-  "Leo emptied the dishwasher.",
+  "Jak emptied the dishwasher.",
   "We're down to two bags of horse feed.",
   "Add tortillas and salsa to the grocery list.",
-  "Put the dentist on Thursday at 3:30 for Leo.",
-  "Where's Maya right now?",
-  "How many points does Leo have?",
+  "Put the dentist on Thursday at 3:30 for Jak.",
+  "Where's Eli right now?",
+  "How many points does Jak have?",
   "Good morning.",
   "Run the greenhouse misters for 30 seconds.",
   "It's going down to 12 tonight. Get the place ready.",
@@ -722,6 +722,8 @@ async function startOver() {
   }
   if (!res?.ok) return caption("", "Couldn't start the household over. Try again.");
   newConversation();
+  // The household starts over from its seed, which may name different people than it did.
+  await loadSpeakers();
   addLog(modelLog, "page", "Started the household over");
   await home().catch(() => {});
 }
@@ -733,7 +735,10 @@ addEventListener("message", (e) => {
   if (e.source !== parent || e.origin !== location.origin) return;
   const msg = e.data as { type?: string; action?: string; note?: string } | null;
   if (msg?.type !== "corral-echo") return;
-  if (msg.action === "new-conversation") newConversation();
+  if (msg.action === "new-conversation") {
+    newConversation();
+    void loadSpeakers();
+  }
   if (msg.action === "home") void home().catch(() => {});
   if (msg.action === "passcode") askForPasscode(msg.note ?? "Enter the demo passcode.");
 });
@@ -792,19 +797,19 @@ interface DemoBeat {
  * beat finds them outside the fence in an evening take.
  */
 const DEMO: DemoBeat[] = [
-  { as: "Sam", say: "What do I need to know today?", linger: 6000, short: true },
-  { as: "Leo", say: "I emptied the dishwasher." },
-  { as: "Maya", say: "Can I have a sleepover at Ava's on Friday?", short: true },
-  { as: "Maya", say: "Yes please.", ifAsked: true, short: true },
-  { as: "Sam", say: "Anything waiting for me?", linger: 4000, short: true },
-  { as: "Sam", say: "Approve the sleepover.", short: true },
-  { as: "Sam", say: "Run the greenhouse misters for 30 seconds.", short: true },
-  { as: "Sam", say: "Yes.", ifAsked: true, linger: 6000, short: true },
-  { as: "Leo", say: "Can you turn on the coop heat lamp?" },
-  { as: "Leo", say: "Yes please.", ifAsked: true },
-  { as: "Sam", say: "It's going down to 12 tonight. Get the place ready.", linger: 3000, short: true },
-  { as: "Sam", say: "Yes, do all of that.", ifAsked: true, linger: 4000, short: true },
-  { as: "Sam", say: "Yes, add both.", ifAsked: true, linger: 3000, short: true },
+  { as: "Nick", say: "What do I need to know today?", linger: 6000, short: true },
+  { as: "Jak", say: "I emptied the dishwasher." },
+  { as: "Eli", say: "Can I have a sleepover at Ava's on Friday?", short: true },
+  { as: "Eli", say: "Yes please.", ifAsked: true, short: true },
+  { as: "Nick", say: "Anything waiting for me?", linger: 4000, short: true },
+  { as: "Nick", say: "Approve the sleepover.", short: true },
+  { as: "Nick", say: "Run the greenhouse misters for 30 seconds.", short: true },
+  { as: "Nick", say: "Yes.", ifAsked: true, linger: 6000, short: true },
+  { as: "Jak", say: "Can you turn on the coop heat lamp?" },
+  { as: "Jak", say: "Yes please.", ifAsked: true },
+  { as: "Nick", say: "It's going down to 12 tonight. Get the place ready.", linger: 3000, short: true },
+  { as: "Nick", say: "Yes, do all of that.", ifAsked: true, linger: 4000, short: true },
+  { as: "Nick", say: "Yes, and add dog food too.", ifAsked: true, linger: 3000, short: true },
 ];
 
 const playButton = $<HTMLButtonElement>("play-demo");

@@ -49,3 +49,10 @@ What we did, in order, with what went wrong and what we decided. Product frictio
   - The recording hides the device's own captions, so the captions drawn over the video are exactly the words that play. Some answers play only their first sentence or two.
   - The music is original, synthesized in code, and the motion graphics are Remotion.
   - Two ranch tests failed before 10 AM, because "tonight" means the night that's ending until then. They now run at 8 PM at the ranch.
+- **The sample family is ours now.** Nick and Holly are the parents and Eli and Jak the kids. The collars are our nine dogs (Hunter, Chewy, Leia, Billie, Wren, Pepper, Melon, Matilda and Luke), and Hunter and Pepper wander off at night. The surname stays made up.
+  - A household the Durable Object kept under the old names would have stayed until midnight. A kept household whose people differ from the build's seed now starts over, as one missing a part already did.
+  - The simulated Echo Show also built its speaker list before a demo started the household over. It now reloads it after the reset, so a renamed family can't leave it sending a name the household no longer has.
+- **Better answers, checked with the real model.** We ran the full demo three times and fixed what we heard:
+  - Alexa added asides after her question ("Want me to ask them? And Eli, Leia's pill is still waiting."), which buried the question. Now she sticks to what was asked unless it's urgent, and a question is always the last thing she says.
+  - A kid asking for the coop lamp was offered it and then refused. `devices` now tells someone who can't switch devices who can, so Alexa says so straight away: "I can't switch the ranch devices for you, Jak, but Nick, Holly or Jordan can."
+  - Most answers are now 10 to 30 words. The freeze answers run longer in the daytime, because a heat lamp's 12-hour limit can't cover tonight yet, and Alexa says so.

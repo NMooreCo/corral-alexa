@@ -41,9 +41,9 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("the speaker header in sample mode", () => {
   it("answers as the person named: their private event in full for them, Busy for anyone else", async () => {
-    const forSam = (await call("calendar", { search: "gift" }, as("Sam"))) as Record<string, any>;
+    const forSam = (await call("calendar", { search: "gift" }, as("Nick"))) as Record<string, any>;
     expect(answer(forSam).map((e: CorralEvent) => e.title)).toEqual(["Birthday gift shopping"]);
-    expect(answer(await call("calendar", { search: "gift" }, as("Maya")))).toEqual([]);
+    expect(answer(await call("calendar", { search: "gift" }, as("Eli")))).toEqual([]);
     expect(answer(await call("calendar", { search: "gift" }))).toEqual([]);
   });
 
@@ -56,35 +56,35 @@ describe("the speaker header in sample mode", () => {
 
   it("runs the whole beat: a kid asks, a parent sees it on the approvals screen, approves, and the week shows it", async () => {
     const title = `Sleepover at Ava's ${crypto.randomUUID().slice(0, 4)}`;
-    const asked = answer(await call("add_event", { title, start: day.toString(), people: ["Maya"] }, as("Maya")));
-    expect(asked).toMatchObject({ status: "waiting_for_approval", approvers: ["Sam", "Alex"], requestId: expect.any(String) });
+    const asked = answer(await call("add_event", { title, start: day.toString(), people: ["Eli"] }, as("Eli")));
+    expect(asked).toMatchObject({ status: "waiting_for_approval", approvers: ["Nick", "Holly"], requestId: expect.any(String) });
 
-    const screen = (await call("show_approvals", {}, as("Sam"))).structuredContent as ApprovalsView;
+    const screen = (await call("show_approvals", {}, as("Nick"))).structuredContent as ApprovalsView;
     expect(screen).toMatchObject({ household: "Juniper Hollow" });
-    expect(screen.toDecide).toContainEqual(expect.objectContaining({ id: asked.requestId, from: "Maya", asks: expect.stringContaining(title) }));
-    const mayas = (await call("show_approvals", {}, as("Maya"))).structuredContent as ApprovalsView;
-    expect(mayas).toMatchObject({ toDecide: [], requests: "Only Sam or Alex approve requests." });
+    expect(screen.toDecide).toContainEqual(expect.objectContaining({ id: asked.requestId, from: "Eli", asks: expect.stringContaining(title) }));
+    const mayas = (await call("show_approvals", {}, as("Eli"))).structuredContent as ApprovalsView;
+    expect(mayas).toMatchObject({ toDecide: [], requests: "Only Nick or Holly approve requests." });
     expect(mayas.yoursWaiting.map((r) => r.id)).toContain(asked.requestId);
 
     // What the screen's Approve button sends, through the same tool.
-    expect(answer(await call("decide_approval", { request: asked.requestId, decision: "approve" }, as("Sam")))).toMatchObject({ status: "done", summary: expect.stringContaining(`Approved Maya's request: ${title}`) });
-    const week = (await call("show_week", { from: day.toString() }, as("Sam"))).structuredContent as WeekView;
+    expect(answer(await call("decide_approval", { request: asked.requestId, decision: "approve" }, as("Nick")))).toMatchObject({ status: "done", summary: expect.stringContaining(`Approved Eli's request: ${title}`) });
+    const week = (await call("show_week", { from: day.toString() }, as("Nick"))).structuredContent as WeekView;
     expect(week.days[0]!.events.map((e) => e.title)).toContain(title);
   });
 
   it("lets only a parent decide, through the screen's tool too", async () => {
-    const asked = answer(await call("add_event", { title: "Movie with friends", start: day.toString() }, as("Leo")));
-    const res = await call("decide_approval", { request: asked.requestId, decision: "approve" }, as("Maya"));
-    expect(res).toMatchObject({ isError: true, content: [{ text: "Only Sam or Alex can approve or decline requests." }] });
+    const asked = answer(await call("add_event", { title: "Movie with friends", start: day.toString() }, as("Jak")));
+    const res = await call("decide_approval", { request: asked.requestId, decision: "approve" }, as("Eli"));
+    expect(res).toMatchObject({ isError: true, content: [{ text: "Only Nick or Holly can approve or decline requests." }] });
   });
 
   it("switches speakers mid-connection when the client's requestInit headers change, as the simulator does", async () => {
-    const headers: Record<string, string> = { ...as("Sam") };
+    const headers: Record<string, string> = { ...as("Nick") };
     const client = new Client({ name: "simulator", version: "1" });
     await client.connect(new StreamableHTTPClientTransport(new URL("https://bridge.example/mcp"), { requestInit: { headers }, fetch: (input, init) => worker.fetch(new Request(input, init), SAMPLE, CTX) }));
     const giftShopping = async () => JSON.parse(((await client.callTool({ name: "calendar", arguments: { search: "gift" } })).content as { text: string }[])[0]!.text) as CorralEvent[];
     expect((await giftShopping()).map((e) => e.title)).toEqual(["Birthday gift shopping"]);
-    headers[SPEAKER_HEADER] = encodeURIComponent("Maya");
+    headers[SPEAKER_HEADER] = encodeURIComponent("Eli");
     expect(await giftShopping()).toEqual([]);
     await client.close();
   });
@@ -110,7 +110,7 @@ describe("the speaker header in corral mode", () => {
     const seen = fakeCorral();
     const e = env();
     const plain = await rpc(e, "tools/call", { name: "calendar", arguments: {} }, linked);
-    const claimed = await rpc(e, "tools/call", { name: "calendar", arguments: {} }, { ...linked, ...as("Sam") });
+    const claimed = await rpc(e, "tools/call", { name: "calendar", arguments: {} }, { ...linked, ...as("Nick") });
     expect(claimed.body).toEqual(plain.body);
     const calls = seen.filter((s) => (s.body as { method: string }).method === "tools/call");
     expect(calls).toHaveLength(2);
@@ -123,7 +123,7 @@ describe("the speaker header in corral mode", () => {
 
   it("offers no approval tools or screen, since Corral's own server doesn't decide requests for any credential", async () => {
     fakeCorral();
-    const list = await rpc(env(), "tools/list", {}, { ...linked, ...as("Sam") });
+    const list = await rpc(env(), "tools/list", {}, { ...linked, ...as("Nick") });
     const names = (list.body!.result!.tools as { name: string }[]).map((t) => t.name);
     expect(names).toContain("calendar");
     expect(names).not.toContain("approvals");
@@ -133,6 +133,6 @@ describe("the speaker header in corral mode", () => {
 
   it("still needs a sign-in: the header alone gets a bare 401", async () => {
     fakeCorral();
-    expect((await rpc(env(), "tools/call", { name: "calendar", arguments: {} }, as("Sam"))).status).toBe(401);
+    expect((await rpc(env(), "tools/call", { name: "calendar", arguments: {} }, as("Nick"))).status).toBe(401);
   });
 });

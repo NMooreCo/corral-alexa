@@ -96,7 +96,7 @@ function render(view: TodayView) {
             ? `<ol class="events">${view.events
                 .map((e) => {
                   const busy = !e.event;
-                  // "Maya, Leo, Alex drives": whoever drives is named once, as the driver.
+                  // "Eli, Jak, Holly drives": whoever drives is named once, as the driver.
                   const line = [...e.people.filter((p) => !e.drivers.includes(p)).map(firstName), ...e.drivers.map((d) => `${firstName(d)} drives`)].join(", ");
                   const badge = now.has(e) ? `<span class="badge solid">Now</span>` : e === next ? `<span class="badge">Next</span>` : "";
                   return `<li class="${busy ? "busy" : ""}${now.has(e) ? " is-now" : ""}">

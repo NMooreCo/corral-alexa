@@ -40,7 +40,7 @@ describe("the shared sample household", () => {
     // A refused change changes nothing.
     await expect(h.call("complete_task", { task: "nope" })).rejects.toThrow("Use the task's id");
     expect(await h.version()).toBe(1);
-    await h.call("complete_task", { task: await taskId(h, "Collect eggs"), by: "Leo" });
+    await h.call("complete_task", { task: await taskId(h, "Collect eggs"), by: "Jak" });
     expect(await h.version()).toBe(2);
     await h.call("add_list_item", { list: "Groceries", text: "salsa" });
     expect(await h.version()).toBe(3);
@@ -50,11 +50,11 @@ describe("the shared sample household", () => {
   it("comes back exactly as it was kept, after a restart", async () => {
     const store = memoryStore();
     const first = new SharedSample(store, { now: () => FRIDAY });
-    await first.call("complete_task", { task: await taskId(first, "Collect eggs"), by: "Maya", values: { eggs: 9 } });
+    await first.call("complete_task", { task: await taskId(first, "Collect eggs"), by: "Eli", values: { eggs: 9 } });
     await first.call("update_supply", { supply: "hay", change: "used", amount: 2 });
     // A new process, the same storage.
     const second = new SharedSample(store, { now: () => FRIDAY });
-    expect(await task(second, "Collect eggs")).toMatchObject({ status: "done", doneBy: "Maya Rivera" });
+    expect(await task(second, "Collect eggs")).toMatchObject({ status: "done", doneBy: "Eli Rivera" });
     expect(await second.call("tasks", { include_done: true })).toEqual(await first.call("tasks", { include_done: true }));
     expect(await second.call("supplies", {})).toEqual(await first.call("supplies", {}));
     // Whereabouts run on Temporal instants, which have to come back as themselves.
@@ -112,6 +112,18 @@ describe("the shared sample household", () => {
     store.save({ ...kept, state: JSON.stringify(older) });
     const h = new SharedSample(store, { now: () => FRIDAY });
     expect(await h.call("supplies", {})).toHaveLength(4);
+    expect(await h.version()).toBe(2);
+  });
+
+  it("starts over a household kept by a build whose sample had other people", async () => {
+    const store = memoryStore();
+    await new SharedSample(store, { now: () => FRIDAY }).version();
+    const kept = store.load()!;
+    const older = JSON.parse(kept.state) as { people: { name: string; shortName: string }[] };
+    older.people[0] = { ...older.people[0]!, name: "Sam Rivera", shortName: "Sam" };
+    store.save({ ...kept, state: JSON.stringify(older) });
+    const h = new SharedSample(store, { now: () => FRIDAY });
+    expect(((await h.call("people", {})) as { shortName: string }[]).map((p) => p.shortName)).toContain("Nick");
     expect(await h.version()).toBe(2);
   });
 });
@@ -181,13 +193,13 @@ describe("the sample household's Durable Object", () => {
     const before = await version(barn);
 
     const id = await choreId(env, "Collect eggs");
-    const done = await kitchen.callTool({ name: "complete_task", arguments: { task: id, by: "Leo" } });
+    const done = await kitchen.callTool({ name: "complete_task", arguments: { task: id, by: "Jak" } });
     expect(done.isError).toBeFalsy();
 
     // The barn's screen sees the counter move, and its refresh has the chore done.
     expect(await version(barn)).toBe(before + 1);
     const today = (await barn.callTool({ name: "refresh_today", arguments: {} })).structuredContent as { tasks: CorralTask[] };
-    expect(today.tasks.find((t) => t.id === id)).toMatchObject({ status: "done", doneBy: "Leo Rivera" });
+    expect(today.tasks.find((t) => t.id === id)).toMatchObject({ status: "done", doneBy: "Jak Rivera" });
     await kitchen.close();
     await barn.close();
   });
@@ -195,23 +207,23 @@ describe("the sample household's Durable Object", () => {
   it("hears who's speaking inside the object: a kid's request waits, and a parent on another device approves it", async () => {
     const { env } = sampleEnv();
     const as = (person: string) => ({ "x-demo-person": person });
-    const sleepover = { title: "Sleepover at Ava's", start: "2026-10-23T18:00:00-06:00[America/Denver]", people: ["Maya"], location: "Ava's house" };
+    const sleepover = { title: "Sleepover at Ava's", start: "2026-10-23T18:00:00-06:00[America/Denver]", people: ["Eli"], location: "Ava's house" };
 
-    const asked = (await tool(env, "add_event", sleepover, "/mcp", as("Maya"))) as { status: string; requestId: string };
+    const asked = (await tool(env, "add_event", sleepover, "/mcp", as("Eli"))) as { status: string; requestId: string };
     expect(asked).toMatchObject({ status: "waiting_for_approval", requestId: expect.any(String) });
-    const waiting = (await tool(env, "approvals", {}, "/mcp", as("Sam"))) as { toDecide: { id: string }[] };
+    const waiting = (await tool(env, "approvals", {}, "/mcp", as("Nick"))) as { toDecide: { id: string }[] };
     expect(waiting.toDecide.map((r) => r.id)).toContain(asked.requestId);
 
-    expect(await tool(env, "decide_approval", { request: asked.requestId, decision: "approve" }, "/mcp", as("Sam"))).toMatchObject({ status: "done" });
-    const friday = (await tool(env, "calendar", { from: "2026-10-23", to: "2026-10-23" }, "/mcp", as("Alex"))) as { title: string }[];
+    expect(await tool(env, "decide_approval", { request: asked.requestId, decision: "approve" }, "/mcp", as("Nick"))).toMatchObject({ status: "done" });
+    const friday = (await tool(env, "calendar", { from: "2026-10-23", to: "2026-10-23" }, "/mcp", as("Holly"))) as { title: string }[];
     expect(friday.map((e) => e.title)).toContain("Sleepover at Ava's");
   });
 
   it("keeps the household in its SQLite storage through a restart", async () => {
     const { households, env } = sampleEnv();
-    await tool(env, "complete_task", { task: await choreId(env, "Collect eggs"), by: "Maya" });
+    await tool(env, "complete_task", { task: await choreId(env, "Collect eggs"), by: "Eli" });
     households.restart();
-    expect(await chore(env, "Collect eggs")).toMatchObject({ status: "done", doneBy: "Maya Rivera" });
+    expect(await chore(env, "Collect eggs")).toMatchObject({ status: "done", doneBy: "Eli Rivera" });
     const row = households.databases.get("demo")!.prepare("SELECT day, version, state FROM household").get() as { day: string; version: number; state: string };
     expect(row).toMatchObject({ day: "2026-10-16", version: 2 });
     expect(thaw(row.state)?.tasks.find((t) => t.title === "Collect eggs")?.status).toBe("done");

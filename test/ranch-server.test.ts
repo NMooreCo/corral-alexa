@@ -81,10 +81,10 @@ describe("the ranch over MCP", () => {
     expect(new URL(forecastCalls[0]!).searchParams.get("latitude")).toBe("43.4400");
 
     const animals = JSON.parse((await call("trackers")).content[0].text);
-    expect(animals.animals).toHaveLength(6);
+    expect(animals.animals).toHaveLength(9);
     // Coordinates stay out of what the assistant reads.
     expect(animals.animals[0].position).toBeUndefined();
-    expect(animals.lowBattery).toEqual(["Dusty"]);
+    expect(animals.lowBattery).toEqual(["Matilda"]);
   });
 
   it("shows the ranch: a map with the fence, zones and a pin per collar, and every device by place", async () => {
@@ -93,7 +93,7 @@ describe("the ranch over MCP", () => {
     expect(view.household).toBe("Juniper Hollow");
     expect(view.map.fence).toMatch(/^M.* Z$/);
     expect(view.map.zones.map((z: { name: string }) => z.name)).toEqual(expect.arrayContaining(["North pasture", "South pasture", "Barn", "Coop", "House", "Garden", "Greenhouse"]));
-    expect(view.map.pins).toHaveLength(6);
+    expect(view.map.pins).toHaveLength(9);
     expect(view.map.scale.label).toMatch(/ft$/);
     expect(view.places[0].name).toBe("Greenhouse");
     expect(view.weather).toMatchObject({ tonight: "Low 12°F tonight", freeze: true });
@@ -131,7 +131,7 @@ describe("the ranch over MCP", () => {
     expect(card("weather")).toMatchObject({ warn: true, headline: expect.stringContaining("Low 12°F tonight: hard freeze") });
     expect(card("supplies").lines.map((l: { text: string }) => l.text)).toEqual(expect.arrayContaining([expect.stringMatching(/^Dog food: 4 lb/)]));
     expect(card("devices").lines.map((l: { text: string }) => l.text)).toContain("Propane tank: Propane is low: 18%");
-    expect(card("animals").lines.map((l: { text: string }) => l.text)).toContain("Dusty's collar battery is at 11%");
+    expect(card("animals").lines.map((l: { text: string }) => l.text)).toContain("Matilda's collar battery is at 11%");
   });
 
   it("goes up without the forecast when Open-Meteo is down", async () => {
@@ -159,14 +159,22 @@ describe("who may switch the ranch's devices", () => {
 
   it("lets a parent or the farm hand switch a device, and tells a kid or a guest who can", async () => {
     const lamp = { device: "coop heat lamp", state: "on" };
-    const kid = await as("Leo")("set_device", lamp);
+    const kid = await as("Jak")("set_device", lamp);
     expect(kid.isError).toBe(true);
-    expect(kid.content[0].text).toBe("Leo can't switch the ranch's devices. Sam, Alex or Jordan can.");
+    expect(kid.content[0].text).toBe("Jak can't switch the ranch's devices. Nick, Holly or Jordan can.");
     const guest = await as("guest")("set_device", lamp);
     expect(guest.isError).toBe(true);
-    expect(guest.content[0].text).toContain("Sam, Alex or Jordan can.");
+    expect(guest.content[0].text).toContain("Nick, Holly or Jordan can.");
 
-    for (const grownUp of ["Sam", "Jordan"]) expect((await as(grownUp)("set_device", lamp)).isError).toBeFalsy();
+    for (const grownUp of ["Nick", "Jordan"]) expect((await as(grownUp)("set_device", lamp)).isError).toBeFalsy();
+  });
+
+  it("tells a kid who can switch a device when they look at it, before anything is offered", async () => {
+    const kid = JSON.parse((await as("Jak")("devices", { device: "coop heat lamp" })).content[0].text);
+    expect(kid.switching).toBe("Jak can't switch the ranch's devices. Nick, Holly or Jordan can.");
+    expect(kid.devices[0].name).toBe("Coop heat lamp");
+    const parent = JSON.parse((await as("Nick")("devices", { device: "coop heat lamp" })).content[0].text);
+    expect(Array.isArray(parent)).toBe(true);
   });
 });
 

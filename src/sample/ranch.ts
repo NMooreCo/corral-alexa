@@ -14,7 +14,7 @@ import { fromCelsius, readingText, tempUnit } from "../ranch/words.ts";
  * middle with a big pasture between it and the road, woods rising to the
  * east) but placed nowhere real, a heated greenhouse whose controller speaks the
  * same API as a real ESP32 valve controller, animal-care devices in the barn
- * and pastures, and six animals in GPS collars. Everything specific lives
+ * and pastures, and nine dogs in GPS collars. Everything specific lives
  * here, as data; the ranch tools only read it.
  */
 
@@ -324,12 +324,15 @@ interface CollarSpec {
 }
 
 const COLLARS: CollarSpec[] = [
-  { collar: "Collar 1", animal: "Biscuit", species: "dog", home: "house", battery: 82, signal: "strong" },
-  { collar: "Collar 2", animal: "Scout", species: "dog", home: "barn", battery: 64, signal: "strong", night: { x: 255, y: 228, signal: "fair" } },
-  { collar: "Collar 3", animal: "Maple", species: "horse", home: "north-pasture", battery: 71, signal: "strong" },
-  { collar: "Collar 4", animal: "Dusty", species: "horse", home: "north-pasture", battery: 14, signal: "fair" },
-  { collar: "Collar 5", animal: "Pepper", species: "goat", home: "south-pasture", battery: 55, signal: "strong", night: { x: -178, y: -74, signal: "weak" } },
-  { collar: "Collar 6", animal: "Clover", species: "goat", home: "south-pasture", battery: 47, signal: "strong" },
+  { collar: "Collar 1", animal: "Hunter", species: "dog", home: "barn", battery: 64, signal: "strong", night: { x: 255, y: 228, signal: "fair" } },
+  { collar: "Collar 2", animal: "Chewy", species: "dog", home: "house", battery: 82, signal: "strong" },
+  { collar: "Collar 3", animal: "Leia", species: "dog", home: "house", battery: 77, signal: "strong" },
+  { collar: "Collar 4", animal: "Billie", species: "dog", home: "barn", battery: 69, signal: "strong" },
+  { collar: "Collar 5", animal: "Wren", species: "dog", home: "garden", battery: 58, signal: "strong" },
+  { collar: "Collar 6", animal: "Pepper", species: "dog", home: "south-pasture", battery: 55, signal: "strong", night: { x: -178, y: -74, signal: "weak" } },
+  { collar: "Collar 7", animal: "Melon", species: "dog", home: "north-pasture", battery: 71, signal: "strong" },
+  { collar: "Collar 8", animal: "Matilda", species: "dog", home: "house", battery: 14, signal: "fair" },
+  { collar: "Collar 9", animal: "Luke", species: "dog", home: "south-pasture", battery: 47, signal: "strong" },
 ];
 
 /** Night, for the demo's runaways: from 6 PM to 7 AM in the household's time zone. */
@@ -344,7 +347,7 @@ function noise(seed: string): number {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
-/** Six collars that report every couple of minutes and wander their home zones; at night two animals are out past the fence. */
+/** Nine dogs' collars that report every couple of minutes and wander their home zones; at night two dogs are out past the fence. */
 export class SampleCollars implements TrackerFeed {
   readonly name = "Sample collars (simulated)";
   readonly live = false;

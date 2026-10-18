@@ -18,32 +18,32 @@ describe("the trackers tool", () => {
     expect(r.feed).toBe("Sample collars (simulated)");
     expect(r.live).toBe(false);
     expect(r.outsideFence).toEqual([]);
-    expect(Object.fromEntries(r.animals.map((a) => [a.animal, a.zone]))).toEqual({ Biscuit: "House", Scout: "Barn", Maple: "North pasture", Dusty: "North pasture", Pepper: "South pasture", Clover: "South pasture" });
+    expect(Object.fromEntries(r.animals.map((a) => [a.animal, a.zone]))).toEqual({ Hunter: "Barn", Chewy: "House", Leia: "House", Billie: "Barn", Wren: "Garden", Pepper: "South pasture", Melon: "North pasture", Matilda: "House", Luke: "South pasture" });
   });
 
   it("at night, has two animals outside the fence, saying how far, which way and what they're near", async () => {
     const r = await ranch(NIGHT).animals();
-    expect(r.outsideFence).toEqual(["Scout", "Pepper"]);
-    const scout = r.animals.find((a) => a.animal === "Scout")!;
-    expect(scout).toMatchObject({ insideFence: false, zone: null, outside: { direction: "north-east", nearestZone: "Woods" } });
-    expect(scout.outside!.words).toMatch(/^about \d+ ft outside the fence to the north-east, nearest the Woods$/);
+    expect(r.outsideFence).toEqual(["Hunter", "Pepper"]);
+    const hunter = r.animals.find((a) => a.animal === "Hunter")!;
+    expect(hunter).toMatchObject({ insideFence: false, zone: null, outside: { direction: "north-east", nearestZone: "Woods" } });
+    expect(hunter.outside!.words).toMatch(/^about \d+ ft outside the fence to the north-east, nearest the Woods$/);
     const pepper = r.animals.find((a) => a.animal === "Pepper")!;
     expect(pepper).toMatchObject({ signal: "weak", outside: { direction: "south-west", nearestZone: "South pasture" } });
   });
 
   it("flags a low collar battery, and says when each collar last reported", async () => {
     const r = await ranch(MORNING).animals();
-    expect(r.lowBattery).toEqual(["Dusty"]);
-    const dusty = r.animals.find((a) => a.animal === "Dusty")!;
-    expect(dusty).toMatchObject({ batteryLow: true, stale: false });
-    expect(dusty.lastSeen).toMatch(/just now|minute/);
-    expect(dusty.lastSeenAt).toMatch(/^10:\d\d AM$/);
+    expect(r.lowBattery).toEqual(["Matilda"]);
+    const matilda = r.animals.find((a) => a.animal === "Matilda")!;
+    expect(matilda).toMatchObject({ batteryLow: true, stale: false });
+    expect(matilda.lastSeen).toMatch(/just now|minute/);
+    expect(matilda.lastSeenAt).toMatch(/^10:\d\d AM$/);
   });
 
   it("answers for one animal, or one kind of animal", async () => {
     const r = ranch(NIGHT);
-    expect((await r.animals("scout")).animals.map((a) => a.animal)).toEqual(["Scout"]);
-    expect((await r.animals("goats")).animals.map((a) => a.animal)).toEqual(["Pepper", "Clover"]);
+    expect((await r.animals("hunter")).animals.map((a) => a.animal)).toEqual(["Hunter"]);
+    expect((await r.animals("dogs")).animals.map((a) => a.animal)).toEqual(["Hunter", "Chewy", "Leia", "Billie", "Wren", "Pepper", "Melon", "Matilda", "Luke"]);
     await expect(r.animals("Moose")).rejects.toThrow(ToolError);
   });
 

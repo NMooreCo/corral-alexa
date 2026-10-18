@@ -123,7 +123,7 @@ export function approversOf(state: SampleState): SamplePerson[] {
   return state.people.filter((p) => actorOf(state, p).role.approves);
 }
 
-/** "Sam", "Sam or Alex", "Sam, Alex or Pat". */
+/** "Nick", "Nick or Holly", "Nick, Holly or Pat". */
 export function either(names: string[]): string {
   if (names.length <= 1) return names[0] ?? "someone who approves requests";
   return `${names.slice(0, -1).join(", ")} or ${names.at(-1)}`;

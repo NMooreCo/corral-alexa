@@ -73,14 +73,14 @@ const TOOLS: ToolDef[] = [
   {
     name: "add_task",
     title: "Add a task",
-    description: 'Add a one-off task. A reminder ("remind Leo to practice piano Friday") is a task for whoever it reminds, due then.',
+    description: 'Add a one-off task. A reminder ("remind Jak to practice piano Friday") is a task for whoever it reminds, due then.',
     input: z.object({ title: z.string(), due: z.string().describe('Zoned like "2026-10-07T17:00:00-06:00[America/Denver]"').optional(), assignees: z.array(z.string()).describe("Names").optional() }),
     write: true,
   },
   {
     name: "complete_task",
     title: "Mark a task done",
-    description: 'Mark a task or chore done ("Maya fed the dog"). Say who did it with by. Check-offs happen right away.',
+    description: 'Mark a task or chore done ("Eli fed the dog"). Say who did it with by. Check-offs happen right away.',
     input: z.object({ task, by: name.describe("Who did it, when someone's named").optional(), values: z.record(z.string(), z.unknown()).describe("What the task asks for when it's done (see the tasks tool), by key").optional() }),
     write: true,
   },
@@ -260,7 +260,13 @@ export async function buildServer(household: Household, ranch?: Ranch): Promise<
       server.registerTool(
         t.name,
         { title: t.title, description: t.description, inputSchema: t.input, annotations: { ...readOnly(t.title), openWorldHint: t.openWorld } },
-        (args) => answer(() => t.run(ranch, args as Record<string, unknown>)),
+        (args) =>
+          answer(async () => {
+            const out = await t.run(ranch, args as Record<string, unknown>);
+            // Someone who may not switch devices hears so (and who can) before anything is offered.
+            const refusal = t.name === "devices" ? household.refusal?.("switch_device") : null;
+            return refusal ? { switching: refusal, devices: out } : out;
+          }),
       );
     }
     const ranchNow = () => ranchView(ranch, household) as unknown as Promise<Record<string, unknown>>;

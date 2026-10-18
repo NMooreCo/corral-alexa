@@ -6,7 +6,7 @@ export const APPROVALS_URI = "ui://corral/approvals.html";
 /** A request someone may approve or decline, as the approvals tool says it (the shape of Corral's own inbox). */
 export interface CorralRequest {
   id: string;
-  /** Who asked, like "Maya". */
+  /** Who asked, like "Eli". */
   from: string;
   /** What they asked for, like "Sleepover at Ava's, Fri, Oct 23, 6:00 PM". */
   asks: string;
@@ -19,7 +19,7 @@ export interface CorralOwnRequest {
   id: string;
   asks: string;
   since: string;
-  /** Who can say yes, like "Sam or Alex". */
+  /** Who can say yes, like "Nick or Holly". */
   decidedBy: string;
 }
 

@@ -21,7 +21,7 @@ describe("the sample household's calendar", () => {
   it("says today's events in order, in Corral's words", async () => {
     const events = (await household().call("calendar", {})) as CorralEvent[];
     expect(events.map((e) => e.title)).toEqual(["School drop-off", "Farrier visit", "Busy (private, no details)", "Soccer practice", "Family movie night"]);
-    expect(events[3]).toMatchObject({ when: "Fri, Oct 16, 3:30 PM to 4:45 PM", people: ["Maya Rivera"], drivers: ["Sam Rivera"], location: "Riverside Fields", calendar: "Family" });
+    expect(events[3]).toMatchObject({ when: "Fri, Oct 16, 3:30 PM to 4:45 PM", people: ["Eli Rivera"], drivers: ["Nick Rivera"], location: "Riverside Fields", calendar: "Family" });
     expect(events[3]!.event).toEqual(expect.any(String));
   });
 
@@ -37,8 +37,8 @@ describe("the sample household's calendar", () => {
   });
 
   it("gives one person's day with what's for everyone", async () => {
-    const maya = (await household().call("calendar", { person: "maya" })) as CorralEvent[];
-    expect(maya.map((e) => e.title)).toEqual(["School drop-off", "Soccer practice", "Family movie night"]);
+    const eli = (await household().call("calendar", { person: "eli" })) as CorralEvent[];
+    expect(eli.map((e) => e.title)).toEqual(["School drop-off", "Soccer practice", "Family movie night"]);
   });
 
   it("says an all-day event as all day", async () => {
@@ -60,7 +60,7 @@ describe("the sample household's calendar", () => {
 describe("the sample household's chores", () => {
   it("marks what's past due as overdue and leaves done ones out unless asked", async () => {
     const open = (await household().call("tasks", {})) as CorralTask[];
-    expect(open.find((t) => t.title === "Give Biscuit her allergy pill")).toMatchObject({ status: "overdue", assignees: ["Maya Rivera"], due: "Fri, Oct 16, 8:00 AM" });
+    expect(open.find((t) => t.title === "Give Leia the allergy pill")).toMatchObject({ status: "overdue", assignees: ["Eli Rivera"], due: "Fri, Oct 16, 8:00 AM" });
     expect(open.find((t) => t.title === "Collect eggs")).toMatchObject({ status: "overdue", assignees: ["anyone"], asks: [{ key: "eggs", label: "Eggs", type: "number" }] });
     expect(open.find((t) => t.title === "Empty the dishwasher")?.status).toBe("open");
     expect(open.some((t) => t.status === "done")).toBe(false);
@@ -71,8 +71,8 @@ describe("the sample household's chores", () => {
   it("checks a chore off with credit to whoever did it, and undoes it", async () => {
     const h = household();
     const id = await taskId(h, "Collect eggs");
-    expect(await h.call("complete_task", { task: id, by: "Leo", values: { eggs: 7 } })).toEqual({ status: "done", summary: "Collect eggs: done by Leo" });
-    expect(((await h.call("tasks", { include_done: true })) as CorralTask[]).find((t) => t.id === id)).toMatchObject({ status: "done", doneBy: "Leo Rivera" });
+    expect(await h.call("complete_task", { task: id, by: "Jak", values: { eggs: 7 } })).toEqual({ status: "done", summary: "Collect eggs: done by Jak" });
+    expect(((await h.call("tasks", { include_done: true })) as CorralTask[]).find((t) => t.id === id)).toMatchObject({ status: "done", doneBy: "Jak Rivera" });
     await h.call("undo_task", { task: id });
     expect(((await h.call("tasks", {})) as CorralTask[]).find((t) => t.id === id)).toMatchObject({ status: "overdue", doneBy: null });
   });
@@ -80,14 +80,14 @@ describe("the sample household's chores", () => {
   it("credits a chore for one person to them when nobody's named", async () => {
     const h = household();
     const id = await taskId(h, "Empty the dishwasher");
-    expect(await h.call("complete_task", { task: id })).toMatchObject({ summary: "Empty the dishwasher: done by Leo" });
+    expect(await h.call("complete_task", { task: id })).toMatchObject({ summary: "Empty the dishwasher: done by Jak" });
   });
 
   it("needs someone named to take a chore, since a shared screen is nobody", async () => {
     const h = household();
     const id = await taskId(h, "Water the garden");
     await expect(h.call("claim_task", { task: id })).rejects.toThrow("Say who's taking it.");
-    expect(await h.call("claim_task", { task: id, by: "Maya" })).toMatchObject({ summary: "Maya is taking Water the garden" });
+    expect(await h.call("claim_task", { task: id, by: "Eli" })).toMatchObject({ summary: "Eli is taking Water the garden" });
   });
 
   it("refuses a task id it doesn't have", async () => {
@@ -99,8 +99,8 @@ describe("changes from the sample's shared screen", () => {
   it("sends a new event to a parent to approve, leaving the calendar as it was", async () => {
     const h = household();
     const before = await h.call("calendar", { from: "2026-10-22", to: "2026-10-22" });
-    const res = await h.call("add_event", { title: "dentist", start: "2026-10-22T15:30:00-06:00[America/Denver]", people: ["Leo", "Grandma"] });
-    expect(res).toEqual({ status: "waiting_for_approval", summary: "Dentist with Grandma, Thu, Oct 22, 3:30 PM", approvers: ["Sam", "Alex"], requestId: expect.any(String) });
+    const res = await h.call("add_event", { title: "dentist", start: "2026-10-22T15:30:00-06:00[America/Denver]", people: ["Jak", "Grandma"] });
+    expect(res).toEqual({ status: "waiting_for_approval", summary: "Dentist with Grandma, Thu, Oct 22, 3:30 PM", approvers: ["Nick", "Holly"], requestId: expect.any(String) });
     expect(await h.call("calendar", { from: "2026-10-22", to: "2026-10-22" })).toEqual(before);
   });
 
@@ -111,9 +111,9 @@ describe("changes from the sample's shared screen", () => {
 
   it("adds a task right away", async () => {
     const h = household();
-    expect(await h.call("add_task", { title: "buy a birthday card", assignees: ["Alex"] })).toEqual({ status: "done", summary: "Buy a birthday card, due Fri, Oct 16" });
+    expect(await h.call("add_task", { title: "buy a birthday card", assignees: ["Holly"] })).toEqual({ status: "done", summary: "Buy a birthday card, due Fri, Oct 16" });
     const tasks = (await h.call("tasks", {})) as CorralTask[];
-    expect(tasks.find((t) => t.title === "Buy a birthday card")).toMatchObject({ assignees: ["Alex Rivera"], status: "open" });
+    expect(tasks.find((t) => t.title === "Buy a birthday card")).toMatchObject({ assignees: ["Holly Rivera"], status: "open" });
   });
 });
 
@@ -156,8 +156,8 @@ describe("the sample household's lists and supplies", () => {
   it("says points and what they turn into", async () => {
     expect(await household().call("points", {})).toEqual({
       balances: [
-        { name: "Maya", has: ["140 points", "$12.50 of allowance"] },
-        { name: "Leo", has: ["85 points", "$4.00 of allowance"] },
+        { name: "Eli", has: ["140 points", "$12.50 of allowance"] },
+        { name: "Jak", has: ["85 points", "$4.00 of allowance"] },
       ],
       turnsInto: ["100 points make $5.00 of allowance"],
     });
@@ -167,28 +167,28 @@ describe("the sample household's lists and supplies", () => {
 describe("the sample household's whereabouts", () => {
   it("says where each person is, until when, and where they go next", async () => {
     const where = (await household().call("whereabouts", {})) as CorralWhere[];
-    expect(where.find((w) => w.name === "Maya Rivera")).toEqual({ name: "Maya Rivera", location: "School", until: "Fri, Oct 16, 3:20 PM", then: "Riverside Fields" });
+    expect(where.find((w) => w.name === "Eli Rivera")).toEqual({ name: "Eli Rivera", location: "School", until: "Fri, Oct 16, 3:20 PM", then: "Riverside Fields" });
     expect(where.find((w) => w.name === "Jordan Blake")).toMatchObject({ location: "Barn", until: "Fri, Oct 16, 4:00 PM", then: "Off the ranch" });
   });
 
   it("treats staying put over midnight as one stay", async () => {
-    const where = (await household().call("whereabouts", { person: "Sam" })) as CorralWhere[];
-    expect(where).toEqual([{ name: "Sam Rivera", location: "Home", until: null }]);
+    const where = (await household().call("whereabouts", { person: "Nick" })) as CorralWhere[];
+    expect(where).toEqual([{ name: "Nick Rivera", location: "Home", until: null }]);
   });
 
   it("answers for another time", async () => {
-    const [leo] = (await household().call("whereabouts", { person: "Leo", at: "2026-10-16T18:00" })) as CorralWhere[];
-    expect(leo).toMatchObject({ location: "Home" });
+    const [jak] = (await household().call("whereabouts", { person: "Jak", at: "2026-10-16T18:00" })) as CorralWhere[];
+    expect(jak).toMatchObject({ location: "Home" });
   });
 
-  it("follows the calendar, so a weekend practice puts Maya at the field", async () => {
-    const [maya] = (await household(SATURDAY).call("whereabouts", { person: "Maya", at: "2026-10-17T16:35" })) as CorralWhere[];
-    expect(maya).toEqual({ name: "Maya Rivera", location: "Riverside Fields", until: "Sat, Oct 17, 4:45 PM", then: "Home" });
+  it("follows the calendar, so a weekend practice puts Eli at the field", async () => {
+    const [eli] = (await household(SATURDAY).call("whereabouts", { person: "Eli", at: "2026-10-17T16:35" })) as CorralWhere[];
+    expect(eli).toEqual({ name: "Eli Rivera", location: "Riverside Fields", until: "Sat, Oct 17, 4:45 PM", then: "Home" });
   });
 
   it("never says where a private event is", async () => {
-    const [sam] = (await household().call("whereabouts", { person: "Sam", at: "2026-10-16T12:30" })) as CorralWhere[];
-    expect(sam).toMatchObject({ location: "Home" });
+    const [nick] = (await household().call("whereabouts", { person: "Nick", at: "2026-10-16T12:30" })) as CorralWhere[];
+    expect(nick).toMatchObject({ location: "Home" });
   });
 
   it("puts someone at an event's place on a day their usual schedule has them elsewhere", async () => {

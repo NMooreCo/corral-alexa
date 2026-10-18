@@ -105,15 +105,16 @@ export class SharedSample implements Household {
       this.#kept = kept;
       return;
     }
-    // Nothing kept yet, or kept by a build whose sample had different parts: start over, after the version it had.
+    // Nothing kept yet, or kept by a build whose sample had different parts or people: start over, after the version it had.
     this.#kept = kept;
     this.#start();
   }
 
-  /** Whether a kept household has every part this build's sample has. */
+  /** Whether a kept household has every part this build's sample has, and the same people. */
   #fits(state: SampleState): boolean {
-    const parts = Object.keys(seed(this.#now(), this.#timeZone));
-    return parts.every((p) => p in state);
+    const fresh = seed(this.#now(), this.#timeZone);
+    const names = (s: SampleState) => (s.people ?? []).map((p) => p.name).sort().join("|");
+    return Object.keys(fresh).every((p) => p in state) && names(state) === names(fresh);
   }
 
   #start() {

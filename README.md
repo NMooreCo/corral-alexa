@@ -19,12 +19,12 @@ On a ranch it also runs the place: **"Alexa, run the greenhouse misters for 30 s
 |---|---|
 | "What's going on today?" | The **Today** screen: the calendar with what's on now and next, chores to tap off, and who's where. It keeps itself current. |
 | "What's our weekend look like?" | The **Week** screen: seven days, today marked, who's driving. |
-| "Leo emptied the dishwasher." | The chore is checked off with credit to Leo, and the screen updates. |
+| "Jak emptied the dishwasher." | The chore is checked off with credit to Jak, and the screen updates. |
 | "We're down to two bags of horse feed." | The count is recorded, the **Supplies** screen shows about three days left, and it offers to put feed on the feed store list. |
 | "Add tortillas and salsa." | Both go on the grocery list; the **List** screen shows it, and tapping an item checks it off. |
-| "Put the dentist on Thursday at 3:30 for Leo." | It confirms first. A parent's change happens right away; from a kid, or from a shared kitchen device, the event goes to a parent to approve, and it says who. |
-| Maya: "Can I have a sleepover at Ava's on Friday?" | It offers to ask, and the request goes to Sam and Alex. Nothing is on the calendar yet. |
-| Sam: "Anything waiting for me?" | The **Approvals** screen: Maya's sleepover with Approve and Decline. A tap on Approve puts it on the calendar, and the **Week** screen shows it. |
+| "Put the dentist on Thursday at 3:30 for Jak." | It confirms first. A parent's change happens right away; from a kid, or from a shared kitchen device, the event goes to a parent to approve, and it says who. |
+| Eli: "Can I have a sleepover at Ava's on Friday?" | It offers to ask, and the request goes to Nick and Holly. Nothing is on the calendar yet. |
+| Nick: "Anything waiting for me?" | The **Approvals** screen: Eli's sleepover with Approve and Decline. A tap on Approve puts it on the calendar, and the **Week** screen shows it. |
 | (tapping a chore on the screen) | The screen checks it off through Corral and tells the assistant, so "who did the eggs?" right after has the answer. |
 | (a chore checked off on the kitchen Echo Show) | The barn Echo Show's screen shows it within a few seconds: every device shares one household, kept through restarts until its day turns over. |
 | "Run the greenhouse misters for 30 seconds." | It confirms, then opens the valve through the greenhouse controller (a real ESP32 controller on the LAN, run locally) and the **Ranch** screen counts the run down. |
@@ -103,7 +103,7 @@ Ranch tools sit beside Corral's, and they're generic: what a device is called, w
 **Connector-shaped.** Devices come from sources, collars from a feed, and the tools only see the generic shapes:
 
 - **The greenhouse** comes through a connector for our ESP32 greenhouse controller's firmware API (`GET /status`, `POST /on?sec=N`, `POST /off`, `X-Api-Key`; one normally closed valve that the firmware closes when a run ends, on any fault and when Wi-Fi drops, an air sensor, and five soil probes reported as raw millivolts). The sample household runs the very same connector against a simulated controller speaking those routes, so its misters, air and beds behave like the real ones. Locally, it can be the real controller ([below](#the-local-greenhouse-connector)).
-- **Animal collars**: our animals wear Halo GPS collars, and Halo has no public API we could find, so the sample simulates six collars behind a generic feed (`TrackerFeed`: animal, battery, signal, last fix, position) that a real feed can fill later. At night two of them are outside the fence for the demo.
+- **Animal collars**: our dogs wear Halo GPS collars, and Halo has no public API we could find, so the sample simulates our nine dogs' collars behind a generic feed (`TrackerFeed`: animal, battery, signal, last fix, position) that a real feed can fill later. At night two of them are outside the fence for the demo.
 - **The sample's other devices** (stock tank heaters, an automatic waterer, a coop heat lamp, a barn heater, a propane tank, a garden drip line) are simulated: they switch, run on timers and read what the time of day and their state would make them read.
 
 **Fails safe.** A valve's safe failure is off, so its runs always have an end; a heater's is on, so switching one off says it comes back on if it loses its connection, and the screen asks for a second tap. The sample caps the misters at 10 minutes, under the firmware's own 30, so a misheard "thirty minutes" stays a small mistake.
@@ -128,7 +128,7 @@ Why a separate script: `wrangler.jsonc` sets `global_fetch_strictly_public`, whi
 
 [`/echo`](https://alexa-demo.corral.narralogy.ai/echo) stands in for Alexa+ on an Echo Show 8, as the FAQ invites: **the page is a real MCP client** of this server. It sends `initialize`, `tools/list`, `resources/read` and `tools/call` over Streamable HTTP, and shows every call in a live traffic log beside the device.
 
-- **Who's speaking:** pick anyone in the household, or someone Alexa doesn't recognize, the way Alexa+ knows voices. The device greets them by name, every MCP call from then on (the assistant's and the screens' taps alike) carries who it is, and the screen redraws as they'd see it: Sam's private appointment opens up for Sam, the farm hand's day is the ranch's, a guest can look but not change anything. It starts as the household's first member, a parent, so every suggestion works; the suggestions marked Maya and Sam switch to them first, which plays the approval demo in two taps.
+- **Who's speaking:** pick anyone in the household, or someone Alexa doesn't recognize, the way Alexa+ knows voices. The device greets them by name, every MCP call from then on (the assistant's and the screens' taps alike) carries who it is, and the screen redraws as they'd see it: Nick's private appointment opens up for Nick, the farm hand's day is the ranch's, a guest can look but not change anything. It starts as the household's first member, a parent, so every suggestion works; the suggestions marked Eli and Nick switch to them first, which plays the approval demo in two taps.
 - **Listening and speaking:** push-to-talk, or hands-free after "Alexa", with the browser's speech recognition and voices. Typing works everywhere.
 - **Deciding:** Claude ([below](#the-simulators-model)) picks the tools and says the answer. The page runs the loop: it calls the tools Claude asks for, sends the results back together, and stops at an answer.
 - **Screens:** when a tool has an MCP Apps screen, the page renders it on the device as a host would, passes taps back through MCP, and tells Claude what was tapped.

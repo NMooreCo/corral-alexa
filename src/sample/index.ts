@@ -374,7 +374,7 @@ export class SampleHousehold implements Household {
     return approversOf(this.state);
   }
 
-  /** Who decides requests, besides `me`: "Sam or Alex". */
+  /** Who decides requests, besides `me`: "Nick or Holly". */
   private decidedBy(me?: SamplePerson | null): string {
     return either(this.approvers().filter((p) => p.id !== me?.id).map((p) => p.shortName));
   }
@@ -443,7 +443,7 @@ export class SampleHousehold implements Household {
     return list?.items.find((it) => !it.approved && it.text.toLowerCase() === text);
   }
 
-  /** "Maya", or "The kitchen screen". */
+  /** "Eli", or "The kitchen screen". */
   private askedBy(r: SampleRequest): string {
     if (r.from) return this.shortNameOf(r.from);
     return this.state.actingAs.charAt(0).toUpperCase() + this.state.actingAs.slice(1);

@@ -23,7 +23,7 @@ export const RANCH_TOOLS: RanchTool[] = [
     name: "devices",
     title: "Ranch devices",
     description:
-      "The ranch's devices and sensors (valves like the greenhouse misters, heaters, heat lamps, waterers, tanks, the greenhouse air and soil), optionally for one place or one device. Each says on or off, any run in progress and when it ends, its readings, how long it may run, what it does if it loses its connection, and anything needing attention.",
+      "The ranch's devices and sensors (valves like the greenhouse misters, heaters, heat lamps, waterers, tanks, the greenhouse air and soil), optionally for one place or one device. Each says on or off, any run in progress and when it ends, its readings, how long it may run, what it does if it loses its connection, and anything needing attention. When the person speaking may not switch devices, it says so and who can.",
     input: z.object({ place: z.string().describe('A place, like "Greenhouse" or "Barn"').optional(), device: z.string().describe("One device's name or id").optional() }),
     openWorld: true,
     run: async (ranch, a) => (await ranch.devices.list({ place: a.place, device: a.device })).map(spoken),
