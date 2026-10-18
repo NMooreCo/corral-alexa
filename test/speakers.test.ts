@@ -128,7 +128,7 @@ describe("a guest", () => {
       ["decide_approval", { request: h.state.requests[0]!.id, decision: "approve" }],
     ];
     for (const [tool, args] of tries) {
-      await expect(h.as("Stranger").call(tool, args)).rejects.toThrow(new ToolError("Only people in Juniper Hollow can change things here, and this voice isn't one of them."));
+      await expect(h.as("Stranger").call(tool, args)).rejects.toThrow(new ToolError("Only people in Juniper Hollow can change things here, by voice or on the screen, and this voice isn't one of them."));
     }
     expect(((await h.as("Sam").call("tasks", {})) as CorralTask[]).find((t) => t.id === eggs)?.status).toBe("overdue");
   });

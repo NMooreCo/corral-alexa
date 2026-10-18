@@ -56,7 +56,7 @@ export class SampleHousehold implements Household {
 
   async callAs(actor: SampleActor, tool: HouseholdTool, args: Args): Promise<unknown> {
     if (CHANGES.has(tool) && !actor.role.changes) {
-      throw new ToolError(actor.person ? `${actor.person.shortName} can look but not change things in ${this.state.name}.` : `Only people in ${this.state.name} can change things here, and this voice isn't one of them.`);
+      throw new ToolError(actor.person ? `${actor.person.shortName} can look but not change things in ${this.state.name}.` : `Only people in ${this.state.name} can change things here, by voice or on the screen, and this voice isn't one of them.`);
     }
     switch (tool) {
       case "calendar":

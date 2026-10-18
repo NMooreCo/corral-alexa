@@ -6,7 +6,7 @@ Alexa can set a timer. It can't tell you whether it's Dad's weekend, who has the
 
 **Try it**
 
-- **[The simulated Echo Show](https://alexa-demo.corral.narralogy.ai/echo)**: talk to it (or type), watch it call Corral's tools over MCP, tap the screens. It runs on a made-up household, Juniper Hollow. The demo passcode is in the submission's testing instructions.
+- **[The simulated Echo Show](https://alexa-demo.corral.narralogy.ai/echo)**: talk to it (or type), watch it call Corral's tools over MCP, tap the screens, and pick who's speaking to watch the family's rules follow the person. It runs on a made-up household, Juniper Hollow. The demo passcode is in the submission's testing instructions.
 - **The MCP server**: `https://alexa-demo.corral.narralogy.ai/mcp` (the sample household, open) and `https://alexa.corral.narralogy.ai/mcp` (linked to a real Corral, behind account linking).
 - **The Agent Skill**: [`skills/corral-household`](skills/corral-household/SKILL.md), also served as the MCP prompt `household-assistant`.
 
@@ -19,7 +19,9 @@ Alexa can set a timer. It can't tell you whether it's Dad's weekend, who has the
 | "Leo emptied the dishwasher." | The chore is checked off with credit to Leo, and the screen updates. |
 | "We're down to two bags of horse feed." | The count is recorded, the **Supplies** screen shows about three days left, and it offers to put feed on the feed store list. |
 | "Add tortillas and salsa." | Both go on the grocery list; the **List** screen shows it, and tapping an item checks it off. |
-| "Put the dentist on Thursday at 3:30 for Leo." | It confirms first. From a shared kitchen device the event goes to a parent to approve, and it says who. |
+| "Put the dentist on Thursday at 3:30 for Leo." | It confirms first. A parent's change happens right away; from a kid, or from a shared kitchen device, the event goes to a parent to approve, and it says who. |
+| Maya: "Can I have a sleepover at Ava's on Friday?" | It offers to ask, and the request goes to Sam and Alex. Nothing is on the calendar yet. |
+| Sam: "Anything waiting for me?" | The **Approvals** screen: Maya's sleepover with Approve and Decline. A tap on Approve puts it on the calendar, and the **Week** screen shows it. |
 | (tapping a chore on the screen) | The screen checks it off through Corral and tells the assistant, so "who did the eggs?" right after has the answer. |
 
 ## How it works
@@ -33,7 +35,7 @@ flowchart LR
   end
   subgraph Bridge["corral-alexa (Cloudflare Worker)"]
     M["MCP server<br/>2025-11-25 and 2026-07-28"]
-    U["MCP Apps screens<br/>Today, Week, List, Supplies"]
+    U["MCP Apps screens<br/>Today, Week, List, Supplies, Approvals"]
     L["Account linking<br/>OAuth 2.1 + PKCE"]
     P["Sample household"]
   end
@@ -50,6 +52,7 @@ flowchart LR
 ```
 
 - **The rules travel with the data.** The bridge never decides who sees or changes what. Linked, every call goes to Corral's own MCP server with the person's own Corral token, and Corral applies the same rules as its app. The sample household answers the same tools with the same JSON, so everything here runs and demos with no account.
+- **Rules follow the person.** Alexa+ recognizes family members by voice, and each person links their own Corral account, so who's talking comes from their token and Corral applies their role: a kid's plans wait for a parent, a private event reads as Busy to anyone but its owner, the farm hand sees the ranch calendar. The sample household has the same roles as data. With no sign-in in sample mode, the simulator names the speaker in an `x-demo-person` header; only the sample reads it, a name it doesn't know is a guest, and the linked server ignores it completely.
 - **One server, every assistant.** Alexa+ speaks MCP 2025-11-25; current clients speak 2026-07-28. Both are served statelessly from one endpoint with the MCP TypeScript SDK's `createMcpHandler`, so the same server, screens and skill also work in Claude, ChatGPT or Home Assistant.
 
 ## Built for Alexa+
@@ -60,7 +63,7 @@ The real Alexa+ developer tools (the MCP Toolkit, the `alexa-ai` CLI and the web
 |---|---|
 | Self-hosted MCP server, spec 2025-11-25, Streamable HTTP | Yes, plus 2026-07-28 for current clients |
 | Round trips under 500 ms | Tool calls answer in about 10 to 20 ms from the edge on the sample household; linked to a real Corral at home, 120 to 350 ms measured end to end |
-| Visuals through MCP Apps | Four screens, each one self-contained HTML (`text/html;profile=mcp-app`) that declares it reaches no other origin |
+| Visuals through MCP Apps | Five screens, each one self-contained HTML (`text/html;profile=mcp-app`) that declares it reaches no other origin |
 | OAuth 2.1 authorization code with PKCE (S256) | Yes ([account linking](#account-linking)) |
 | Protected resource metadata at `/.well-known/oauth-protected-resource` | Served at the root, naming `/mcp`, this server and the scopes |
 | `resource` on authorize and token; a refresh token with every access token | Yes |
@@ -72,6 +75,7 @@ The real Alexa+ developer tools (the MCP Toolkit, the `alexa-ai` CLI and the web
 
 [`/echo`](https://alexa-demo.corral.narralogy.ai/echo) stands in for Alexa+ on an Echo Show 8, as the FAQ invites: **the page is a real MCP client** of this server. It sends `initialize`, `tools/list`, `resources/read` and `tools/call` over Streamable HTTP, and shows every call in a live traffic log beside the device.
 
+- **Who's speaking:** pick anyone in the household, or someone Alexa doesn't recognize, the way Alexa+ knows voices. The device greets them by name, every MCP call from then on (the assistant's and the screens' taps alike) carries who it is, and the screen redraws as they'd see it: Sam's private appointment opens up for Sam, the farm hand's day is the ranch's, a guest can look but not change anything. It starts as the household's first member, a parent, so every suggestion works; the suggestions marked Maya and Sam switch to them first, which plays the approval demo in two taps.
 - **Listening and speaking:** push-to-talk, or hands-free after "Alexa", with the browser's speech recognition and voices. Typing works everywhere.
 - **Deciding:** Claude ([below](#the-simulators-model)) picks the tools and says the answer. The page runs the loop: it calls the tools Claude asks for, sends the results back together, and stops at an answer.
 - **Screens:** when a tool has an MCP Apps screen, the page renders it on the device as a host would, passes taps back through MCP, and tells Claude what was tapped.
@@ -94,7 +98,7 @@ The simulator's brain is **Claude Opus 5.5**, called from the Worker at `POST /e
 
 ## The Agent Skill
 
-[`skills/corral-household`](skills/corral-household/SKILL.md) is an [Agent Skill](https://agentskills.io/) that teaches any agent to run a family's day through Corral's tools by voice: look before changing, confirm in one sentence, respect approvals, keep "Busy" private, credit the right person, speak briefly, and use the screens. It includes everyday requests, a running-low recipe and a tool reference. The server also offers it as the MCP prompt `household-assistant`, and the simulator gives it to Claude.
+[`skills/corral-household`](skills/corral-household/SKILL.md) is an [Agent Skill](https://agentskills.io/) that teaches any agent to run a family's day through Corral's tools by voice: know who's speaking, look before changing, confirm in one sentence, respect approvals (and leave deciding them to the people who give them), keep "Busy" private, credit the right person, speak briefly, and use the screens. It includes everyday requests, a running-low recipe and a tool reference. The server also offers it as the MCP prompt `household-assistant`, and the simulator gives it to Claude.
 
 ## Account linking
 
@@ -154,6 +158,7 @@ pnpm check
 Builds every page, typechecks (Worker and screens), and runs the tests:
 
 - the sample household's answers;
+- who's talking: each role's rules as data (private events, the farm hand, guests, what waits for a parent), approvals from a kid's request through a parent's yes to the calendar, the speaker header in sample mode, and corral mode ignoring it;
 - the 2025-11-25 handshake, tools and prompts Alexa+ sees;
 - every screen's resource;
 - the current protocol for up-to-date clients;
@@ -166,8 +171,8 @@ Builds every page, typechecks (Worker and screens), and runs the tests:
 |---|---|
 | `src/index.ts` | The Worker: the sample household with `/echo` and `/preview`, or account linking in front of a real Corral |
 | `src/server.ts` | The MCP server: Corral's tools, the screen tools and their MCP Apps resources, the skill as a prompt |
-| `src/household.ts`, `src/corral.ts`, `src/sample/` | The contract both households answer; a real Corral through its MCP server; the sample household |
-| `src/today.ts`, `src/screens.ts` | What each screen shows |
+| `src/household.ts`, `src/corral.ts`, `src/sample/` | The contract both households answer; a real Corral through its MCP server; the sample household, with its roles in `src/sample/roles.ts` |
+| `src/today.ts`, `src/screens.ts`, `src/approvals.ts` | What each screen shows |
 | `src/link/` | Account linking: the OAuth provider, Corral as the sign-in, `/admin/clients` |
 | `src/echo/` | The simulator's model route (Claude on Bedrock or the Claude API) and the practice model |
 | `widgets/` | The screens (MCP Apps), each built into one HTML file, on `widgets/shared` |

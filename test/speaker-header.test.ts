@@ -49,7 +49,7 @@ describe("the speaker header in sample mode", () => {
 
   it("treats a name nobody here has as a guest, never as the kitchen screen", async () => {
     const res = await call("add_list_item", { text: "Fireworks" }, as("Grandpa Joe"));
-    expect(res).toMatchObject({ isError: true, content: [{ text: "Only people in Juniper Hollow can change things here, and this voice isn't one of them." }] });
+    expect(res).toMatchObject({ isError: true, content: [{ text: "Only people in Juniper Hollow can change things here, by voice or on the screen, and this voice isn't one of them." }] });
     const items = answer(await call("lists", { list: "Groceries" })).items.map((i: { text: string }) => i.text);
     expect(items).not.toContain("Fireworks");
   });

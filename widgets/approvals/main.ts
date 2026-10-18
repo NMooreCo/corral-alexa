@@ -39,7 +39,7 @@ function render(view: ApprovalsView) {
     <header>
       <div>
         <h1>${decides ? "Waiting for you" : "Requests"}</h1>
-        <p class="household">${escape([decides ? (waiting.length ? `${waiting.length} to decide` : "Nothing to decide") : "", view.household].filter(Boolean).join(" · "))}</p>
+        <p class="household">${escape([decides ? (waiting.length ? `${waiting.length} to decide` : "Nothing to decide") : view.yoursWaiting.length ? `${view.yoursWaiting.length} waiting for a yes` : "", view.household].filter(Boolean).join(" · "))}</p>
       </div>
       <div class="header-end">${sizeButton(screen)}</div>
     </header>
@@ -54,7 +54,7 @@ function render(view: ApprovalsView) {
             <h2 id="h-decide">To decide</h2>
             <ul class="requests">
               ${waiting.map(card).join("")}
-              ${done.map(({ request, decision }) => `<li class="request decided ${decision}"><span class="avatar" aria-hidden="true">${initial(request.from)}</span><div class="body"><p class="who">${escape(request.from)} asked</p><p class="asks">${escape(request.asks)}</p></div><span class="badge solid">${decision === "approve" ? "Approved" : "Declined"}</span></li>`).join("")}
+              ${done.map(({ request, decision }) => `<li class="request decided ${decision === "approve" ? "approved" : "declined"}"><span class="avatar" aria-hidden="true">${initial(request.from)}</span><div class="body"><p class="who">${escape(request.from)} asked</p><p class="asks">${escape(request.asks)}</p></div><span class="badge solid">${decision === "approve" ? "Approved" : "Declined"}</span></li>`).join("")}
             </ul>
           </section>`
         : ""
@@ -66,7 +66,6 @@ function render(view: ApprovalsView) {
             <ul class="mine">${view.yoursWaiting
               .map((r) => `<li><p class="asks">${escape(r.asks)}</p><p class="meta">Waiting for ${escape(r.decidedBy)} · asked ${escape(withoutToday(r.since, zone()))}</p></li>`)
               .join("")}</ul>
-            ${view.requests && !nothing ? `<p class="meta note">${escape(view.requests)}</p>` : ""}
           </section>`
         : ""
     }`;

@@ -433,3 +433,171 @@ footer label {
   gap: 8px;
   align-items: center;
 }
+
+/* ---------- Who's speaking ---------- */
+
+/* One color per person, the same on the picker and the device. */
+[data-tone="0"] {
+  --tone: #8cc4a3;
+}
+[data-tone="1"] {
+  --tone: #9db8f2;
+}
+[data-tone="2"] {
+  --tone: #f2b6d0;
+}
+[data-tone="3"] {
+  --tone: #f2c879;
+}
+[data-tone="4"] {
+  --tone: #b9a6f2;
+}
+[data-tone="5"] {
+  --tone: #b5bdb9;
+}
+
+.speakers {
+  margin: 0;
+  padding: 12px 14px 14px;
+  border-radius: 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  min-width: 0;
+}
+
+.speakers legend {
+  padding: 0 6px;
+  font-weight: 700;
+}
+
+.speakers .hint {
+  display: block;
+  margin: 0 0 10px;
+}
+
+.speaker-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 8px;
+}
+
+.speaker {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  cursor: pointer;
+}
+
+/* The guest's long label gets the whole row. */
+.speaker:last-child {
+  grid-column: 1 / -1;
+}
+
+.speaker input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.speaker:has(input:checked) {
+  border-color: var(--tone);
+  box-shadow: inset 0 0 0 1px var(--tone);
+}
+
+.speaker:has(input:focus-visible) {
+  outline: 2px solid var(--alexa);
+  outline-offset: 2px;
+}
+
+.speaker .avatar {
+  grid-row: span 2;
+}
+
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--tone, var(--muted));
+  color: #10201a;
+  font-weight: 800;
+}
+
+.speaker-name {
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.speaker-role {
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.2;
+}
+
+/* On the device: who Alexa thinks is talking, in a quiet pill at the top. It says hello for a moment on a switch. */
+.speaker-chip {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 18px 6px 6px;
+  border-radius: 999px;
+  background: rgb(5 8 7 / 0.62);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 600;
+  pointer-events: none;
+  opacity: 0.8;
+  transition:
+    opacity 0.3s,
+    padding 0.3s,
+    font-size 0.3s;
+}
+
+.speaker-chip .avatar {
+  width: 36px;
+  height: 36px;
+  font-size: 20px;
+}
+
+.speaker-chip.greeting {
+  opacity: 1;
+  padding: 10px 26px 10px 10px;
+  font-size: 30px;
+  box-shadow: 0 0 0 2px var(--tone), 0 8px 30px rgb(0 0 0 / 0.4);
+}
+
+.speaker-chip.greeting .avatar {
+  width: 44px;
+  height: 44px;
+  font-size: 24px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .speaker-chip {
+    transition: none;
+  }
+}
+
+.chip-as {
+  display: inline-block;
+  margin-right: 2px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--alexa);
+  font-size: 0.8rem;
+  font-weight: 700;
+}

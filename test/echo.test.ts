@@ -82,6 +82,8 @@ describe("the simulated Echo Show", () => {
     expect(sent!.headers.get("x-api-key")).toBe("bedrock-key");
     expect(sent!.body).toMatchObject({ model: "anthropic.claude-opus-5-5", output_config: { effort: "low" }, tools: [{ name: "show_today" }] });
     expect(sent!.body.system[0].text).toContain("Busy means private");
+    // It knows the simulator says who Alexa recognized before each turn.
+    expect(sent!.body.system[0].text).toContain("(Alexa recognized the voice");
     expect(sent!.body.system[0].cache_control).toEqual({ type: "ephemeral" });
     expect(sent!.body.system[1].text).toContain("America/Denver");
   });
@@ -117,5 +119,16 @@ describe("the simulated Echo Show", () => {
     const env: Env = { BACKEND: "sample", MODEL_MOCK: "true" };
     const first = await (await call(env, "/echo/model", turn([{ role: "user", content: "What's going on today?" }]))).json();
     expect(first).toMatchObject({ stop_reason: "tool_use", content: [{ type: "tool_use", name: "show_today" }] });
+  });
+
+  it("plays the approval demo with the practice model too: a kid's sleepover for the coming Friday, then a parent's approvals", async () => {
+    const env: Env = { BACKEND: "sample", MODEL_MOCK: "true" };
+    const said = (who: string, text: string) => [{ role: "user", content: [{ type: "text", text: who }, { type: "text", text }] }];
+    const asked = await (await call(env, "/echo/model", turn(said("(Alexa recognized the voice: Maya Rivera, Kid.)", "Can I have a sleepover at Ava's on Friday?")))).json() as { content: { input: { start: string } }[] };
+    const use = asked.content[0]!;
+    expect(use).toMatchObject({ type: "tool_use", name: "add_event", input: { title: "Sleepover at Ava's", people: ["maya rivera"] } });
+    expect(new Date(`${use.input.start}T12:00:00Z`).getUTCDay()).toBe(5);
+    const waiting = await (await call(env, "/echo/model", turn(said("(Alexa recognized the voice: Sam Rivera, Parent.)", "Anything waiting for me?")))).json();
+    expect(waiting).toMatchObject({ content: [{ type: "tool_use", name: "show_approvals" }] });
   });
 });

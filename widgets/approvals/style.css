@@ -30,7 +30,7 @@ main > section + section {
   background: var(--forest-soft);
 }
 
-.request.decided.decline {
+.request.decided.declined {
   border-left-color: var(--muted);
   background: var(--busy);
 }
@@ -39,7 +39,7 @@ main > section + section {
   color: var(--muted);
 }
 
-.request.decided.decline .badge {
+.request.decided.declined .badge {
   background: var(--muted);
   border-color: var(--muted);
 }
@@ -92,13 +92,13 @@ main > section + section {
   cursor: pointer;
 }
 
-.approve {
+.actions .approve {
   border: 2px solid var(--forest);
   background: var(--forest);
   color: var(--card);
 }
 
-.decline {
+.actions .decline {
   border: 2px solid var(--line);
   background: var(--card);
   color: var(--ink);
@@ -124,10 +124,6 @@ main > section + section {
 
 .mine .asks {
   font-size: 1.15rem;
-}
-
-.note {
-  margin: 12px 0 0;
 }
 
 /* Nothing waiting: a calm, finished state rather than an empty box. */
