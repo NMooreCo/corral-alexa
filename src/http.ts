@@ -1,10 +1,11 @@
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import type { Household } from "./household.ts";
+import type { Ranch } from "./ranch/index.ts";
 import { SERVER_INFO, buildServer } from "./server.ts";
 
-/** Serves one MCP request (either protocol era) from `household`. */
-export function serveMcp(request: Request, household: Household): Promise<Response> {
-  return createMcpHandler(() => buildServer(household), { onerror: (err) => console.error("mcp:", err.message) }).fetch(request);
+/** Serves one MCP request (either protocol era) from `household`, and its ranch when it has one. */
+export function serveMcp(request: Request, household: Household, ranch?: Ranch): Promise<Response> {
+  return createMcpHandler(() => buildServer(household, ranch), { onerror: (err) => console.error("mcp:", err.message) }).fetch(request);
 }
 
 export function json(status: number, body: unknown, headers: Record<string, string> = {}): Response {

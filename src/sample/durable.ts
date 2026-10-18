@@ -1,9 +1,10 @@
 import { DurableObject } from "cloudflare:workers";
 import type { Env } from "../env.ts";
 import { serveMcp } from "../http.ts";
+import { SampleRanchHolder } from "./ranch.ts";
+import { SPEAKER_HEADER, speakerOf } from "./roles.ts";
 import { SharedSample, type SampleStatus } from "./shared.ts";
 import { sqlStore } from "./store.ts";
-import { SPEAKER_HEADER, speakerOf } from "./roles.ts";
 
 /**
  * One sample household as a Durable Object (sample mode only). The Worker
@@ -15,6 +16,8 @@ import { SPEAKER_HEADER, speakerOf } from "./roles.ts";
  */
 export class SampleHouseholdObject extends DurableObject<Env> {
   readonly #household: SharedSample;
+  /** The household's ranch, in memory: both Echo Shows reach this one object, so they see the same runs. */
+  readonly #ranch = new SampleRanchHolder();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -23,8 +26,10 @@ export class SampleHouseholdObject extends DurableObject<Env> {
   }
 
   /** An MCP request (either protocol era), answered from this household. */
-  fetch(request: Request): Promise<Response> {
-    return serveMcp(request, this.#household.as(speakerOf(request.headers.get(SPEAKER_HEADER))));
+  async fetch(request: Request): Promise<Response> {
+    const { timeZone } = await this.#household.about();
+    const ranch = this.#ranch.ranchFor(this.env, request.url, timeZone);
+    return serveMcp(request, this.#household.as(speakerOf(request.headers.get(SPEAKER_HEADER))), ranch);
   }
 
   async status(): Promise<SampleStatus> {

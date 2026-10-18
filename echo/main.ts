@@ -48,6 +48,10 @@ const SUGGESTIONS: (string | { text: string; as: string })[] = [
   "Put the dentist on Thursday at 3:30 for Leo.",
   "Where's Maya right now?",
   "How many points does Leo have?",
+  "Good morning.",
+  "Run the greenhouse misters for 30 seconds.",
+  "It's going down to 12 tonight. Get the place ready.",
+  "Are any of the animals outside the fence?",
 ];
 // What to try on a display somewhere else on the place.
 const PLACE_SUGGESTIONS: Record<string, string[]> = {
@@ -495,15 +499,12 @@ function echoable(content: Block[]): Block[] {
 async function runTool(use: Anthropic.Beta.BetaToolUseBlock): Promise<Anthropic.Beta.BetaToolResultBlockParam> {
   const args = (use.input ?? {}) as Record<string, unknown>;
   try {
-    state.actor = "assistant";
     const result = await client.callTool({ name: use.name, arguments: args });
-    state.actor = "screen";
     const uri = uiByTool.get(use.name);
     if (uri && !result.isError) await showScreen(use.name, uri, args, result);
     const text = (result.content as { type: string; text?: string }[]).filter((c) => c.type === "text").map((c) => c.text).join("\n");
     return { type: "tool_result", tool_use_id: use.id, content: (text || JSON.stringify(result.structuredContent ?? {})).slice(0, 20_000), is_error: Boolean(result.isError) };
   } catch (err) {
-    state.actor = "screen";
     return { type: "tool_result", tool_use_id: use.id, content: err instanceof Error ? err.message : "That tool didn't answer.", is_error: true };
   }
 }
@@ -533,8 +534,10 @@ async function ask(text: string) {
       const said = blocks.filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text").map((b) => b.text).join(" ").trim();
       if (reply.stop_reason === "tool_use" && uses.length) {
         if (said) caption(text, said);
-        // Every result goes back together, in one message.
-        state.messages.push({ role: "user", content: await Promise.all(uses.map(runTool)) });
+        // Every result goes back together, in one message. The calls run side by side, so the log says the assistant made each of them until they're all back.
+        state.actor = "assistant";
+        const results = await Promise.all(uses.map(runTool)).finally(() => (state.actor = "screen"));
+        state.messages.push({ role: "user", content: results });
         continue;
       }
       respond(text, reply.stop_reason === "refusal" ? "Sorry, I can't help with that one." : said || "Done.");

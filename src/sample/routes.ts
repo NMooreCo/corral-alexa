@@ -2,6 +2,7 @@ import type { Env } from "../env.ts";
 import { json, serveMcp } from "../http.ts";
 import { SharedSample } from "./shared.ts";
 import { memoryStore } from "./store.ts";
+import { SampleRanchHolder } from "./ranch.ts";
 import { SPEAKER_HEADER, speakerOf } from "./roles.ts";
 
 /** The household everyone shares unless a request names another with ?household=. */
@@ -18,15 +19,16 @@ export function householdId(url: URL): string | null {
  * config without it), each household lives as long as this isolate, as the
  * sample did before it had a Durable Object.
  */
-const local = new Map<string, SharedSample>();
-function localHousehold(id: string): SharedSample {
-  let household = local.get(id);
-  if (!household) {
+const local = new Map<string, { household: SharedSample; ranch: SampleRanchHolder }>();
+function localSample(id: string): { household: SharedSample; ranch: SampleRanchHolder } {
+  let sample = local.get(id);
+  if (!sample) {
     if (local.size >= 32) local.clear();
-    local.set(id, (household = new SharedSample(memoryStore())));
+    local.set(id, (sample = { household: new SharedSample(memoryStore()), ranch: new SampleRanchHolder() }));
   }
-  return household;
+  return sample;
 }
+const localHousehold = (id: string): SharedSample => localSample(id).household;
 
 function passcodeOk(request: Request, env: Env): boolean {
   return !env.DEMO_PASSCODE || request.headers.get("x-demo-passcode")?.trim() === env.DEMO_PASSCODE.trim();
@@ -45,7 +47,12 @@ export async function householdRoute(request: Request, env: Env): Promise<Respon
   if (!id) return json(400, { error: { code: "bad_household", message: "A household id is lowercase letters, digits and dashes, up to 40 of them." } });
   const object = env.SAMPLE_HOUSEHOLDS?.getByName(id);
 
-  if (url.pathname === "/mcp") return object ? object.fetch(request) : serveMcp(request, localHousehold(id).as(speakerOf(request.headers.get(SPEAKER_HEADER))));
+  if (url.pathname === "/mcp") {
+    if (object) return object.fetch(request);
+    const { household, ranch } = localSample(id);
+    const { timeZone } = await household.about();
+    return serveMcp(request, household.as(speakerOf(request.headers.get(SPEAKER_HEADER))), ranch.ranchFor(env, request.url, timeZone));
+  }
 
   if (url.pathname === "/household") {
     if (request.method !== "GET" && request.method !== "HEAD") return json(405, { error: { code: "method", message: "GET /household." } }, { allow: "GET, HEAD" });

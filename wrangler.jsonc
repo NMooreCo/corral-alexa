@@ -6,6 +6,7 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
   // global_fetch_strictly_public sends calls to Corral over the public internet, even from a Worker in the same zone.
+  // It also keeps every fetch off the LAN, so `pnpm dev:lan` (the local greenhouse connector) runs without it, on this machine only.
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "workers_dev": false,
   "vars": {

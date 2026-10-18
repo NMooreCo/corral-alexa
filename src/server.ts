@@ -4,6 +4,9 @@ import * as z from "zod/v4";
 import { APPROVALS_URI, approvalsView } from "./approvals.ts";
 import { UpstreamAuthError } from "./corral.ts";
 import { APPROVAL_TOOLS, ToolError, type Household, type HouseholdAbout, type HouseholdTool } from "./household.ts";
+import type { Ranch } from "./ranch/index.ts";
+import { RANCH_INSTRUCTIONS, RANCH_TOOLS, SET_DEVICE } from "./ranch/tools.ts";
+import { BRIEFING_URI, RANCH_URI, briefingView, ranchSummary, ranchView, type RanchView } from "./ranch/views.ts";
 import { LIST_URI, SUPPLIES_URI, WEEK_URI, listView, suppliesView, weekView } from "./screens.ts";
 import { TODAY_URI, todayView } from "./today.ts";
 import { householdSkill, householdSkillTools, widgetHtml } from "./widgets.generated.ts";
@@ -108,7 +111,7 @@ const TOOLS: ToolDef[] = [
   },
 ];
 
-function instructions(about: HouseholdAbout, decides: boolean): string {
+function instructions(about: HouseholdAbout, decides: boolean, ranch: boolean): string {
   return [
     `Corral runs ${about.name ? `the ${about.name} household` : "this household"}: its calendar, chores, lists, whereabouts, points and supplies.`,
     ...(about.timeZone ? [`The household's time zone is ${about.timeZone}.`] : []),
@@ -116,6 +119,7 @@ function instructions(about: HouseholdAbout, decides: boolean): string {
     "Changes happen right away, so confirm with the person first. Some changes go to a parent to approve instead; the answer says so and who.",
     ...(decides ? ["What waits for someone to approve is in approvals; only the people who approve requests decide them, with decide_approval."] : []),
     `Speak briefly: the next thing or two, not a whole list. To show something on a screen, use show_today, show_week, show_list${decides ? ", show_supplies or show_approvals" : " or show_supplies"}.`,
+    ...(ranch ? [RANCH_INSTRUCTIONS] : []),
   ].join(" ");
 }
 
@@ -130,10 +134,10 @@ async function answer(run: () => Promise<unknown>): Promise<CallToolResult> {
   }
 }
 
-/** One MCP server for one request, answering from `household`. */
-export async function buildServer(household: Household): Promise<McpServer> {
+/** One MCP server for one request, answering from `household` (and its ranch, when it has one). */
+export async function buildServer(household: Household, ranch?: Ranch): Promise<McpServer> {
   const decides = Boolean(household.decidesRequests);
-  const server = new McpServer(SERVER_INFO, { instructions: instructions(await household.about(), decides) });
+  const server = new McpServer(SERVER_INFO, { instructions: instructions(await household.about(), decides, Boolean(ranch)) });
 
   for (const t of TOOLS) {
     if ((APPROVAL_TOOLS as readonly string[]).includes(t.name) && !decides) continue;
@@ -150,18 +154,27 @@ export async function buildServer(household: Household): Promise<McpServer> {
   }
 
   const readOnly = (title: string) => ({ title, readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
-  /** A tool's answer as a screen's view: the JSON for the model and structuredContent for the screen. */
-  const asView = async (make: () => Promise<Record<string, unknown>>): Promise<CallToolResult> => {
+  /** A tool's answer as a screen's view: the JSON for the model (or what `say` makes of it) and structuredContent for the screen. */
+  const asView = async (make: () => Promise<Record<string, unknown>>, say?: (view: Record<string, unknown>) => unknown): Promise<CallToolResult> => {
     try {
       const view = await make();
-      return { content: [{ type: "text", text: JSON.stringify(view) }], structuredContent: view };
+      return { content: [{ type: "text", text: JSON.stringify(say ? say(view) : view) }], structuredContent: view };
     } catch (err) {
       return answer(() => Promise.reject(err));
     }
   };
   /** A screen: the tool that shows it and the MCP Apps page it shows. Every page is self-contained, so it reaches no other origin. */
-  const screen = (name: string, title: string, description: string, input: z.ZodObject, uri: string, html: string, make: (args: Record<string, unknown>) => Promise<Record<string, unknown>>) => {
-    registerAppTool(server, name, { title, description, inputSchema: input, annotations: readOnly(title), _meta: { ui: { resourceUri: uri } } }, (args: unknown) => asView(() => make((args ?? {}) as Record<string, unknown>)));
+  const screen = (
+    name: string,
+    title: string,
+    description: string,
+    input: z.ZodObject,
+    uri: string,
+    html: string,
+    make: (args: Record<string, unknown>) => Promise<Record<string, unknown>>,
+    say?: (view: Record<string, unknown>) => unknown,
+  ) => {
+    registerAppTool(server, name, { title, description, inputSchema: input, annotations: readOnly(title), _meta: { ui: { resourceUri: uri } } }, (args: unknown) => asView(() => make((args ?? {}) as Record<string, unknown>), say));
     registerAppResource(server, title, uri, { description }, async () => ({
       contents: [{ uri, mimeType: RESOURCE_MIME_TYPE, text: html, _meta: { ui: { csp: { connectDomains: [], resourceDomains: [] }, prefersBorder: false } } }],
     }));
@@ -239,6 +252,65 @@ export async function buildServer(household: Household): Promise<McpServer> {
       APPROVALS_URI,
       widgetHtml.approvals,
       () => approvalsView(household),
+    );
+  }
+
+  if (ranch) {
+    for (const t of RANCH_TOOLS) {
+      server.registerTool(
+        t.name,
+        { title: t.title, description: t.description, inputSchema: t.input, annotations: { ...readOnly(t.title), openWorldHint: t.openWorld } },
+        (args) => answer(() => t.run(ranch, args as Record<string, unknown>)),
+      );
+    }
+    const ranchNow = () => ranchView(ranch, household) as unknown as Promise<Record<string, unknown>>;
+    const sayRanch = (v: Record<string, unknown>) => ranchSummary(v as unknown as RanchView);
+    screen(
+      "show_ranch",
+      "Show the ranch",
+      "Show the ranch on the screen: a map of the property with the fence, its zones and each collared animal (one outside the fence stands out), and every device by place, which people can tap to switch. Use it when someone asks about the ranch, the animals, the greenhouse or a device.",
+      z.object({}),
+      RANCH_URI,
+      widgetHtml.ranch,
+      ranchNow,
+      sayRanch,
+    );
+    // The Ranch screen keeps itself current through this; only the screen calls it.
+    registerAppTool(
+      server,
+      "refresh_ranch",
+      { title: "Refresh the ranch", description: "The Ranch screen's own refresh.", inputSchema: z.object({}), annotations: readOnly("Refresh the ranch"), _meta: { ui: { resourceUri: RANCH_URI, visibility: ["app"] } } },
+      () => asView(ranchNow, sayRanch),
+    );
+    // Switching shows the Ranch screen, so a run started by voice counts down in front of whoever asked.
+    registerAppTool(
+      server,
+      SET_DEVICE.name,
+      {
+        title: SET_DEVICE.title,
+        description: SET_DEVICE.description,
+        inputSchema: SET_DEVICE.input,
+        annotations: { title: SET_DEVICE.title, readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+        _meta: { ui: { resourceUri: RANCH_URI } },
+      },
+      async (args: unknown) => {
+        try {
+          const change = await ranch.devices.set((args ?? {}) as Record<string, unknown>);
+          const view = await ranchNow();
+          return { content: [{ type: "text", text: JSON.stringify(change) }], structuredContent: view };
+        } catch (err) {
+          return answer(() => Promise.reject(err));
+        }
+      },
+    );
+    screen(
+      "show_briefing",
+      "Show the briefing",
+      "Show the morning briefing as swipeable cards: today at a glance, the weather, late chores, low supplies, the animals (outside the fence, low collar batteries), the greenhouse and devices needing attention. Use it for good morning, or what do I need to know today.",
+      z.object({}),
+      BRIEFING_URI,
+      widgetHtml.briefing,
+      () => briefingView(household, ranch) as unknown as Promise<Record<string, unknown>>,
     );
   }
 

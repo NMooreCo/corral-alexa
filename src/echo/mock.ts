@@ -31,7 +31,11 @@ export async function mockTurn(request: Request): Promise<Response> {
     return toolUse("add_event", { title: "Sleepover at Ava's", start: day.toString(), ...(who ? { people: [who] } : {}) });
   }
   if (/today|going on|my day/.test(words)) return toolUse("show_today", {});
+  if (/good morning|briefing/.test(words)) return toolUse("show_briefing", {});
+  const run = /(?:run|turn on) (?:the )?(.+?) for (\d+) (second|minute)/.exec(words);
+  if (run) return toolUse("set_device", { device: run[1], state: "on", [run[3] === "second" ? "seconds" : "minutes"]: Number(run[2]) });
+  if (/ranch|animals|greenhouse|fence/.test(words)) return toolUse("show_ranch", {});
   const add = /add (.+?) to the (\w[\w ]*?) list/.exec(words);
   if (add) return toolUse("add_list_item", { text: add[1], list: add[2] });
-  return say("I'm the practice model. Try asking what's going on today.");
+  return say("I'm the practice model. Try asking what's going on today, good morning, or to run the greenhouse misters for 30 seconds.");
 }

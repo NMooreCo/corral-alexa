@@ -9,6 +9,8 @@
   "scripts": {
     "build:widgets": "node scripts/build-widgets.mjs",
     "dev": "pnpm build:widgets && wrangler dev",
+    "dev:lan": "pnpm build:widgets && wrangler dev --compatibility-flags nodejs_compat --var GREENHOUSE_LAN:true",
+    "greenhouse:fake": "node scripts/fake-greenhouse.mjs",
     "ship": "pnpm build:widgets && wrangler deploy --env production",
     "typecheck": "pnpm build:widgets && tsc -p tsconfig.json && tsc -p tsconfig.screens.json",
     "test": "pnpm build:widgets && vitest run",
