@@ -3,9 +3,10 @@ import type { CorralAsk } from "../household.ts";
 import { sampleRoles, type PlanChange, type SampleRole } from "./roles.ts";
 
 /**
- * The sample household: a made-up family ranch with two parents, two kids and
- * a farm hand. Everything is laid out around today, so it always looks
- * current. None of it is a real family.
+ * The sample household: a family ranch with two parents, two kids and a farm
+ * hand. Everything is laid out around today, so it always looks current. The
+ * parents, kids and dogs have our own first names; the surname, the farm hand
+ * and everything they do are made up.
  */
 
 export interface SamplePerson {
