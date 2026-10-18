@@ -1,8 +1,9 @@
 import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
 import { McpServer, type CallToolResult } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
+import { APPROVALS_URI, approvalsView } from "./approvals.ts";
 import { UpstreamAuthError } from "./corral.ts";
-import { ToolError, type CorralTool, type Household, type HouseholdAbout } from "./household.ts";
+import { APPROVAL_TOOLS, ToolError, type Household, type HouseholdAbout, type HouseholdTool } from "./household.ts";
 import { LIST_URI, SUPPLIES_URI, WEEK_URI, listView, suppliesView, weekView } from "./screens.ts";
 import { TODAY_URI, todayView } from "./today.ts";
 import { householdSkill, householdSkillTools, widgetHtml } from "./widgets.generated.ts";
@@ -19,7 +20,7 @@ const date = (what: string) => z.string().describe(`YYYY-MM-DD, ${what}`);
 const task = z.string().describe("The task's id from the tasks tool");
 
 interface ToolDef {
-  name: CorralTool;
+  name: HouseholdTool;
   title: string;
   description: string;
   input: z.ZodObject;
@@ -92,15 +93,29 @@ const TOOLS: ToolDef[] = [
     input: z.object({ supply: z.string().describe("Its name or id"), change: z.enum(["used", "added", "count"]), amount: z.number().describe("How much was used or added, or how much is there now"), where: z.string().describe("A place, when it's kept in more than one").optional() }),
     write: true,
   },
+  {
+    name: "approvals",
+    title: "Requests waiting",
+    description: 'Requests waiting for approval: ones this person can approve or decline (toDecide, with ids), and their own still waiting (yoursWaiting, with who decides). For "anything waiting for me?" or "did Mom say yes yet?".',
+    input: z.object({}),
+  },
+  {
+    name: "decide_approval",
+    title: "Approve or decline a request",
+    description: "Approve or decline a request waiting for this person, by its id from approvals. Approving makes the change it asks for. Only people who approve requests can, never for their own.",
+    input: z.object({ request: z.string().describe("The request's id from approvals"), decision: z.enum(["approve", "decline"]) }),
+    write: true,
+  },
 ];
 
-function instructions(about: HouseholdAbout): string {
+function instructions(about: HouseholdAbout, decides: boolean): string {
   return [
     `Corral runs ${about.name ? `the ${about.name} household` : "this household"}: its calendar, chores, lists, whereabouts, points and supplies.`,
     ...(about.timeZone ? [`The household's time zone is ${about.timeZone}.`] : []),
     "Look things up with the read tools before changing anything, and use the ids they return.",
     "Changes happen right away, so confirm with the person first. Some changes go to a parent to approve instead; the answer says so and who.",
-    "Speak briefly: the next thing or two, not a whole list. To show something on a screen, use show_today, show_week, show_list or show_supplies.",
+    ...(decides ? ["What waits for someone to approve is in approvals; only the people who approve requests decide them, with decide_approval."] : []),
+    `Speak briefly: the next thing or two, not a whole list. To show something on a screen, use show_today, show_week, show_list${decides ? ", show_supplies or show_approvals" : " or show_supplies"}.`,
   ].join(" ");
 }
 
@@ -117,9 +132,11 @@ async function answer(run: () => Promise<unknown>): Promise<CallToolResult> {
 
 /** One MCP server for one request, answering from `household`. */
 export async function buildServer(household: Household): Promise<McpServer> {
-  const server = new McpServer(SERVER_INFO, { instructions: instructions(await household.about()) });
+  const decides = Boolean(household.decidesRequests);
+  const server = new McpServer(SERVER_INFO, { instructions: instructions(await household.about(), decides) });
 
   for (const t of TOOLS) {
+    if ((APPROVAL_TOOLS as readonly string[]).includes(t.name) && !decides) continue;
     server.registerTool(
       t.name,
       {
@@ -193,6 +210,17 @@ export async function buildServer(household: Household): Promise<McpServer> {
     widgetHtml.supplies,
     () => suppliesView(household),
   );
+  if (decides) {
+    screen(
+      "show_approvals",
+      "Show requests waiting",
+      `Show requests waiting for approval on the screen, with Approve and Decline buttons for whoever may decide them, and the speaker's own requests still waiting. Use it for "anything waiting for me?" or "what needs my OK?".`,
+      z.object({}),
+      APPROVALS_URI,
+      widgetHtml.approvals,
+      () => approvalsView(household),
+    );
+  }
 
   // The same guidance as skills/corral-household, for clients that load prompts.
   server.registerPrompt(

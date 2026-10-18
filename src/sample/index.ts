@@ -1,19 +1,26 @@
 import { Temporal } from "temporal-polyfill";
-import { ToolError, type CorralChange, type CorralEvent, type CorralTask, type CorralTool, type CorralWhere, type Household } from "../household.ts";
+import type { CorralApprovals } from "../approvals.ts";
+import { ToolError, type CorralChange, type CorralEvent, type CorralTask, type CorralWhere, type Household, type HouseholdTool } from "../household.ts";
 import { clock, dollars, isAllDay, unitAmount, whenLabel } from "./labels.ts";
-import { seed, type SamplePerson, type SampleState, type SampleTask } from "./seed.ts";
+import { actorFor, actorOf, approversOf, either, personNamed, type PlanChange, type SampleActor } from "./roles.ts";
+import { seed, type SampleEvent, type SamplePerson, type SampleRequest, type SampleState, type SampleTask } from "./seed.ts";
 
 type Args = Record<string, unknown>;
 
+/** The tools that change something. A role that only reads gets none of them. */
+const CHANGES = new Set<HouseholdTool>(["add_event", "add_task", "complete_task", "undo_task", "claim_task", "skip_task", "add_list_item", "check_list_item", "update_supply", "decide_approval"]);
+
 /**
  * The sample household, answering Corral's tools the way Corral does, so the
- * bridge runs and demos with no Corral account. It acts as a shared kitchen
- * screen: it sees what the adults see, except private events, which read as
- * Busy; check-offs and list changes happen right away; and anything it puts
- * on the calendar goes to a parent to approve.
+ * bridge runs and demos with no Corral account. Every call comes from
+ * someone: a person in the household (the simulated Echo Show says who Alexa
+ * recognized), a guest, or, when no one's named, the shared kitchen screen.
+ * Their role (see roles.ts) decides what they see and whether a change
+ * happens now or waits for a parent to approve it.
  */
 export class SampleHousehold implements Household {
   readonly state: SampleState;
+  readonly decidesRequests = true;
   readonly #now: () => Temporal.Instant;
 
   constructor(opts: { now?: () => Temporal.Instant; timeZone?: string } = {}) {
@@ -29,14 +36,35 @@ export class SampleHousehold implements Household {
     return { name: this.state.name, timeZone: this.state.timeZone };
   }
 
-  async call(tool: CorralTool, args: Args): Promise<unknown> {
+  /** As the shared kitchen screen: no one in particular. */
+  async call(tool: HouseholdTool, args: Args): Promise<unknown> {
+    return this.callAs(actorFor(this.state, null), tool, args);
+  }
+
+  /**
+   * The household as one speaker hears it: a name in the household, "guest"
+   * (or any name nobody here has) for a guest, nothing for the shared screen.
+   */
+  as(speaker: string | null | undefined): Household {
+    return {
+      name: this.name,
+      decidesRequests: true,
+      about: () => this.about(),
+      call: (tool, args) => this.callAs(actorFor(this.state, speaker), tool, args),
+    };
+  }
+
+  async callAs(actor: SampleActor, tool: HouseholdTool, args: Args): Promise<unknown> {
+    if (CHANGES.has(tool) && !actor.role.changes) {
+      throw new ToolError(actor.person ? `${actor.person.shortName} can look but not change things in ${this.state.name}.` : `Only people in ${this.state.name} can change things here, and this voice isn't one of them.`);
+    }
     switch (tool) {
       case "calendar":
-        return this.calendar(args);
+        return this.calendar(actor, args);
       case "tasks":
-        return this.tasks(args);
+        return this.tasks(actor, args);
       case "whereabouts":
-        return this.whereabouts(args);
+        return this.whereabouts(actor, args);
       case "people":
         return this.state.people.map((p) => ({ name: p.name, shortName: p.shortName, roles: p.roles }));
       case "lists":
@@ -46,26 +74,30 @@ export class SampleHousehold implements Household {
       case "supplies":
         return this.supplies();
       case "add_event":
-        return this.addEvent(args);
+        return this.addEvent(actor, args);
       case "add_task":
-        return this.addTask(args);
+        return this.addTask(actor, args);
       case "complete_task":
       case "undo_task":
       case "claim_task":
       case "skip_task":
-        return this.markTask(tool, args);
+        return this.markTask(actor, tool, args);
       case "add_list_item":
-        return this.addListItem(args);
+        return this.addListItem(actor, args);
       case "check_list_item":
         return this.checkListItem(args);
       case "update_supply":
         return this.updateSupply(args);
+      case "approvals":
+        return this.approvals(actor);
+      case "decide_approval":
+        return this.decide(actor, args);
     }
   }
 
   // ---------- Reading ----------
 
-  private calendar(args: Args): CorralEvent[] {
+  private calendar(actor: SampleActor, args: Args): CorralEvent[] {
     const from = this.dateArg(args.from, this.today());
     const p = this.person(args.person);
     const search = typeof args.search === "string" && args.search.trim() ? args.search.trim().toLowerCase() : null;
@@ -73,25 +105,34 @@ export class SampleHousehold implements Household {
     if (Temporal.PlainDate.compare(to, from) < 0) throw new ToolError("The end date is before the start date.");
     const last = Temporal.PlainDate.compare(to, from.add({ days: 61 })) > 0 ? from.add({ days: 61 }) : to;
     return this.state.events
+      .filter((e) => this.seesCalendar(actor, e.calendar))
       .filter((e) => Temporal.PlainDate.compare(this.dayOf(e.start), last) <= 0 && Temporal.PlainDate.compare(this.dayOf(e.end), from) >= 0)
       .filter((e) => !p || e.people.length === 0 || e.people.includes(p.id) || e.drivers.includes(p.id))
-      .filter((e) => !search || (!e.private && e.title.toLowerCase().includes(search)))
+      .filter((e) => !search || (this.seesDetails(actor, e) && e.title.toLowerCase().includes(search)))
       .sort((a, b) => this.instantOf(a.start).epochMilliseconds - this.instantOf(b.start).epochMilliseconds)
       .map((e) => {
-        const when = isAllDay(e.start) ? `${whenLabel(e.start)} (all day)` : `${whenLabel(e.start)} to ${clock(e.end)}`;
+        const when = this.eventWhen(e);
         // A private event says only that the time is taken: no id, no title, nobody named.
-        if (e.private) return { when, title: "Busy (private, no details)", people: [], drivers: [], location: null, calendar: e.calendar };
+        if (!this.seesDetails(actor, e)) return { when, title: "Busy (private, no details)", people: [], drivers: [], location: null, calendar: e.calendar };
         return { event: e.id, when, title: e.title, people: e.people.map((id) => this.nameOf(id)), drivers: e.drivers.map((id) => this.nameOf(id)), location: e.location, calendar: e.calendar };
       });
   }
 
-  private tasks(args: Args): CorralTask[] {
+  /** "Fri, Oct 16, 3:30 PM to 4:45 PM", "Sat, Oct 17 (all day)", or with the end's day when it ends another day. */
+  private eventWhen(e: SampleEvent): string {
+    if (isAllDay(e.start)) return e.end === e.start || !isAllDay(e.end) ? `${whenLabel(e.start)} (all day)` : `${whenLabel(e.start)} to ${whenLabel(e.end)} (all day)`;
+    const sameDay = Temporal.PlainDate.compare(this.dayOf(e.start), this.dayOf(e.end)) === 0;
+    return `${whenLabel(e.start)} to ${sameDay ? clock(e.end) : whenLabel(e.end)}`;
+  }
+
+  private tasks(actor: SampleActor, args: Args): CorralTask[] {
     const from = this.dateArg(args.from, this.today());
     const to = this.dateArg(args.to, from);
     const last = Temporal.PlainDate.compare(to, from.add({ days: 30 })) > 0 ? from.add({ days: 30 }) : to;
     const p = this.person(args.person);
     const includeDone = args.include_done === true;
     return this.state.tasks
+      .filter((t) => this.seesTask(actor, t))
       .filter((t) => {
         const day = this.dayOf(t.due);
         const inWindow = Temporal.PlainDate.compare(day, from) >= 0 && Temporal.PlainDate.compare(day, last) <= 0;
@@ -117,8 +158,13 @@ export class SampleHousehold implements Household {
     };
   }
 
-  private whereabouts(args: Args): CorralWhere[] {
-    const p = this.person(args.person);
+  private whereabouts(actor: SampleActor, args: Args): CorralWhere[] {
+    let p = this.person(args.person);
+    if (actor.role.whereabouts === "own") {
+      if (!actor.person) throw new ToolError(`Where people are is only for people in ${this.state.name}.`);
+      if (p && p.id !== actor.person.id) throw new ToolError(`Where others are isn't shared with ${actor.person.shortName}.`);
+      p = actor.person;
+    }
     let at = this.#now();
     if (typeof args.at === "string" && args.at) {
       try {
@@ -171,36 +217,59 @@ export class SampleHousehold implements Household {
 
   // ---------- Changing ----------
 
-  /** Putting something on the calendar from a shared screen goes to a parent to approve. */
-  private addEvent(args: Args): CorralChange {
+  /** Whether this change waits for an approver, by the actor's role. `forOthers`: it's for someone besides them. */
+  private waits(actor: SampleActor, change: PlanChange, forOthers: boolean): boolean {
+    const rule = actor.role.approval[change];
+    return rule === "always" || (rule === "for_others" && forOthers);
+  }
+
+  /** Keeps a change as a request for an approver, and says so, the way Corral answers. */
+  private hold(actor: SampleActor, tool: PlanChange, args: Args, summary: string): CorralChange {
+    const id = crypto.randomUUID();
+    this.state.requests.push({ id, from: actor.person?.id ?? null, summary, at: this.#now().toZonedDateTimeISO(this.state.timeZone).toString(), change: { tool, args }, status: "pending" });
+    return { status: "waiting_for_approval", summary, approvers: this.approvers().filter((p) => p.id !== actor.person?.id).map((p) => p.shortName), requestId: id };
+  }
+
+  /** `approved`: an approver said yes to it, so it happens now whoever asked. */
+  private addEvent(actor: SampleActor, args: Args, approved = false): CorralChange {
     const title = this.titled(args.title, "New event");
     const start = this.wire(args.start, "start");
+    const end = args.end ? this.wire(args.end, "end") : isAllDay(start) ? start : Temporal.ZonedDateTime.from(start).add({ hours: 1 }).toString();
+    if (Temporal.Instant.compare(this.instantOf(end), this.instantOf(start)) < 0) throw new ToolError("The end is before the start.");
     const names = Array.isArray(args.people) ? args.people.filter((n): n is string => typeof n === "string") : [];
-    const guests = names.filter((n) => !this.findPerson(n));
+    const members = names.map((n) => personNamed(this.state, n)).filter((p): p is SamplePerson => Boolean(p));
+    const guests = names.filter((n) => !personNamed(this.state, n));
     const titleWithGuests = guests.length ? `${title} with ${guests.join(" and ")}` : title;
+    const calendar = this.calendarFor(actor, args.calendar);
+    const location = typeof args.location === "string" && args.location.trim() ? args.location.trim().slice(0, 200) : null;
     const summary = `${titleWithGuests}, ${whenLabel(start)}`;
-    const requestId = crypto.randomUUID();
-    this.state.requests.push({ id: requestId, summary });
-    return { status: "waiting_for_approval", summary, approvers: this.state.approvers, requestId };
+    if (!approved && this.waits(actor, "add_event", true)) return this.hold(actor, "add_event", { title, start, end, people: names, calendar, location }, summary);
+    const id = crypto.randomUUID();
+    this.state.events.push({ id, title: titleWithGuests, start, end, people: members.map((p) => p.id), drivers: [], location, calendar });
+    return { status: "done", summary, event: id };
   }
 
-  private addTask(args: Args): CorralChange {
+  private addTask(actor: SampleActor, args: Args, approved = false): CorralChange {
     const title = this.titled(args.title, "New task");
     const due = args.due ? this.wire(args.due, "due time") : this.today().toString();
-    const assignees = Array.isArray(args.assignees) && args.assignees.length ? args.assignees.map((n) => this.person(n)!.id) : "anyone";
+    const named = Array.isArray(args.assignees) ? args.assignees.map((n) => this.person(n)).filter((p): p is SamplePerson => Boolean(p)) : [];
+    const assignees = named.length ? named.map((p) => p.id) : "anyone";
+    const summary = `${title}, due ${whenLabel(due)}`;
+    const forOthers = assignees === "anyone" || assignees.some((id) => id !== actor.person?.id);
+    if (!approved && this.waits(actor, "add_task", forOthers)) return this.hold(actor, "add_task", { title, due, assignees: named.map((p) => p.shortName) }, summary);
     this.state.tasks.push({ id: crypto.randomUUID(), title, due, assignees, status: "open", doneBy: null });
-    return { status: "done", summary: `${title}, due ${whenLabel(due)}` };
+    return { status: "done", summary };
   }
 
-  private markTask(tool: "complete_task" | "undo_task" | "claim_task" | "skip_task", args: Args): CorralChange {
+  private markTask(actor: SampleActor, tool: "complete_task" | "undo_task" | "claim_task" | "skip_task", args: Args, approved = false): CorralChange {
     const t = this.state.tasks.find((x) => x.id === args.task);
-    if (!t) throw new ToolError("Use the task's id from the tasks tool.");
+    if (!t || !this.seesTask(actor, t)) throw new ToolError("Use the task's id from the tasks tool.");
     const by = this.person(args.by);
     switch (tool) {
       case "complete_task": {
         t.status = "done";
-        // Credit goes to whoever's named, else the one person it's for; a shared screen itself is nobody.
-        t.doneBy = by?.id ?? (t.assignees !== "anyone" && t.assignees.length === 1 ? t.assignees[0]! : null);
+        // Credit goes to whoever's named, else the one person it's for, else whoever's speaking; a shared screen itself is nobody.
+        t.doneBy = by?.id ?? (t.assignees !== "anyone" && t.assignees.length === 1 ? t.assignees[0]! : (actor.person?.id ?? null));
         if (args.values && typeof args.values === "object" && !Array.isArray(args.values)) t.captured = args.values as Record<string, unknown>;
         return { status: "done", summary: `${t.title}: done${t.doneBy ? ` by ${this.shortNameOf(t.doneBy)}` : ""}` };
       }
@@ -209,18 +278,21 @@ export class SampleHousehold implements Household {
         t.doneBy = null;
         delete t.captured;
         return { status: "done", summary: `${t.title}: not done` };
-      case "claim_task":
-        if (!by) throw new ToolError("Say who's taking it.");
+      case "claim_task": {
+        const taker = by ?? actor.person;
+        if (!taker) throw new ToolError("Say who's taking it.");
         if (t.status !== "open") throw new ToolError(`${t.title} isn't open.`);
-        t.assignees = [by.id];
-        return { status: "done", summary: `${by.shortName} is taking ${t.title}` };
+        t.assignees = [taker.id];
+        return { status: "done", summary: `${taker.shortName} is taking ${t.title}` };
+      }
       case "skip_task":
+        if (!approved && this.waits(actor, "skip_task", true)) return this.hold(actor, "skip_task", { task: t.id }, `Skip ${t.title}`);
         t.status = "skipped";
         return { status: "done", summary: `Skipped ${t.title}` };
     }
   }
 
-  private addListItem(args: Args): CorralChange {
+  private addListItem(actor: SampleActor, args: Args): CorralChange {
     const text = String(args.text ?? "").trim().slice(0, 300);
     if (!text) throw new ToolError("Say what to add.");
     const list = typeof args.list === "string" && args.list ? this.list(args.list) : this.state.lists[0]!;
@@ -230,7 +302,11 @@ export class SampleHousehold implements Household {
       if (quantity) there.quantity = quantity;
       return { status: "done", summary: `${there.text} is already on ${list.name}` };
     }
-    list.items.push({ text: text.charAt(0).toUpperCase() + text.slice(1), quantity, done: false, approved: true });
+    const item = text.charAt(0).toUpperCase() + text.slice(1);
+    // Waiting, it's on the list for everyone to see, marked as waiting for a parent.
+    const waits = this.waits(actor, "add_list_item", true);
+    list.items.push({ text: item, quantity, done: false, approved: !waits });
+    if (waits) return this.hold(actor, "add_list_item", { list: list.name, text: item }, `${item} on ${list.name}`);
     return { status: "done", summary: `Added ${text} to ${list.name}` };
   }
 
@@ -255,6 +331,117 @@ export class SampleHousehold implements Household {
     else if (args.change === "count") s.quantity = amount;
     else throw new ToolError('The change is "used", "added" or "count".');
     return { status: "done", summary: `${s.name}: ${unitAmount(s.quantity, s.unit)} left` };
+  }
+
+  // ---------- Approvals ----------
+
+  private approvers(): SamplePerson[] {
+    return approversOf(this.state);
+  }
+
+  /** Who decides requests, besides `me`: "Sam or Alex". */
+  private decidedBy(me?: SamplePerson | null): string {
+    return either(this.approvers().filter((p) => p.id !== me?.id).map((p) => p.shortName));
+  }
+
+  /** What's waiting for this actor to decide, and what of theirs waits for someone else. */
+  private approvals(actor: SampleActor): CorralApprovals {
+    const me = actor.person;
+    const pending = this.state.requests.filter((r) => r.status === "pending").sort((a, b) => this.instantOf(a.at).epochMilliseconds - this.instantOf(b.at).epochMilliseconds);
+    const decides = Boolean(me && actor.role.approves);
+    const toDecide = decides ? pending.filter((r) => r.from !== me!.id).map((r) => ({ id: r.id, from: this.askedBy(r), asks: r.summary, since: whenLabel(r.at) })) : [];
+    const yoursWaiting = me ? pending.filter((r) => r.from === me.id).map((r) => ({ id: r.id, asks: r.summary, since: whenLabel(r.at), decidedBy: this.decidedBy(me) })) : [];
+    if (decides) return { toDecide, yoursWaiting };
+    // Why there's nothing to decide here, without saying what waits.
+    const requests = me ? `Only ${this.decidedBy()} approve requests.` : actor.role.changes ? this.screenNote() : `Only people in ${this.state.name} see its requests.`;
+    return { toDecide, yoursWaiting, requests };
+  }
+
+  private screenNote(): string {
+    return `Requests aren't decided on a shared screen: ${this.decidedBy()} decide them as themselves.`;
+  }
+
+  private decide(actor: SampleActor, args: Args): CorralChange {
+    const me = actor.person;
+    if (!me) throw new ToolError(this.screenNote());
+    const r = this.state.requests.find((x) => x.id === args.request);
+    if (!actor.role.approves) {
+      if (r?.from === me.id) throw new ToolError(`They can't approve or decline their own request, which waits for ${this.decidedBy(me)}.`);
+      throw new ToolError(`Only ${this.decidedBy()} can approve or decline requests.`);
+    }
+    if (!r) throw new ToolError("Use the request's id from the approvals tool.");
+    if (r.status !== "pending") throw new ToolError(`That request was already ${r.status}${r.decidedBy ? ` by ${this.shortNameOf(r.decidedBy)}` : ""}.`);
+    if (args.decision !== "approve" && args.decision !== "decline") throw new ToolError('The decision is "approve" or "decline".');
+    // Approving makes the change as it was asked, as whoever asked; if it can't happen now, the request stays.
+    if (args.decision === "approve") this.apply(r);
+    else this.discard(r);
+    r.status = args.decision === "approve" ? "approved" : "declined";
+    r.decidedBy = me.id;
+    const asker = r.from ? `${this.shortNameOf(r.from)}'s` : `${this.state.actingAs}'s`;
+    return { status: "done", summary: `${args.decision === "approve" ? "Approved" : "Declined"} ${asker} request: ${r.summary}` };
+  }
+
+  private apply(r: SampleRequest): void {
+    const from = r.from ? this.state.people.find((p) => p.id === r.from) : undefined;
+    const asker = from ? actorOf(this.state, from) : actorFor(this.state, null);
+    const { tool, args } = r.change;
+    if (tool === "add_event") this.addEvent(asker, args, true);
+    else if (tool === "add_task") this.addTask(asker, args, true);
+    else if (tool === "skip_task") this.markTask(asker, "skip_task", args, true);
+    else {
+      const item = this.waitingItem(r);
+      if (item) item.approved = true;
+    }
+  }
+
+  /** Declining a list item takes it back off the list; anything else was never made. */
+  private discard(r: SampleRequest): void {
+    if (r.change.tool !== "add_list_item") return;
+    const item = this.waitingItem(r);
+    const list = this.state.lists.find((l) => l.items.includes(item!));
+    if (item && list) list.items.splice(list.items.indexOf(item), 1);
+  }
+
+  private waitingItem(r: SampleRequest) {
+    const list = this.state.lists.find((l) => l.name === r.change.args.list);
+    const text = String(r.change.args.text ?? "").toLowerCase();
+    return list?.items.find((it) => !it.approved && it.text.toLowerCase() === text);
+  }
+
+  /** "Maya", or "The kitchen screen". */
+  private askedBy(r: SampleRequest): string {
+    if (r.from) return this.shortNameOf(r.from);
+    return this.state.actingAs.charAt(0).toUpperCase() + this.state.actingAs.slice(1);
+  }
+
+  // ---------- What a role sees ----------
+
+  private seesCalendar(actor: SampleActor, calendar: string): boolean {
+    return actor.role.calendars === "*" || actor.role.calendars.includes(calendar);
+  }
+
+  /** A private event in full is its owner's alone. */
+  private seesDetails(actor: SampleActor, e: SampleEvent): boolean {
+    return !e.private || (actor.person !== null && e.owner === actor.person.id);
+  }
+
+  private seesTask(actor: SampleActor, t: SampleTask): boolean {
+    if (actor.role.tasks === "everyone" || t.assignees === "anyone") return true;
+    return actor.person !== null && t.assignees.includes(actor.person.id);
+  }
+
+  /** The calendar a new event goes on: the one named, if this actor sees it, else the first they see. */
+  private calendarFor(actor: SampleActor, said: unknown): string {
+    const sees = this.state.calendars.filter((c) => this.seesCalendar(actor, c));
+    if (typeof said !== "string" || !said.trim()) {
+      if (!sees[0]) throw new ToolError("There's no calendar to add it to.");
+      return sees[0];
+    }
+    const named = this.state.calendars.find((c) => c.toLowerCase() === said.trim().toLowerCase());
+    if (!named || !sees.includes(named)) {
+      throw new ToolError(sees.length === 1 ? `Events go on the ${sees[0]} calendar.` : `There's no calendar called "${said}". Calendars: ${sees.join(", ")}.`);
+    }
+    return named;
   }
 
   // ---------- Helpers ----------
@@ -311,16 +498,10 @@ export class SampleHousehold implements Household {
     return s ? s.charAt(0).toUpperCase() + s.slice(1) : fallback;
   }
 
-  private findPerson(v: unknown): SamplePerson | undefined {
-    if (typeof v !== "string" || !v.trim()) return undefined;
-    const said = v.trim().toLowerCase();
-    return this.state.people.find((p) => p.name.toLowerCase() === said || p.shortName.toLowerCase() === said);
-  }
-
   /** The person named, or none when nobody was named; a name nobody here has is a mistake to say. */
   private person(v: unknown): SamplePerson | undefined {
     if (v === undefined || v === null || v === "") return undefined;
-    const p = this.findPerson(v);
+    const p = typeof v === "string" ? personNamed(this.state, v) : undefined;
     if (!p) throw new ToolError(`No one named "${String(v)}" lives here.`);
     return p;
   }

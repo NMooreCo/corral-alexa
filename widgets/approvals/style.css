@@ -1,0 +1,179 @@
+/* The approvals screen, on top of shared/base.css. Each request is a card with its decision at the end, big enough to tap from a step away. */
+
+main > section + section {
+  margin-top: 16px;
+}
+
+.requests,
+.mine {
+  gap: 10px;
+}
+
+.request {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--late);
+  border-radius: 12px;
+  background: var(--late-soft);
+}
+
+.request.pending {
+  opacity: 0.6;
+}
+
+.request.decided {
+  border-left-color: var(--forest);
+  background: var(--forest-soft);
+}
+
+.request.decided.decline {
+  border-left-color: var(--muted);
+  background: var(--busy);
+}
+
+.request.decided .asks {
+  color: var(--muted);
+}
+
+.request.decided.decline .badge {
+  background: var(--muted);
+  border-color: var(--muted);
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--forest);
+  color: var(--card);
+  font-weight: 700;
+  font-size: 1.3rem;
+}
+
+.body {
+  min-width: 0;
+}
+
+.body p,
+.mine p,
+.clear p {
+  margin: 0;
+}
+
+.who {
+  font-weight: 700;
+}
+
+.asks {
+  font-size: 1.35rem;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+}
+
+.actions button {
+  font: inherit;
+  font-weight: 700;
+  min-height: 56px;
+  min-width: 128px;
+  padding: 10px 18px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.approve {
+  border: 2px solid var(--forest);
+  background: var(--forest);
+  color: var(--card);
+}
+
+.decline {
+  border: 2px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+}
+
+.actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.actions button:focus-visible {
+  outline: 3px solid var(--forest);
+  outline-offset: 2px;
+}
+
+.mine li {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.mine .asks {
+  font-size: 1.15rem;
+}
+
+.note {
+  margin: 12px 0 0;
+}
+
+/* Nothing waiting: a calm, finished state rather than an empty box. */
+.clear {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 40px 16px;
+  text-align: center;
+}
+
+.clear .mark {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--forest-soft);
+  position: relative;
+}
+
+.clear .mark::after {
+  content: "";
+  position: absolute;
+  left: 23px;
+  top: 14px;
+  width: 14px;
+  height: 26px;
+  border: solid var(--forest);
+  border-width: 0 5px 5px 0;
+  transform: rotate(45deg);
+}
+
+.clear .title {
+  font-size: 1.3rem;
+}
+
+@media (max-width: 640px) {
+  .request {
+    grid-template-columns: auto 1fr;
+  }
+
+  .actions {
+    grid-column: 1 / -1;
+  }
+
+  .actions button {
+    flex: 1;
+    min-width: 0;
+  }
+}
