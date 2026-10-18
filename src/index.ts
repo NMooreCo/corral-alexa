@@ -4,6 +4,7 @@ import type { Env } from "./env.ts";
 import { json, notFound, serveMcp, siteRoute } from "./http.ts";
 import { linkingProvider, protectedResource } from "./link/provider.ts";
 import { SampleHousehold } from "./sample/index.ts";
+import { SPEAKER_HEADER, speakerOf } from "./sample/roles.ts";
 import { echoHtml, previewHtml } from "./widgets.generated.ts";
 import { mockTurn } from "./echo/mock.ts";
 import { echoPage, modelTurn } from "./echo/model.ts";
@@ -64,7 +65,8 @@ export default {
     if (url.pathname === "/preview") return page(previewHtml);
     if (url.pathname === "/echo" && request.method === "GET") return page(echoPage(echoHtml, env));
     if (url.pathname === "/echo/model" && request.method === "POST") return env.MODEL_MOCK === "true" ? mockTurn(request) : modelTurn(request, env);
-    if (url.pathname === "/mcp") return serveMcp(request, sampleHousehold());
+    // There's no sign-in here, so the simulator says who Alexa recognized; only the sample reads it, and a name it doesn't know is a guest.
+    if (url.pathname === "/mcp") return serveMcp(request, sampleHousehold().as(speakerOf(request.headers.get(SPEAKER_HEADER))));
     return notFound();
   },
 };

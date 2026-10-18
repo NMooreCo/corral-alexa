@@ -1,5 +1,6 @@
 import { Temporal } from "temporal-polyfill";
 import type { CorralAsk } from "../household.ts";
+import { sampleRoles, type PlanChange, type SampleRole } from "./roles.ts";
 
 /**
  * The sample household: a made-up family ranch with two parents, two kids and
@@ -26,6 +27,8 @@ export interface SampleEvent {
   calendar: string;
   /** Kept private by its owner: everyone else sees only that the time is taken. */
   private?: boolean;
+  /** Whose it is, a person's id: the one who sees a private event in full. */
+  owner?: string;
 }
 
 export interface SampleTask {
@@ -80,13 +83,30 @@ export interface SampleBalance {
   allowanceCents: number;
 }
 
+/** A change waiting for someone who approves it. Approving makes the change it holds, as asked. */
+export interface SampleRequest {
+  id: string;
+  /** Who asked, a person's id; null when it came from the shared screen. */
+  from: string | null;
+  /** What it asks, as the answer to the change said it. */
+  summary: string;
+  /** When it was asked, zoned. */
+  at: string;
+  /** The change, as the tool that made it would make it. */
+  change: { tool: PlanChange; args: Record<string, unknown> };
+  status: "pending" | "approved" | "declined";
+  decidedBy?: string;
+}
+
 export interface SampleState {
   name: string;
   timeZone: string;
-  /** Who this sample acts as: a shared screen in the kitchen, which sees what the household's adults see. */
+  /** What a call that names no speaker acts as: the shared screen in the kitchen. */
   actingAs: string;
-  /** Who approves a change made from a shared screen. */
-  approvers: string[];
+  /** Who may see and change what. People hold these by name. */
+  roles: SampleRole[];
+  /** The calendars events go on; a new one goes on the first its maker sees. */
+  calendars: string[];
   people: SamplePerson[];
   events: SampleEvent[];
   tasks: SampleTask[];
@@ -96,8 +116,8 @@ export interface SampleState {
   balances: SampleBalance[];
   /** "100 points make $5.00 of allowance". */
   pointsPerFiveDollars: number;
-  /** Changes waiting for a parent, by request id. */
-  requests: { id: string; summary: string }[];
+  /** Changes asked for, waiting or decided. */
+  requests: SampleRequest[];
 }
 
 export function seed(now: Temporal.Instant, timeZone = "America/Denver"): SampleState {
@@ -117,7 +137,7 @@ export function seed(now: Temporal.Instant, timeZone = "America/Denver"): Sample
   const events: SampleEvent[] = [
     ...(weekday ? [{ id: id(), title: "School drop-off", start: at(0, "07:40"), end: at(0, "08:00"), people: [maya.id, leo.id], drivers: [alex.id], location: "Juniper Elementary", calendar: "School" }] : []),
     { id: id(), title: "Farrier visit", start: at(0, "10:00"), end: at(0, "11:00"), people: [jordan.id], drivers: [], location: "Barn", calendar: "Ranch" },
-    { id: id(), title: "Birthday gift shopping", start: at(0, "12:00"), end: at(0, "13:00"), people: [sam.id], drivers: [], location: "Downtown", calendar: "Family", private: true },
+    { id: id(), title: "Birthday gift shopping", start: at(0, "12:00"), end: at(0, "13:00"), people: [sam.id], drivers: [], location: "Downtown", calendar: "Family", private: true, owner: sam.id },
     { id: id(), title: "Soccer practice", start: at(0, "15:30"), end: at(0, "16:45"), people: [maya.id], drivers: [sam.id], location: "Riverside Fields", calendar: "Family" },
     { id: id(), title: "Family movie night", start: at(0, "18:30"), end: at(0, "20:30"), people: [], drivers: [], location: "Home", calendar: "Family" },
     { id: id(), title: "Biscuit's vet checkup", start: at(1, "09:00"), end: at(1, "09:30"), people: [alex.id], drivers: [alex.id], location: "Valley Vet", calendar: "Family" },
@@ -192,7 +212,8 @@ export function seed(now: Temporal.Instant, timeZone = "America/Denver"): Sample
     name: "Juniper Hollow",
     timeZone,
     actingAs: "the kitchen screen",
-    approvers: [sam.shortName, alex.shortName],
+    roles: sampleRoles(),
+    calendars: ["Family", "School", "Ranch"],
     people: [sam, alex, maya, leo, jordan],
     events,
     tasks,
@@ -204,6 +225,7 @@ export function seed(now: Temporal.Instant, timeZone = "America/Denver"): Sample
       { person: leo.id, points: 85, allowanceCents: 400 },
     ],
     pointsPerFiveDollars: 100,
-    requests: [],
+    // The ice cream on the grocery list is Leo's ask, waiting for a parent.
+    requests: [{ id: id(), from: leo.id, summary: "Ice cream on Groceries", at: now.subtract({ minutes: 90 }).toZonedDateTimeISO(timeZone).toString(), change: { tool: "add_list_item", args: { list: "Groceries", text: "Ice cream" } }, status: "pending" }],
   };
 }

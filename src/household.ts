@@ -28,13 +28,25 @@ export const CORRAL_TOOLS = [
 
 export type CorralTool = (typeof CORRAL_TOOLS)[number];
 
+/**
+ * Seeing and deciding requests that wait for approval. Corral's own MCP
+ * server doesn't let any credential decide requests yet, so a linked
+ * household doesn't offer these; the sample household does.
+ */
+export const APPROVAL_TOOLS = ["approvals", "decide_approval"] as const;
+
+export type ApprovalTool = (typeof APPROVAL_TOOLS)[number];
+export type HouseholdTool = CorralTool | ApprovalTool;
+
 export interface Household {
   /** The household's name, when already known, for screens and the server's instructions. */
   readonly name?: string;
+  /** Whether it answers the approval tools. */
+  readonly decidesRequests?: boolean;
   /** The household's name and time zone, looked up if need be. */
   about(): Promise<HouseholdAbout>;
-  /** Calls one of Corral's tools. Throws ToolError for an answer the model should hear and can act on. */
-  call(tool: CorralTool, args: Record<string, unknown>): Promise<unknown>;
+  /** Calls one of its tools. Throws ToolError for an answer the model should hear and can act on. */
+  call(tool: HouseholdTool, args: Record<string, unknown>): Promise<unknown>;
 }
 
 export interface HouseholdAbout {

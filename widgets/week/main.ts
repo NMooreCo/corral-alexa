@@ -23,7 +23,9 @@ const screen: Screen<WeekView> = await startScreen<WeekView>({
 /** "Sat, Oct 17, 3:30 PM to 4:45 PM" on Saturday's column is just "3:30 PM to 4:45 PM". */
 function time(e: CorralEvent, dayLabel: string): string {
   if (e.when.endsWith("(all day)")) return "All day";
-  return e.when.startsWith(`${dayLabel}, `) ? e.when.slice(dayLabel.length + 2) : e.when;
+  const rest = e.when.startsWith(`${dayLabel}, `) ? e.when.slice(dayLabel.length + 2) : e.when;
+  // Overnight, "6:00 PM to Sat, Oct 24, 10:00 AM" fits the column as "6:00 PM to Sat 10:00 AM".
+  return rest.replace(/ to (\w{3}), \w{3} \d{1,2}, /, " to $1 ");
 }
 
 function range(view: WeekView): string {

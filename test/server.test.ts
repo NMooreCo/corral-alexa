@@ -1,6 +1,6 @@
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { describe, expect, it } from "vitest";
-import { CORRAL_TOOLS } from "../src/household.ts";
+import { APPROVAL_TOOLS, CORRAL_TOOLS } from "../src/household.ts";
 import worker, { type Env } from "../src/index.ts";
 
 const CTX = { waitUntil() {}, passThroughOnException() {}, props: {} } as unknown as ExecutionContext;
@@ -37,7 +37,7 @@ describe("serving Alexa+ (MCP 2025-11-25 over Streamable HTTP)", () => {
   it("lists Corral's tools and the Today screen tool, pointing at its screen", async () => {
     const { body } = await rpc(SAMPLE, "tools/list");
     const tools = body!.result!.tools as { name: string; annotations?: { readOnlyHint?: boolean }; _meta?: { ui?: { resourceUri?: string; visibility?: string[] } } }[];
-    expect(tools.map((t) => t.name).sort()).toEqual([...CORRAL_TOOLS, "show_today", "refresh_today", "show_list", "show_week", "show_supplies"].sort());
+    expect(tools.map((t) => t.name).sort()).toEqual([...CORRAL_TOOLS, ...APPROVAL_TOOLS, "show_today", "refresh_today", "show_list", "show_week", "show_supplies", "show_approvals"].sort());
     expect(tools.find((t) => t.name === "show_today")?._meta?.ui?.resourceUri).toBe(TODAY_URI);
     // The screen's own refresh is the screen's alone: hosts keep it from the model.
     expect(tools.find((t) => t.name === "refresh_today")?._meta?.ui?.visibility).toEqual(["app"]);
@@ -73,7 +73,7 @@ describe("serving Alexa+ (MCP 2025-11-25 over Streamable HTTP)", () => {
   it("gives every screen tool its own self-contained page", async () => {
     const { body } = await rpc(SAMPLE, "tools/list");
     const screens = (body!.result!.tools as { name: string; _meta?: { ui?: { resourceUri?: string; visibility?: string[] } } }[]).filter((t) => t._meta?.ui?.resourceUri && !t._meta.ui.visibility);
-    expect(screens.map((t) => t.name).sort()).toEqual(["show_list", "show_supplies", "show_today", "show_week"]);
+    expect(screens.map((t) => t.name).sort()).toEqual(["show_approvals", "show_list", "show_supplies", "show_today", "show_week"]);
     for (const t of screens) {
       const read = await rpc(SAMPLE, "resources/read", { uri: t._meta!.ui!.resourceUri });
       const [page] = read.body!.result!.contents as { mimeType: string; text: string }[];

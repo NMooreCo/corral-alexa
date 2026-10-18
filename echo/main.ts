@@ -20,8 +20,13 @@ type ToolResult = Awaited<ReturnType<Client["callTool"]>>;
 const SCREEN_W = 1280;
 const SCREEN_H = 800;
 const MAX_STEPS = 8;
-const SUGGESTIONS = [
+/** Who Alexa recognized, on every MCP request. Only the sample household reads it (sample mode has no sign-in). */
+const SPEAKER_HEADER = "x-demo-person";
+/** Things to try. One with `as` is said by that person: the picker switches to them first. */
+const SUGGESTIONS: (string | { text: string; as: string })[] = [
   "What's going on today?",
+  { text: "Can I have a sleepover at Ava's on Friday?", as: "Maya" },
+  { text: "Anything waiting for me?", as: "Sam" },
   "Did anyone collect the eggs yet?",
   "Leo emptied the dishwasher.",
   "We're down to two bags of horse feed.",
@@ -52,8 +57,23 @@ const passcodeForm = $<HTMLFormElement>("passcode-form");
 const passcodeInput = $<HTMLInputElement>("passcode");
 const passcodeNote = $("passcode-note");
 const themeEl = $<HTMLSelectElement>("theme");
+const speakersEl = $("speakers");
+const speakerList = $("speaker-list");
+const speakerChip = $("speaker-chip");
+
+/** Someone the picker offers: a person in the household, or a voice Alexa doesn't know. */
+interface Speaker {
+  /** What the header says: a person's short name, or "guest". */
+  said: string;
+  name: string;
+  role: string;
+}
+const GUEST: Speaker = { said: "guest", name: "Someone Alexa doesn't recognize", role: "Guest" };
 
 const state = {
+  /** Who's talking now; the first person in the household until someone picks. */
+  speaker: null as Speaker | null,
+  speakers: [] as Speaker[],
   messages: [] as Msg[],
   /** What someone did on the screen since the assistant last spoke. */
   screenNotes: [] as string[],
@@ -115,6 +135,8 @@ function addLog(list: HTMLElement, who: string, text: string, meta = "", tone = 
 
 /** The MCP client's own requests, as they go over the wire. */
 const loggingFetch: typeof fetch = async (input, init) => {
+  // Who's calling, as it was when the call went out: tools the assistant runs together finish in any order.
+  const actor = state.actor;
   const started = performance.now();
   let label = init?.method ?? "GET";
   if (typeof init?.body === "string") {
@@ -131,13 +153,21 @@ const loggingFetch: typeof fetch = async (input, init) => {
   }
   const res = await fetch(input, init);
   const ms = Math.round(performance.now() - started);
-  if (label !== "GET") addLog(mcpLog, state.actor, label, `${res.status} · ${ms} ms`, res.ok ? "" : "bad");
+  const speaker = new Headers(init?.headers).get(SPEAKER_HEADER);
+  const as = speaker ? ` · as ${decodeURIComponent(speaker)}` : "";
+  if (label !== "GET") addLog(mcpLog, actor, label, `${res.status} · ${ms} ms${as}`, res.ok ? "" : "bad");
   return res;
 };
 
 // ---------- MCP ----------
 
 const client = new Client({ name: "corral-echo-show-simulator", version: "0.1.0" });
+/**
+ * The headers on every MCP request. The transport reads these afresh for
+ * each request, so changing the speaker here takes effect on the next call,
+ * from the assistant and the screens alike, with no reconnecting.
+ */
+const mcpHeaders: Record<string, string> = {};
 let modelTools: ModelTool[] = [];
 const uiByTool = new Map<string, string>();
 const uiHtml = new Map<string, string>();
@@ -149,7 +179,7 @@ function householdTimeZone(): string {
 
 async function connect() {
   state.actor = "page";
-  await client.connect(new StreamableHTTPClientTransport(new URL("/mcp", location.origin), { fetch: loggingFetch }));
+  await client.connect(new StreamableHTTPClientTransport(new URL("/mcp", location.origin), { fetch: loggingFetch, requestInit: { headers: mcpHeaders } }));
   instructions = client.getInstructions() ?? "";
   const { tools } = await client.listTools();
   for (const t of tools) {
@@ -166,13 +196,91 @@ async function connect() {
     const page = res.contents[0] as { text?: string } | undefined;
     if (page?.text) uiHtml.set(uri, page.text);
   }
+  await loadSpeakers();
   state.actor = "screen";
   tick();
 }
 
+// ---------- Who's speaking ----------
+
+/** The household's people from its own people tool, plus a guest; the first person speaks until someone picks. */
+async function loadSpeakers() {
+  try {
+    const res = await client.callTool({ name: "people", arguments: {} });
+    const text = (res.content as { type: string; text?: string }[]).find((c) => c.type === "text")?.text ?? "[]";
+    const people = JSON.parse(text) as { name: string; shortName: string; roles: string[] }[];
+    state.speakers = [...people.map((p) => ({ said: p.shortName, name: p.name, role: p.roles[0] ?? "" })), GUEST];
+  } catch {
+    state.speakers = [];
+  }
+  if (!state.speakers.length) return;
+  speakerList.replaceChildren(
+    ...state.speakers.map((s, i) => {
+      const label = document.createElement("label");
+      label.className = "speaker";
+      label.dataset.tone = String(i % 6);
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = "speaker";
+      input.value = s.said;
+      input.addEventListener("change", () => input.checked && void setSpeaker(s));
+      const avatar = document.createElement("span");
+      avatar.className = "avatar";
+      avatar.setAttribute("aria-hidden", "true");
+      avatar.textContent = s === GUEST ? "?" : (s.said[0] ?? "?").toUpperCase();
+      const name = document.createElement("span");
+      name.className = "speaker-name";
+      name.textContent = s === GUEST ? s.name : s.said;
+      const role = document.createElement("span");
+      role.className = "speaker-role";
+      role.textContent = s.role;
+      label.append(input, avatar, name, role);
+      return label;
+    }),
+  );
+  speakersEl.hidden = false;
+  // The household's first member, who set up the Echo: a parent in the sample, so every suggestion works from the start.
+  await setSpeaker(state.speakers[0]!, { quiet: true });
+}
+
+let greetTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Puts `s` on every MCP call from here on, says so on the device, and shows the current screen as they'd see it. */
+async function setSpeaker(s: Speaker, opts: { quiet?: boolean } = {}) {
+  const changed = state.speaker?.said !== s.said;
+  state.speaker = s;
+  mcpHeaders[SPEAKER_HEADER] = encodeURIComponent(s.said);
+  for (const input of speakerList.querySelectorAll<HTMLInputElement>("input[name=speaker]")) input.checked = input.value === s.said;
+  const tone = String(Math.max(0, state.speakers.indexOf(s)) % 6);
+  const avatar = $("speaker-avatar");
+  avatar.textContent = s === GUEST ? "?" : (s.said[0] ?? "?").toUpperCase();
+  speakerChip.dataset.tone = tone;
+  speakerChip.hidden = false;
+  // Alexa greets someone it knows by name for a moment, then keeps just the name in the corner.
+  const settled = s === GUEST ? "Guest" : s.said;
+  $("speaker-text").textContent = opts.quiet ? settled : s === GUEST ? "I don't know this voice" : `Hi, ${s.said}`;
+  speakerChip.classList.toggle("greeting", !opts.quiet);
+  clearTimeout(greetTimer);
+  greetTimer = setTimeout(() => {
+    $("speaker-text").textContent = settled;
+    speakerChip.classList.remove("greeting");
+  }, 2600);
+  if (!changed) return;
+  if (!opts.quiet) addLog(modelLog, "page", `Now speaking: ${s === GUEST ? "a guest (a voice Alexa doesn't recognize)" : `${s.name}, ${s.role}`}`);
+  await refreshScreen();
+}
+
+/** What the assistant is told about the speaker, before each thing they say. */
+function speakerNote(): string | null {
+  const s = state.speaker;
+  if (!s) return null;
+  return s === GUEST ? "(Alexa doesn't recognize this voice: a guest.)" : `(Alexa recognized the voice: ${s.name}${s.role ? `, ${s.role}` : ""}.)`;
+}
+
 // ---------- Screens (MCP Apps) ----------
 
-let mounted: { uri: string; bridge: AppBridge; ready: Promise<void> } | null = null;
+/** The screen on the device, and the tool call that showed it, to show again as someone else would see it. */
+let mounted: { uri: string; bridge: AppBridge; ready: Promise<void>; tool: string; args: Record<string, unknown> } | null = null;
 
 function hostContext() {
   return {
@@ -190,7 +298,7 @@ function hostContext() {
 }
 
 /** Shows a tool's screen with its result, reusing the one already up when it's the same screen. */
-async function showScreen(uri: string, args: Record<string, unknown>, result: ToolResult) {
+async function showScreen(tool: string, uri: string, args: Record<string, unknown>, result: ToolResult) {
   const html = uiHtml.get(uri);
   if (!html) return;
   if (!mounted || mounted.uri !== uri) {
@@ -217,15 +325,33 @@ async function showScreen(uri: string, args: Record<string, unknown>, result: To
     bridge.onrequestdisplaymode = async () => ({ mode: "fullscreen" });
     await bridge.connect(new PostMessageTransport(iframe.contentWindow!, iframe.contentWindow!));
     iframe.srcdoc = html;
-    mounted = { uri, bridge, ready: readyP };
+    mounted = { uri, bridge, ready: readyP, tool, args };
     idleEl.hidden = true;
   }
+  mounted.tool = tool;
+  mounted.args = args;
   await mounted.ready;
   await mounted.bridge.sendToolInput({ arguments: args });
   await mounted.bridge.sendToolResult(result as Parameters<AppBridge["sendToolResult"]>[0]);
 }
 
 themeEl.addEventListener("change", () => void mounted?.bridge.sendHostContextChange({ theme: themeEl.value as "dark" | "light" }));
+
+/** The screen that's up, called again as whoever's speaking now: a private event opens up for its owner, the farm hand's day is the ranch's. */
+async function refreshScreen() {
+  if (!mounted) return;
+  const { tool, uri, args } = mounted;
+  const was = state.actor;
+  state.actor = "page";
+  try {
+    const result = await client.callTool({ name: tool, arguments: args });
+    if (!result.isError) await showScreen(tool, uri, args, result);
+  } catch {
+    // The screen keeps what it had; its own refresh tries again.
+  } finally {
+    state.actor = was;
+  }
+}
 
 // ---------- The assistant ----------
 
@@ -314,7 +440,7 @@ async function runTool(use: Anthropic.Beta.BetaToolUseBlock): Promise<Anthropic.
     const result = await client.callTool({ name: use.name, arguments: args });
     state.actor = "screen";
     const uri = uiByTool.get(use.name);
-    if (uri && !result.isError) await showScreen(uri, args, result);
+    if (uri && !result.isError) await showScreen(use.name, uri, args, result);
     const text = (result.content as { type: string; text?: string }[]).filter((c) => c.type === "text").map((c) => c.text).join("\n");
     return { type: "tool_result", tool_use_id: use.id, content: (text || JSON.stringify(result.structuredContent ?? {})).slice(0, 20_000), is_error: Boolean(result.isError) };
   } catch (err) {
@@ -332,6 +458,9 @@ async function ask(text: string) {
   caption(text, "");
   const before = state.messages.length;
   const content: Anthropic.Beta.BetaContentBlockParam[] = [];
+  // Who said it, as Alexa+ would know from the voice: each turn says, since the speaker can change mid-conversation.
+  const who = speakerNote();
+  if (who) content.push({ type: "text", text: who });
   const notes = state.screenNotes.splice(0);
   if (notes.length) content.push({ type: "text", text: `(On the screen since you last spoke: ${notes.join(" ")})` });
   content.push({ type: "text", text });
@@ -515,8 +644,23 @@ $("reset").addEventListener("click", () => {
 for (const s of SUGGESTIONS) {
   const b = document.createElement("button");
   b.type = "button";
-  b.textContent = s;
-  b.addEventListener("click", () => void ask(s));
+  const text = typeof s === "string" ? s : s.text;
+  const as = typeof s === "string" ? null : s.as;
+  if (as) {
+    const who = document.createElement("span");
+    who.className = "chip-as";
+    who.textContent = as;
+    b.append(who, " ");
+  }
+  b.append(text);
+  if (as) b.setAttribute("aria-label", `As ${as}: ${text}`);
+  b.addEventListener("click", async () => {
+    // Said by someone in particular: switch to them first, as if they'd walked up and spoken.
+    const speaker = as ? state.speakers.find((p) => p.said === as) : undefined;
+    if (state.busy) return;
+    if (speaker && speaker !== state.speaker) await setSpeaker(speaker);
+    void ask(text);
+  });
   $("chips").append(b);
 }
 
@@ -530,7 +674,7 @@ try {
     state.actor = "page";
     const result = await client.callTool({ name: today, arguments: {} });
     state.actor = "screen";
-    await showScreen(uiByTool.get(today)!, {}, result);
+    await showScreen(today, uiByTool.get(today)!, {}, result);
   }
 } catch (err) {
   caption("", `Couldn't reach the server: ${err instanceof Error ? err.message : err}`);

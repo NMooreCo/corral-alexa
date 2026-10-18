@@ -82,8 +82,16 @@ async function addToList(name: string, list: string) {
   screen.rerender();
   const said = await screen.act("add_list_item", { text: name, list });
   if (said !== null) {
-    screen.toast(`Added ${name} to ${list}`);
-    screen.tell("added to a list", { supply: name, list }, `On the screen: added ${name} to ${list}.`);
+    // Someone whose changes need a parent's yes puts it on the list as waiting.
+    const answer = JSON.parse(said) as { status?: string; approvers?: string[] };
+    if (answer.status === "waiting_for_approval") {
+      const who = (answer.approvers ?? []).join(" or ") || "a parent";
+      screen.toast(`${name} is on ${list}, waiting for ${who}`);
+      screen.tell("asked to add to a list", { supply: name, list }, `On the screen: asked for ${name} on ${list}; it waits for ${who} to approve.`);
+    } else {
+      screen.toast(`Added ${name} to ${list}`);
+      screen.tell("added to a list", { supply: name, list }, `On the screen: added ${name} to ${list}.`);
+    }
   }
   pending.delete(name);
   await screen.refreshNow();
