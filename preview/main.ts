@@ -19,8 +19,10 @@ const screenEl = document.getElementById("screen") as HTMLSelectElement;
 const client = new Client({ name: "corral-preview", version: "0.1.0" });
 await client.connect(new StreamableHTTPClientTransport(new URL("/mcp", location.origin)));
 const { tools } = await client.listTools();
-// Every tool the model may call that shows a screen.
-const screens = tools.filter((t) => getToolUiResourceUri(t) && !(t._meta as { ui?: { visibility?: string[] } } | undefined)?.ui?.visibility?.every((v) => v === "app"));
+// Every tool the model may call that shows a screen and needs no arguments (switching a device shows a screen too, but needs one).
+const screens = tools.filter(
+  (t) => getToolUiResourceUri(t) && !(t._meta as { ui?: { visibility?: string[] } } | undefined)?.ui?.visibility?.every((v) => v === "app") && !(t.inputSchema as { required?: string[] }).required?.length,
+);
 for (const t of screens) screenEl.append(new Option(t.title ?? t.name, t.name));
 const pages = new Map<string, string>();
 async function pageFor(name: string): Promise<string> {

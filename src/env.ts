@@ -34,4 +34,14 @@ export interface Env {
   MODEL_LIMIT?: RateLimit;
   /** "true" answers the simulator with a practice model instead, for building without a model key. Never deployed. */
   MODEL_MOCK?: string;
+  /**
+   * The local greenhouse connector: a real ESP32 greenhouse controller on the LAN in place of the simulated one.
+   * GREENHOUSE_URL and GREENHOUSE_KEY go in .dev.vars only, never in wrangler.jsonc or a deploy; `pnpm dev:lan`
+   * sets GREENHOUSE_LAN, and the connector also needs the Worker to be served from this machine or the LAN.
+   */
+  GREENHOUSE_URL?: string;
+  GREENHOUSE_KEY?: string;
+  GREENHOUSE_LAN?: string;
+  /** The longest run the bridge allows on the real valve, in seconds (default 600; never past the firmware's 1800). */
+  GREENHOUSE_MAX_RUN_S?: string;
 }

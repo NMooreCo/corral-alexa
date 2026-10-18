@@ -1,0 +1,172 @@
+/* The morning briefing, on top of shared/base.css. */
+
+main {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
+  height: 100vh;
+}
+
+.deck {
+  min-height: 0;
+  min-width: 0;
+  outline: none;
+  /* Full bleed, so the cards on either side peek in from the screen's edges. */
+  margin: 0 -24px;
+}
+
+[data-display="fullscreen"] .deck {
+  margin: 0 -32px;
+}
+
+.track {
+  display: flex;
+  gap: 18px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  padding: 6px 11% 10px;
+  height: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+.track::-webkit-scrollbar {
+  display: none;
+}
+
+.card {
+  flex: 0 0 78%;
+  scroll-snap-align: center;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 26px 30px;
+  border-radius: 22px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  opacity: 0.55;
+  transform: scale(0.97);
+  transition:
+    opacity 0.25s,
+    transform 0.25s;
+}
+
+.card.current {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    transition: none;
+  }
+}
+
+.card.warn {
+  border-color: var(--late);
+  box-shadow: inset 6px 0 0 var(--late);
+}
+
+.kicker {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.headline {
+  margin: 0;
+  font-size: 2rem;
+  line-height: 1.15;
+  text-transform: none;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  display: block;
+}
+
+.lines {
+  gap: 10px;
+  font-size: 1.15rem;
+}
+
+.lines li {
+  padding-left: 16px;
+  border-left: 4px solid var(--forest);
+}
+
+.lines li.warn {
+  border-left-color: var(--late);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding-top: 10px;
+}
+
+.dots {
+  display: flex;
+  gap: 4px;
+}
+
+.dot {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+}
+
+.dot::after {
+  content: "";
+  position: absolute;
+  inset: 11px;
+  border-radius: 50%;
+  background: var(--line);
+}
+
+.dot[aria-current="true"]::after {
+  background: var(--forest);
+  inset: 9px;
+}
+
+.step {
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  min-height: 44px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.step:focus-visible,
+.dot:focus-visible,
+.deck:focus-visible {
+  outline: 3px solid var(--forest);
+  outline-offset: 2px;
+}
+
+@media (max-width: 600px) {
+  .track {
+    padding: 6px 6% 10px;
+  }
+  .card {
+    flex-basis: 88%;
+    padding: 20px;
+  }
+  .headline {
+    font-size: 1.5rem;
+  }
+}

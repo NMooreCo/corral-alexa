@@ -37,7 +37,8 @@ describe("serving Alexa+ (MCP 2025-11-25 over Streamable HTTP)", () => {
   it("lists Corral's tools and the Today screen tool, pointing at its screen", async () => {
     const { body } = await rpc(SAMPLE, "tools/list");
     const tools = body!.result!.tools as { name: string; annotations?: { readOnlyHint?: boolean }; _meta?: { ui?: { resourceUri?: string; visibility?: string[] } } }[];
-    expect(tools.map((t) => t.name).sort()).toEqual([...CORRAL_TOOLS, "show_today", "refresh_today", "show_list", "show_week", "show_supplies"].sort());
+    const ranch = ["devices", "set_device", "weather", "trackers", "show_ranch", "refresh_ranch", "show_briefing"];
+    expect(tools.map((t) => t.name).sort()).toEqual([...CORRAL_TOOLS, "show_today", "refresh_today", "show_list", "show_week", "show_supplies", ...ranch].sort());
     expect(tools.find((t) => t.name === "show_today")?._meta?.ui?.resourceUri).toBe(TODAY_URI);
     // The screen's own refresh is the screen's alone: hosts keep it from the model.
     expect(tools.find((t) => t.name === "refresh_today")?._meta?.ui?.visibility).toEqual(["app"]);
@@ -73,7 +74,8 @@ describe("serving Alexa+ (MCP 2025-11-25 over Streamable HTTP)", () => {
   it("gives every screen tool its own self-contained page", async () => {
     const { body } = await rpc(SAMPLE, "tools/list");
     const screens = (body!.result!.tools as { name: string; _meta?: { ui?: { resourceUri?: string; visibility?: string[] } } }[]).filter((t) => t._meta?.ui?.resourceUri && !t._meta.ui.visibility);
-    expect(screens.map((t) => t.name).sort()).toEqual(["show_list", "show_supplies", "show_today", "show_week"]);
+    // Switching a ranch device shows the Ranch screen, so a run started by voice counts down there.
+    expect(screens.map((t) => t.name).sort()).toEqual(["set_device", "show_briefing", "show_list", "show_ranch", "show_supplies", "show_today", "show_week"]);
     for (const t of screens) {
       const read = await rpc(SAMPLE, "resources/read", { uri: t._meta!.ui!.resourceUri });
       const [page] = read.body!.result!.contents as { mimeType: string; text: string }[];

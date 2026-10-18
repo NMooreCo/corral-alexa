@@ -1,0 +1,420 @@
+/* The Ranch screen, on top of shared/base.css. */
+
+:root {
+  --field: #dfe9d3;
+  --structure: #e7dcc8;
+  --yard: #eef0e4;
+  --fence: #7a5a32;
+  --pin: #2f5d46;
+  --alarm: #b3261e;
+  --alarm-soft: #f9dedc;
+}
+
+[data-theme="dark"] {
+  --field: #22301f;
+  --structure: #3a3225;
+  --yard: #262d24;
+  --fence: #c9a26b;
+  --pin: #8cc4a3;
+  --alarm: #ff8a80;
+  --alarm-soft: #3d1f1d;
+}
+
+.weather {
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+.weather strong {
+  color: var(--ink);
+  font-size: 1.2rem;
+}
+
+.weather.freeze {
+  color: var(--late);
+}
+
+.ranch {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.2fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 860px) {
+  .ranch {
+    grid-template-columns: 1fr;
+  }
+}
+
+.map-card .meta {
+  margin: 8px 0 0;
+}
+
+.map {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 72vh;
+}
+
+.map .ground {
+  fill: var(--paper);
+  stroke: var(--line);
+  stroke-width: 2;
+}
+
+.map .zone {
+  stroke: var(--line);
+  stroke-width: 2;
+  fill: var(--yard);
+}
+
+.map .zone.field {
+  fill: var(--field);
+}
+
+.map .zone.structure {
+  fill: var(--structure);
+}
+
+.map .fence {
+  fill: none;
+  stroke: var(--fence);
+  stroke-width: 5;
+  stroke-dasharray: 14 8;
+  stroke-linejoin: round;
+}
+
+.map text {
+  font-family: inherit;
+  text-anchor: middle;
+}
+
+.map .zone-name {
+  font-size: 22px;
+  font-weight: 600;
+  fill: var(--muted);
+}
+
+.map .pin .dot {
+  fill: var(--pin);
+  stroke: var(--card);
+  stroke-width: 4;
+}
+
+.map .pin .initial {
+  font-size: 20px;
+  font-weight: 800;
+  fill: var(--card);
+}
+
+.map .pin .name {
+  font-size: 22px;
+  font-weight: 700;
+  fill: var(--ink);
+  paint-order: stroke;
+  stroke: var(--paper);
+  stroke-width: 6px;
+}
+
+.map .pin.low .name {
+  fill: var(--late);
+}
+
+.map .pin.stale .dot {
+  opacity: 0.5;
+}
+
+.map .pin.outside .dot {
+  fill: var(--alarm);
+}
+
+.map .pin.outside .name {
+  fill: var(--alarm);
+}
+
+.map .pin .ring {
+  fill: none;
+  stroke: var(--alarm);
+  stroke-width: 4;
+  animation: ping 1.6s ease-out infinite;
+  transform-origin: 0 0;
+}
+
+@keyframes ping {
+  from {
+    transform: scale(0.55);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map .pin .ring {
+    animation: none;
+  }
+}
+
+.map .north path {
+  fill: var(--muted);
+}
+
+.map .north text,
+.map .scale text {
+  font-size: 20px;
+  font-weight: 700;
+  fill: var(--muted);
+}
+
+.map .scale path {
+  stroke: var(--muted);
+  stroke-width: 3;
+  fill: none;
+}
+
+.devices {
+  font-size: 0.7em;
+}
+
+.devices h2 {
+  font-size: 0.95em;
+}
+
+.tiles {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+}
+
+.place-tag {
+  margin-left: auto;
+  white-space: nowrap;
+  font-size: 0.72em;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.tile {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  align-content: start;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.tile.is-on {
+  border-color: var(--forest);
+  background: var(--forest-soft);
+}
+
+.tile.warn {
+  border-color: var(--late);
+  background: var(--late-soft);
+}
+
+.tile.gone {
+  opacity: 0.65;
+}
+
+.tile-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tile-top .title {
+  margin-right: auto;
+  font-size: 1.12em;
+  line-height: 1.15;
+  min-width: 0;
+}
+
+.tile-state {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-height: 1.2em;
+}
+
+.tile-top .badge {
+  margin-left: 0;
+}
+
+.icon {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  fill: none;
+  stroke: var(--forest);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.state {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.state.on {
+  color: var(--forest);
+}
+
+.state.off,
+.state.unknown {
+  color: var(--muted);
+}
+
+.countdown {
+  font-size: 1.6em;
+  margin-left: 4px;
+}
+
+.readings {
+  margin: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.readings div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.readings dt {
+  color: var(--muted);
+  font-size: 0.85em;
+}
+
+.readings.many {
+  gap: 0;
+}
+
+.readings dd {
+  margin: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.readings .warn dd,
+.bars .warn .value {
+  color: var(--late);
+}
+
+.bars {
+  gap: 4px;
+}
+
+.bars li {
+  display: grid;
+  grid-template-columns: 3.6em 1fr 4.2em;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85em;
+}
+
+.bars .bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--busy);
+  overflow: hidden;
+}
+
+.bars .bar span {
+  display: block;
+  height: 100%;
+  background: var(--forest);
+}
+
+.bars .warn .bar span {
+  background: var(--late);
+}
+
+.bars .value {
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.attention {
+  margin: 0;
+  font-size: 0.85em;
+  color: var(--late);
+  font-weight: 600;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.controls button {
+  font: inherit;
+  font-size: 0.95em;
+  font-weight: 600;
+  min-height: 36px;
+  padding: 2px 10px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--forest);
+  background: var(--card);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.controls button.primary {
+  background: var(--forest);
+  color: var(--card);
+}
+
+.controls button.confirm {
+  border-color: var(--late);
+  background: var(--late);
+  color: var(--card);
+}
+
+.controls button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.controls button:focus-visible {
+  outline: 3px solid var(--forest);
+  outline-offset: 2px;
+}
+
+.play {
+  width: 0.7em;
+  height: 0.7em;
+  margin-right: 5px;
+  fill: currentColor;
+}
+
+/* On a display, the map stays put and the devices scroll beside it. */
+@media (min-width: 861px) {
+  main {
+    height: 100vh;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .ranch {
+    min-height: 0;
+    height: 100%;
+  }
+  .devices {
+    max-height: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
