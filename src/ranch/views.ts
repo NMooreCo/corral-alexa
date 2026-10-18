@@ -149,7 +149,7 @@ export function ranchSummary(view: RanchView) {
         ? "The Ranch screen, on its Automations tab: each automation, on or off, with what it does and when it next runs."
         : view.tab === "animals"
           ? "The Ranch screen, on its Animals tab: the property map large, and each collar with where it is and its battery."
-          : "The Ranch screen: the property map with each collar, and every device by place. Its tabs also show the animals and the automations.",
+          : "The Ranch screen: every device by place, and how the animals are. Its tabs also show the animals on the property map, and the automations.",
     weather: view.weather,
     outsideFence: view.animals.outside,
     lowCollarBattery: view.animals.lowBattery,

@@ -69,6 +69,50 @@
   text-align: center;
 }
 
+/* ---------- Ranch: every device on one screen ---------- */
+
+.devices.wide .tiles {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.devices.wide {
+  font-size: 0.82em;
+}
+
+.devices.wide .tile {
+  padding: 7px 9px;
+}
+
+.devices.wide .bars {
+  gap: 1px;
+}
+
+.animals-chip {
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.animals-chip.warn {
+  border-color: var(--late);
+  background: var(--late-soft);
+  color: var(--late);
+}
+
+@media (max-width: 860px) {
+  .devices.wide .tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 /* ---------- Animals ---------- */
 
 .animals {

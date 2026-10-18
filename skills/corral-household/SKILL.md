@@ -66,7 +66,7 @@ Often a shared device in the kitchen or the barn, sometimes one person's phone. 
 | "Run the greenhouse misters for 30 seconds." | `devices` for the misters if you don't have the id, confirm ("Run the greenhouse misters for 30 seconds?"), then `set_device` with `state: "on"`, `seconds: 30`. The Ranch screen shows the countdown. |
 | "Turn off the barn heater." | Confirm, then `set_device` with `state: "off"`. If the answer has a `note`, say it in a few words. |
 | "Is the coop lamp on?" / "How's the greenhouse?" | `devices` with `device` or `place`; lead with the state or the reading they asked about. |
-| "Are the animals in?" / "Where's Hunter?" | `trackers` (with `animal` for one); name anyone outside the fence and roughly where. On a screen, `show_ranch`. |
+| "Are the animals in?" / "Where's Hunter?" | `trackers` (with `animal` for one); name anyone outside the fence and roughly where. On a screen, `show_ranch` with `view: "animals"`. |
 | "Is it going to freeze tonight?" | `weather`; say tonight's low and whether it freezes. |
 | "It's going down to 12 tonight. Get the place ready." | See the freeze recipe below. |
 | "What runs on its own?" / "Show me the automations." | `show_ranch` with `view: "automations"` on a screen, otherwise `automations`; say what's on and what's next. |

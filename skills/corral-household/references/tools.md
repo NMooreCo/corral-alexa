@@ -55,7 +55,7 @@ Devices, readings and limits are the household's own configuration; these tools 
 | `show_list` | One list (`list`, default the first) with items to tap off and the other lists to switch to. |
 | `show_supplies` | Each supply's amount, days left and whether it's low; a low one goes on a list in one tap. |
 | `show_approvals` | Requests waiting for this person, each with Approve and Decline, and their own requests still waiting. |
-| `show_ranch` | A map of the property (fence, zones, a pin per collar, anyone outside the fence standing out) and a tile per device that switches it, with runs counting down. `view` opens it on a tab: `ranch` (the default), `animals` (the map large, with each collar) or `automations` (each one with a switch). The Today and Ranch screens share one set of tabs, so people can tap between them. It keeps itself current. |
+| `show_ranch` | The ranch's tabs, opened by `view`: `ranch` (the default: a tile per device that switches it, with runs counting down, and how the animals are), `animals` (a map of the property with the fence, zones and a pin per collar, anyone outside the fence standing out, beside each collar's place and battery) or `automations` (each one with a switch). The Today and Ranch screens share one set of tabs, so people can tap between them. It keeps itself current. |
 | `show_briefing` | The morning briefing as swipeable cards; you're told which card is showing. |
 
 `approvals`, `decide_approval` and `show_approvals` follow the shape of Corral's own inbox and request decisions. Corral's MCP server doesn't let connected apps decide requests yet, so a server linked to a real Corral leaves them out; the sample household has them.

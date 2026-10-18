@@ -4,9 +4,9 @@ import { escape, sizeButton } from "../shared/screen.ts";
 import type { Home } from "./main.ts";
 
 /**
- * The Ranch tab: the property drawn as a map (fence, zones, a pin for each
- * collar, anything outside the fence standing out) and a tile for every
- * device, by place. Tiles switch devices through the same set_device tool the
+ * The Ranch tab: a tile for every device, by place, all on one screen, with
+ * a chip saying how the animals are that taps over to their map. (The map
+ * itself is drawn here and shown on the Animals tab.) Tiles switch devices through the same set_device tool the
  * assistant uses, so each device's limits still apply, and a run counts down
  * on the tile whether it started here or by voice.
  */
@@ -148,28 +148,24 @@ function running(view: RanchView): string {
 
 export function ranchHtml(view: RanchView, home: Home): string {
   ended = new Set();
+  const outside = view.animals.outside;
+  // How the animals are, in a word; a tap opens their map.
+  const animals = `<button type="button" class="animals-chip${outside.length ? " warn" : ""}" data-tab="animals">${escape(outside.length ? `${outside.join(" and ")} outside the fence` : "Animals all inside")}</button>`;
   return `
     <header>
       <div>
         <h1>Ranch</h1>
-        <p class="household">${escape([view.household, view.attention ? `${view.attention} to look at` : "All's well"].filter(Boolean).join(" · "))}</p>
+        <p class="household">${escape([view.household, `Devices: ${running(view)}`].filter(Boolean).join(" · "))}</p>
       </div>
       <div class="header-end">
+        ${animals}
         ${weatherLine(view)}
         ${sizeButton(home.screen)}
       </div>
     </header>
-    <div class="ranch">
-      <section class="map-card" aria-labelledby="h-map">
-        <h2 id="h-map">Animals <span class="count">${escape(view.animals.outside.length ? `${view.animals.outside.length} outside the fence` : "all inside the fence")}</span></h2>
-        ${map(view)}
-        <p class="meta">${escape([view.animals.outside.length ? `Outside: ${view.animals.outside.join(", ")}` : "", view.animals.lowBattery.length ? `Low collar battery: ${view.animals.lowBattery.join(", ")}` : "", view.animals.live ? "" : view.animals.feed].filter(Boolean).join(" · "))}</p>
-      </section>
-      <section class="devices" aria-labelledby="h-devices">
-        <h2 id="h-devices">Devices <span class="count">${escape(running(view))}</span></h2>
-        <ul class="tiles">${view.places.flatMap((p) => p.devices).map(tile).join("")}</ul>
-      </section>
-    </div>`;
+    <section class="devices wide" aria-label="Devices">
+      <ul class="tiles">${view.places.flatMap((p) => p.devices).map(tile).join("")}</ul>
+    </section>`;
 }
 
 /** Runs count down every second, between refreshes; when one ends, ask for the real state. */

@@ -275,7 +275,7 @@ export async function buildServer(household: Household, ranch?: Ranch): Promise<
     screen(
       "show_ranch",
       "Show the ranch",
-      "Show the ranch on the screen: a map of the property with the fence, its zones and each collared animal (one outside the fence stands out), and every device by place, which people can tap to switch. Its tabs show the animals (a big map and each collar) and the automations. Use it when someone asks about the ranch, the animals, the greenhouse, a device or the automations.",
+      "Show the ranch on the screen. Its tabs: \"ranch\" is every device by place, which people can tap to switch, with how the animals are; \"animals\" is a map of the property with the fence, its zones and each collar (one outside the fence stands out), beside every collar's place and battery; \"automations\" is each automation with a switch. Use it when someone asks about the ranch, a device, the greenhouse, the animals or the automations.",
       z.object({ view: z.enum(["ranch", "animals", "automations"]).describe('Which tab to open on: "ranch" (the default), "animals" or "automations"').optional() }),
       RANCH_URI,
       widgetHtml.ranch,
