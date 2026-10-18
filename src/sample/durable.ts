@@ -38,6 +38,7 @@ export class SampleHouseholdObject extends DurableObject<Env> {
 
   /** Starts the household over, for a fresh demo take. */
   async reset(): Promise<SampleStatus> {
+    this.#ranch.reset();
     return this.#household.reset();
   }
 }

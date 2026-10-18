@@ -62,6 +62,7 @@ export async function householdRoute(request: Request, env: Env): Promise<Respon
 
   if (request.method !== "POST") return json(405, { error: { code: "method", message: "POST /household/reset to start the household over." } }, { allow: "POST" });
   if (!passcodeOk(request, env)) return json(401, { error: { code: "passcode", message: "Enter the demo passcode to start the household over." } });
+  if (!object) localSample(id).ranch.reset();
   const status = object ? await object.reset() : localHousehold(id).reset();
   return json(200, { household: id, ...status });
 }

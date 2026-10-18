@@ -452,4 +452,9 @@ export class SampleRanchHolder {
     if (!this.#held || this.#held.key !== key) this.#held = { key, ranch: sampleRanch({ timeZone, ...(greenhouse ? { greenhouse } : {}) }) };
     return this.#held.ranch;
   }
+
+  /** Starts the ranch over with the household: every device back to how the day began. */
+  reset() {
+    this.#held = undefined;
+  }
 }

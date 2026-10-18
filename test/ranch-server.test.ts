@@ -166,3 +166,15 @@ describe("who may switch the ranch's devices", () => {
     for (const grownUp of ["Sam", "Jordan"]) expect((await as(grownUp)("set_device", lamp)).isError).toBeFalsy();
   });
 });
+
+describe("starting the household over", () => {
+  it("starts the ranch's devices over too, so every demo take begins the same", async () => {
+    const lamp = async () => ((await call("devices", { device: "coop heat lamp" })).structuredContent ?? JSON.parse((await call("devices", { device: "coop heat lamp" })).content[0].text)) as unknown;
+    const state = async () => JSON.stringify(await lamp()).includes('"state":"on"');
+    expect((await call("set_device", { device: "coop heat lamp", state: "on" })).isError).toBeFalsy();
+    expect(await state()).toBe(true);
+    const reset = await worker.fetch(new Request("https://bridge.example/household/reset", { method: "POST" }), SAMPLE, CTX);
+    expect(reset.status).toBe(200);
+    expect(await state()).toBe(false);
+  });
+});

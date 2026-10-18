@@ -770,9 +770,96 @@ for (const s of embedded ? tries.slice(0, 3) : tries) {
   $("chips").append(b);
 }
 
+// ---------- The demo, played for a recording ----------
+
+/**
+ * One beat of the demo: who says it, what they say, whether it's only said
+ * when the assistant has just asked something (a yes to its question), and how
+ * long to let the screen sit before the next beat, so a viewer can read it.
+ */
+interface DemoBeat {
+  as: string;
+  say: string;
+  ifAsked?: boolean;
+  linger?: number;
+  /** Part of the short demo too (?demo=short), the headline beats only. */
+  short?: boolean;
+}
+
+/**
+ * The demo, in the order the video tells it. Every answer comes from the real
+ * model, live. The animals wander off after 6 PM in the sample, so the freeze
+ * beat finds them outside the fence in an evening take.
+ */
+const DEMO: DemoBeat[] = [
+  { as: "Sam", say: "What do I need to know today?", linger: 6000, short: true },
+  { as: "Leo", say: "I emptied the dishwasher." },
+  { as: "Maya", say: "Can I have a sleepover at Ava's on Friday?", short: true },
+  { as: "Maya", say: "Yes please.", ifAsked: true, short: true },
+  { as: "Sam", say: "Anything waiting for me?", linger: 4000, short: true },
+  { as: "Sam", say: "Approve the sleepover.", short: true },
+  { as: "Sam", say: "Run the greenhouse misters for 30 seconds.", short: true },
+  { as: "Sam", say: "Yes.", ifAsked: true, linger: 6000, short: true },
+  { as: "Leo", say: "Can you turn on the coop heat lamp?" },
+  { as: "Leo", say: "Yes please.", ifAsked: true },
+  { as: "Sam", say: "It's going down to 12 tonight. Get the place ready.", linger: 3000, short: true },
+  { as: "Sam", say: "Yes, do all of that.", ifAsked: true, linger: 4000, short: true },
+  { as: "Sam", say: "Yes, add both.", ifAsked: true, linger: 3000, short: true },
+];
+
+const playButton = $<HTMLButtonElement>("play-demo");
+let demo: { stop: boolean } | null = null;
+
+const pause = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** Waits until Alexa has finished saying her answer (or 45 seconds, whichever is first). */
+async function untilQuiet() {
+  if (!("speechSynthesis" in window)) return;
+  const until = Date.now() + 45_000;
+  while ((speechSynthesis.speaking || speechSynthesis.pending) && Date.now() < until) await pause(250);
+}
+
+/** Plays the demo from a fresh household: each beat as its speaker, with the real model, at a pace a recording can follow. */
+async function playDemo(short = false) {
+  if (demo) {
+    demo.stop = true;
+    return;
+  }
+  const run = { stop: false };
+  demo = run;
+  playButton.textContent = "Stop the demo";
+  handsFreeEl.checked = false;
+  recognition?.stop();
+  try {
+    await startOver();
+    if (!passcodeForm.hidden) return; // It needs the passcode first; the card is showing.
+    await pause(2500);
+    for (const beat of short ? DEMO.filter((b) => b.short) : DEMO) {
+      if (run.stop) break;
+      // A yes is only said to a question.
+      if (beat.ifAsked && !saidEl.textContent?.trim().endsWith("?")) continue;
+      const speaker = state.speakers.find((p) => p.said === beat.as);
+      if (speaker && speaker !== state.speaker) {
+        await setSpeaker(speaker);
+        await pause(1400);
+      }
+      while (state.busy) await pause(200);
+      await ask(beat.say);
+      await untilQuiet();
+      if (!passcodeForm.hidden) break;
+      await pause(beat.linger ?? 2500);
+    }
+  } finally {
+    demo = null;
+    playButton.textContent = "Play the demo";
+  }
+}
+
+playButton.addEventListener("click", () => void playDemo());
+if (embedded) playButton.hidden = true;
+
 // ---------- Start ----------
 
-/** The add-on's screen is the kitchen board until someone asks for something else. */
 /** The add-on's screen is the kitchen board until someone asks for something else. */
 async function home() {
   const today = [...uiByTool.keys()].find((n) => n === "show_today");
@@ -786,6 +873,13 @@ async function home() {
 try {
   await connect();
   await home();
+  // /echo?demo=1 plays the demo on its own, for recording a take; ?demo=short plays only its headline beats.
+  const take = params.get("demo");
+  if ((take === "1" || take === "short") && !embedded) {
+    caption("", "Starting the demo...");
+    await pause(3000);
+    void playDemo(take === "short");
+  }
 } catch (err) {
   caption("", `Couldn't reach the server: ${err instanceof Error ? err.message : err}`);
 }
