@@ -1,6 +1,7 @@
 import { Temporal } from "temporal-polyfill";
 import { describe, expect, it } from "vitest";
 import { ToolError } from "../src/household.ts";
+import { duration } from "../src/ranch/words.ts";
 import { sampleRanch } from "../src/sample/ranch.ts";
 
 // Friday, October 16, 2026, 7:30 PM in Denver.
@@ -101,5 +102,14 @@ describe("set_device and each device's limits", () => {
     expect(air.readings.find((r) => r.key === "humidity")!.value).toBeGreaterThan(70);
     advance(31);
     expect((await ranch.devices.list({ device: "misters" }))[0]!.state).toBe("off");
+  });
+});
+
+describe("how long a run has left, in words", () => {
+  it("rounds to whole minutes, so an hour never has 60 minutes", () => {
+    expect(duration(12 * 3600 - 20)).toBe("12 hours");
+    expect(duration(3600 + 59 * 60 + 40)).toBe("2 hours");
+    expect(duration(3600 + 15 * 60)).toBe("1 hour 15 minutes");
+    expect(duration(90)).toBe("1 minute 30 seconds");
   });
 });

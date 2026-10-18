@@ -711,3 +711,36 @@ html:not(.roomy) .embedded .chips,
 html:not(.roomy) .embedded details {
   display: none !important;
 }
+
+/* In the two-device view, who's speaking is a compact row of name chips, so each device's talk bar stays in view. */
+.embedded .speakers {
+  padding: 6px 10px 8px;
+}
+
+.embedded .speakers .hint,
+.embedded .speaker-role {
+  display: none;
+}
+
+.embedded .speaker-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.embedded .speaker {
+  display: flex;
+  gap: 6px;
+  padding: 3px 10px 3px 3px;
+  border-radius: 999px;
+}
+
+.embedded .speaker:last-child {
+  grid-column: auto;
+}
+
+.embedded .speaker .avatar {
+  width: 24px;
+  height: 24px;
+  font-size: 0.8rem;
+}

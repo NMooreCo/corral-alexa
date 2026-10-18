@@ -14,8 +14,10 @@ export function duration(seconds: number): string {
     const rest = s % 60;
     return rest ? `${plural(m, "minute")} ${plural(rest, "second")}` : plural(m, "minute");
   }
-  const h = Math.floor(s / 3600);
-  const m = Math.round((s % 3600) / 60);
+  // Round to whole minutes first, so 11 hours 59 minutes 40 seconds is 12 hours, never 11 hours 60 minutes.
+  const minutes = Math.round(s / 60);
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
   return m ? `${plural(h, "hour")} ${plural(m, "minute")}` : plural(h, "hour");
 }
 
