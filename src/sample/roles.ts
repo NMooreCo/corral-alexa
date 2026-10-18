@@ -1,3 +1,4 @@
+import type { HouseholdAction } from "../household.ts";
 import type { SamplePerson, SampleState } from "./seed.ts";
 
 /**
@@ -47,6 +48,8 @@ export interface SampleRole {
   approval: Partial<Record<PlanChange, "always" | "for_others">>;
   /** Approves or declines other people's requests. */
   approves: boolean;
+  /** Switches the ranch's devices (heaters, valves, lamps), by voice or on the Ranch screen. */
+  devices: boolean;
 }
 
 /** The role for a voice Alexa doesn't recognize. */
@@ -56,7 +59,7 @@ export const SCREEN_ROLE = "Shared screen";
 
 export function sampleRoles(): SampleRole[] {
   return [
-    { name: "Parent", calendars: "*", tasks: "everyone", whereabouts: "everyone", changes: true, approval: {}, approves: true },
+    { name: "Parent", calendars: "*", tasks: "everyone", whereabouts: "everyone", changes: true, approval: {}, approves: true, devices: true },
     {
       name: "Kid",
       calendars: "*",
@@ -66,13 +69,15 @@ export function sampleRoles(): SampleRole[] {
       // Anything that changes plans for others waits for a parent; a reminder for themselves doesn't.
       approval: { add_event: "always", add_task: "for_others", add_list_item: "always", skip_task: "always" },
       approves: false,
+      // The ranch's heaters and valves are a grown-up's to switch.
+      devices: false,
     },
     // From outside the family: the ranch's calendar, their own chores and ones up for grabs, and where they are.
-    { name: "Farm hand", calendars: ["Ranch"], tasks: "own", whereabouts: "own", changes: true, approval: {}, approves: false },
+    { name: "Farm hand", calendars: ["Ranch"], tasks: "own", whereabouts: "own", changes: true, approval: {}, approves: false, devices: true },
     // Someone Alexa doesn't recognize: they can hear what the day holds, and change nothing.
-    { name: GUEST_ROLE, calendars: "*", tasks: "everyone", whereabouts: "own", changes: false, approval: {}, approves: false },
+    { name: GUEST_ROLE, calendars: "*", tasks: "everyone", whereabouts: "own", changes: false, approval: {}, approves: false, devices: false },
     // The kitchen screen itself: what the sample always was before it knew voices.
-    { name: SCREEN_ROLE, calendars: "*", tasks: "everyone", whereabouts: "everyone", changes: true, approval: { add_event: "always" }, approves: false },
+    { name: SCREEN_ROLE, calendars: "*", tasks: "everyone", whereabouts: "everyone", changes: true, approval: { add_event: "always" }, approves: false, devices: true },
   ];
 }
 
@@ -122,4 +127,12 @@ export function approversOf(state: SampleState): SamplePerson[] {
 export function either(names: string[]): string {
   if (names.length <= 1) return names[0] ?? "someone who approves requests";
   return `${names.slice(0, -1).join(", ")} or ${names.at(-1)}`;
+}
+
+/** Why an actor may not do something beyond the household's own tools, naming who can, or null when they may. */
+export function refusalFor(state: SampleState, actor: SampleActor, action: HouseholdAction): string | null {
+  if (action !== "switch_device" || actor.role.devices) return null;
+  const can = state.people.filter((p) => actorOf(state, p).role.devices).map((p) => p.shortName);
+  const who = can.length > 1 ? `${can.slice(0, -1).join(", ")} or ${can.at(-1)}` : (can[0] ?? "someone who looks after the ranch");
+  return actor.person ? `${actor.person.shortName} can't switch the ranch's devices. ${who} can.` : `Only people in ${state.name} who look after the ranch can switch its devices, and this voice isn't one of them. ${who} can.`;
 }

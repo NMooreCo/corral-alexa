@@ -294,6 +294,9 @@ export async function buildServer(household: Household, ranch?: Ranch): Promise<
         _meta: { ui: { resourceUri: RANCH_URI } },
       },
       async (args: unknown) => {
+        // The household says who may switch its devices; a screen's tap is the speaker's too.
+        const refusal = household.refusal?.("switch_device");
+        if (refusal) return answer(() => Promise.reject(new ToolError(refusal)));
         try {
           const change = await ranch.devices.set((args ?? {}) as Record<string, unknown>);
           const view = await ranchNow();

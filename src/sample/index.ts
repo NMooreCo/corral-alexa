@@ -2,7 +2,7 @@ import { Temporal } from "temporal-polyfill";
 import type { CorralApprovals } from "../approvals.ts";
 import { ToolError, type CorralChange, type CorralEvent, type CorralTask, type CorralWhere, type Household, type HouseholdTool } from "../household.ts";
 import { clock, dollars, isAllDay, unitAmount, whenLabel } from "./labels.ts";
-import { actorFor, actorOf, approversOf, either, personNamed, type PlanChange, type SampleActor } from "./roles.ts";
+import { actorFor, actorOf, approversOf, either, personNamed, refusalFor, type PlanChange, type SampleActor } from "./roles.ts";
 import { seed, type SampleEvent, type SamplePerson, type SampleRequest, type SampleState, type SampleStay, type SampleTask } from "./seed.ts";
 
 type Args = Record<string, unknown>;
@@ -52,6 +52,7 @@ export class SampleHousehold implements Household {
       decidesRequests: true,
       about: () => this.about(),
       call: (tool, args) => this.callAs(actorFor(this.state, speaker), tool, args),
+      refusal: (action) => refusalFor(this.state, actorFor(this.state, speaker), action),
     };
   }
 

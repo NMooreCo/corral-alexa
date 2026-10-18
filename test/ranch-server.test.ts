@@ -12,11 +12,11 @@ const SAMPLE: Env = { BACKEND: "sample" };
 
 type Rpc = { result?: Record<string, any>; error?: { message: string } };
 
-async function rpc(method: string, params: Record<string, unknown> = {}, send: (req: Request) => Promise<Response> = (req) => worker.fetch(req, SAMPLE, CTX)): Promise<Rpc> {
+async function rpc(method: string, params: Record<string, unknown> = {}, send: (req: Request) => Promise<Response> = (req) => worker.fetch(req, SAMPLE, CTX), headers: Record<string, string> = {}): Promise<Rpc> {
   const res = await send(
     new Request("https://bridge.example/mcp", {
       method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2025-11-25" },
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2025-11-25", ...headers },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
     }),
   );
@@ -148,5 +148,21 @@ describe("the ranch over MCP", () => {
     expect(names).not.toContain("devices");
     expect(names).not.toContain("show_ranch");
     expect(names).toContain("show_today");
+  });
+});
+
+describe("who may switch the ranch's devices", () => {
+  const as = (person: string) => async (name: string, args: Record<string, unknown> = {}) => (await rpc("tools/call", { name, arguments: args }, undefined, { "x-demo-person": person })).result!;
+
+  it("lets a parent or the farm hand switch a device, and tells a kid or a guest who can", async () => {
+    const lamp = { device: "coop heat lamp", state: "on" };
+    const kid = await as("Leo")("set_device", lamp);
+    expect(kid.isError).toBe(true);
+    expect(kid.content[0].text).toBe("Leo can't switch the ranch's devices. Sam, Alex or Jordan can.");
+    const guest = await as("guest")("set_device", lamp);
+    expect(guest.isError).toBe(true);
+    expect(guest.content[0].text).toContain("Sam, Alex or Jordan can.");
+
+    for (const grownUp of ["Sam", "Jordan"]) expect((await as(grownUp)("set_device", lamp)).isError).toBeFalsy();
   });
 });

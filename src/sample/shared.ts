@@ -62,6 +62,7 @@ export class SharedSample implements Household {
       about: () => shared.about(),
       call: (tool, args) => shared.#callAs(speaker, tool, args),
       version: () => shared.version(),
+      refusal: (action) => shared.#current().as(speaker).refusal?.(action) ?? null,
     };
   }
 

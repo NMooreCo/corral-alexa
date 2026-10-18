@@ -49,7 +49,12 @@ export interface Household {
   call(tool: HouseholdTool, args: Record<string, unknown>): Promise<unknown>;
   /** A counter that goes up whenever anything in the household changes, when this kind of household keeps one, so screens can tell when to refresh. */
   version?(): Promise<number>;
+  /** Why this speaker may not do something beyond the household's own tools, said for people, or null when they may. A household that knows no speakers leaves it out. */
+  refusal?(action: HouseholdAction): string | null;
 }
+
+/** What a household says yes or no to beyond its own tools, like switching one of its ranch's devices. */
+export type HouseholdAction = "switch_device";
 
 export interface HouseholdAbout {
   name?: string;
