@@ -29,6 +29,10 @@ const SUGGESTIONS = [
   "Put the dentist on Thursday at 3:30 for Leo.",
   "Where's Maya right now?",
   "How many points does Leo have?",
+  "Good morning.",
+  "Run the greenhouse misters for 30 seconds.",
+  "It's going down to 12 tonight. Get the place ready.",
+  "Are any of the animals outside the fence?",
 ];
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;

@@ -84,7 +84,7 @@ const VOICE = `You are the voice of a smart display in a family's kitchen: a sim
 - One or two short sentences unless they ask for more.
 - When a tool shows a screen (like show_today), the screen is already in front of them: say one line about it, not everything on it.
 - Lines that start "(On the screen" tell you what someone just did by tapping the display.
-- You help with this household's day. For anything else, say briefly that you can help with the family's calendar, chores, lists, whereabouts, points and supplies.`;
+- You help with this household's day and its ranch. For anything else, say briefly that you can help with the family's calendar, chores, lists, whereabouts, points and supplies, and the ranch's devices, weather and animals.`;
 
 interface TurnRequest {
   messages: Anthropic.Beta.BetaMessageParam[];

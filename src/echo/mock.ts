@@ -3,7 +3,7 @@ import { json } from "../http.ts";
 
 /**
  * A practice stand-in for Claude, for building the simulator on a machine
- * with no Bedrock key (MODEL_MOCK=true). It knows two requests, answers in
+ * with no Bedrock key (MODEL_MOCK=true). It knows a few requests, answers in
  * the Messages API's own shape, and is never deployed.
  */
 export async function mockTurn(request: Request): Promise<Response> {
@@ -22,7 +22,11 @@ export async function mockTurn(request: Request): Promise<Response> {
   }
   const words = blocks.filter((b) => b.type === "text").map((b) => (b.type === "text" ? b.text : "")).join(" ").toLowerCase();
   if (/today|going on|my day/.test(words)) return toolUse("show_today", {});
+  if (/good morning|briefing/.test(words)) return toolUse("show_briefing", {});
+  const run = /(?:run|turn on) (?:the )?(.+?) for (\d+) (second|minute)/.exec(words);
+  if (run) return toolUse("set_device", { device: run[1], state: "on", [run[3] === "second" ? "seconds" : "minutes"]: Number(run[2]) });
+  if (/ranch|animals|greenhouse|fence/.test(words)) return toolUse("show_ranch", {});
   const add = /add (.+?) to the (\w[\w ]*?) list/.exec(words);
   if (add) return toolUse("add_list_item", { text: add[1], list: add[2] });
-  return say("I'm the practice model. Try asking what's going on today.");
+  return say("I'm the practice model. Try asking what's going on today, good morning, or to run the greenhouse misters for 30 seconds.");
 }
