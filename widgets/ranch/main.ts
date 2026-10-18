@@ -92,7 +92,7 @@ function map(view: RanchView): string {
     <rect class="ground" x="0" y="0" width="${m.width}" height="${m.height}" rx="18"/>
     ${m.zones.map((z) => `<path class="zone ${escape(z.style)}" d="${z.d}"/>`).join("")}
     <path class="fence" d="${m.fence}"/>
-    ${m.zones.map((z) => `<text class="zone-name" x="${z.x}" y="${z.y}">${escape(z.name)}</text>`).join("")}
+    ${m.zones.filter((z) => z.name).map((z) => `<text class="zone-name" x="${z.x}" y="${z.y}">${escape(z.name)}</text>`).join("")}
     ${m.pins.map(pin).join("")}
     <g class="north" transform="translate(${m.width - 40} ${m.height - 60})"><path d="M0 -26 L12 10 L0 3 L-12 10 Z"/><text y="34">N</text></g>
     <g class="scale" transform="translate(24 ${m.height - 20})"><path d="M0 0 H${m.scale.length}"/><path d="M0 -8 V8 M${m.scale.length} -8 V8"/><text x="${m.scale.length / 2}" y="-14">${escape(m.scale.label)}</text></g>

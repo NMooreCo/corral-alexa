@@ -94,20 +94,25 @@ describe("placing points on a property", () => {
   const at = (x: number, y: number) => localPlane({ latitude: 43.44, longitude: -105.21 }).toLatLon({ x, y });
 
   it("finds the smallest zone a point is in", () => {
-    expect(plane.place(at(0, 100))).toEqual({ insideFence: true, zone: "North pasture" });
-    expect(plane.place(at(10, -10))).toEqual({ insideFence: true, zone: "Barn" });
-    expect(plane.place(at(125, -30))).toEqual({ insideFence: true, zone: "Greenhouse" });
+    expect(plane.place(at(-60, 150))).toEqual({ insideFence: true, zone: "North pasture" });
+    expect(plane.place(at(-142, 100))).toEqual({ insideFence: true, zone: "Barn" });
+    expect(plane.place(at(54, 38))).toEqual({ insideFence: true, zone: "Greenhouse" });
     // Inside the fence but in no zone.
-    expect(plane.place(at(150, 0))).toEqual({ insideFence: true, zone: null });
+    expect(plane.place(at(10, 60))).toEqual({ insideFence: true, zone: null });
+    // On the drive: a road is drawn, but it isn't a place.
+    expect(plane.place(at(-24, -60))).toEqual({ insideFence: true, zone: null });
   });
 
   it("says how far outside the fence a point is, which way, and what it's nearest", () => {
-    const north = plane.place(at(0, 230));
+    const north = plane.place(at(0, 250));
     expect(north).toMatchObject({ insideFence: false, zone: null, outside: { direction: "north", nearestZone: "North pasture" } });
     expect(north.outside!.meters).toBeGreaterThanOrEqual(49);
     expect(north.outside!.meters).toBeLessThanOrEqual(51);
-    // The neighbor's corner, cut out of the L, is outside too.
-    expect(plane.place(at(180, -150))).toMatchObject({ insideFence: false, outside: { meters: 88 } });
+    // Across the road, south-west of the property's middle, and never "near" the road itself.
+    const west = plane.place(at(-200, -60));
+    expect(west).toMatchObject({ insideFence: false, outside: { direction: "south-west", nearestZone: "South pasture" } });
+    expect(west.outside!.meters).toBeGreaterThanOrEqual(76);
+    expect(west.outside!.meters).toBeLessThanOrEqual(80);
   });
 
   it("nests zones by size, whatever order the data lists them in", () => {
@@ -128,8 +133,8 @@ describe("placing points on a property", () => {
   it("frames a north-up drawing around the fence and anyone outside it, with far runaways kept on the map", () => {
     const frame = mapFrame(property, [at(255, 228)]);
     expect(frame.width).toBe(1000);
-    const nw = frame.draw(at(-210, 180));
-    const se = frame.draw(at(92, -180));
+    const nw = frame.draw(at(-236, 200));
+    const se = frame.draw(at(150, -200));
     // North is up and west is left.
     expect(nw.y).toBeLessThan(se.y);
     expect(nw.x).toBeLessThan(se.x);
@@ -138,6 +143,6 @@ describe("placing points on a property", () => {
     const far = mapFrame(property, [at(2000, 0)]);
     expect(far.metersPerUnit).toBeLessThan(1.3);
     expect(far.covers(at(2000, 0))).toBe(false);
-    expect(pathOf(frame, property.fence)).toMatch(/^M[\d.]+ [\d.]+ (L[\d.]+ [\d.]+ ){5}Z$/);
+    expect(pathOf(frame, property.fence)).toMatch(/^M[\d.]+ [\d.]+ (L[\d.]+ [\d.]+ ){6}Z$/);
   });
 });

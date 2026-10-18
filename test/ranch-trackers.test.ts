@@ -25,10 +25,10 @@ describe("the trackers tool", () => {
     const r = await ranch(NIGHT).animals();
     expect(r.outsideFence).toEqual(["Scout", "Pepper"]);
     const scout = r.animals.find((a) => a.animal === "Scout")!;
-    expect(scout).toMatchObject({ insideFence: false, zone: null, outside: { direction: "north-east", nearestZone: "North pasture" } });
-    expect(scout.outside!.words).toMatch(/^about \d+ ft outside the fence to the north-east, nearest the North pasture$/);
+    expect(scout).toMatchObject({ insideFence: false, zone: null, outside: { direction: "north-east", nearestZone: "Woods" } });
+    expect(scout.outside!.words).toMatch(/^about \d+ ft outside the fence to the north-east, nearest the Woods$/);
     const pepper = r.animals.find((a) => a.animal === "Pepper")!;
-    expect(pepper).toMatchObject({ signal: "weak", outside: { direction: "west", nearestZone: "South pasture" } });
+    expect(pepper).toMatchObject({ signal: "weak", outside: { direction: "south-west", nearestZone: "South pasture" } });
   });
 
   it("flags a low collar battery, and says when each collar last reported", async () => {
@@ -62,7 +62,7 @@ describe("the trackers tool", () => {
     const feed: TrackerFeed = {
       name: "A real collar feed",
       live: true,
-      fixes: async () => [{ collar: "C9", animal: "Juniper", species: "donkey", battery: 90, signal: "none", at: MORNING.subtract({ hours: 2 }), position: plane.toLatLon({ x: 0, y: 100 }) }],
+      fixes: async () => [{ collar: "C9", animal: "Juniper", species: "donkey", battery: 90, signal: "none", at: MORNING.subtract({ hours: 2 }), position: plane.toLatLon({ x: 0, y: 150 }) }],
     };
     const r = await trackerReport(feed, config, MORNING);
     expect(r).toMatchObject({ feed: "A real collar feed", live: true, stale: ["Juniper"], outsideFence: [], animals: [{ animal: "Juniper", zone: "North pasture", lastSeen: "2 hours ago", stale: true }] });

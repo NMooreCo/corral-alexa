@@ -100,8 +100,10 @@ export interface Placement {
 export function propertyPlane(property: PropertyMap) {
   const plane = localPlane(centerOf(property.fence));
   const fence = property.fence.map(plane.toPoint);
-  // Smallest first, so a coop inside a pasture is the coop.
+  // The places something can be in, smallest first, so a coop inside a pasture is the coop. A zone with
+  // no name (a road, a drive) is drawn but isn't a place, so nothing is ever "near the" nothing.
   const zones = property.zones
+    .filter((z) => z.name)
     .map((z) => ({ zone: z, polygon: z.polygon.map(plane.toPoint) }))
     .sort((a, b) => area(a.polygon) - area(b.polygon));
 
@@ -115,7 +117,8 @@ export function propertyPlane(property: PropertyMap) {
     return { insideFence, zone, outside: { meters: Math.round(distanceToEdge(p, fence)), direction: direction(labelPoint(fence), p), nearestZone: nearest?.zone.name ?? null } };
   }
 
-  return { plane, fence, zones: zones.map((z) => z.zone) as Zone[], place };
+  // Every zone, in the property's own order, which is the order a map draws them in.
+  return { plane, fence, zones: property.zones as Zone[], place };
 }
 
 // ---------- Drawing ----------

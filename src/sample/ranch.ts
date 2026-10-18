@@ -1,7 +1,7 @@
 import { Temporal } from "temporal-polyfill";
 import { ToolError } from "../household.ts";
 import { attentionOf, runOf } from "../ranch/devices.ts";
-import { localPlane, type Point } from "../ranch/geo.ts";
+import { inside, labelPoint, localPlane, type Point } from "../ranch/geo.ts";
 import { GreenhouseController, type GreenhouseConfig } from "../ranch/greenhouse.ts";
 import { Ranch, localGreenhouse, type GreenhouseEnv } from "../ranch/index.ts";
 import type { Device, DeviceLimits, DeviceSource, LatLon, RanchConfig, Reading, SwitchRequest, SwitchState, TrackerFeed, TrackerFix, Units, Zone } from "../ranch/types.ts";
@@ -9,7 +9,10 @@ import { fromCelsius, readingText, tempUnit } from "../ranch/words.ts";
 
 /**
  * Juniper Hollow's ranch, made up for the demo: a fenced property in the
- * grasslands, a heated greenhouse whose controller speaks the
+ * grasslands, laid out like a real one (a road along its
+ * west side, the barn and coop on the north fence line, the house in the
+ * middle with a big pasture between it and the road, woods rising to the
+ * east) but placed nowhere real, a heated greenhouse whose controller speaks the
  * same API as a real ESP32 valve controller, animal-care devices in the barn
  * and pastures, and six animals in GPS collars. Everything specific lives
  * here, as data; the ranch tools only read it.
@@ -28,25 +31,47 @@ const rect = (west: number, south: number, east: number, north: number): LatLon[
     { x: west, y: north },
   ].map(plane.toLatLon);
 
-const ZONES: Zone[] = [
-  { id: "north-pasture", name: "North pasture", style: "field", polygon: rect(-200, 25, 200, 170) },
-  { id: "south-pasture", name: "South pasture", style: "field", polygon: rect(-200, -170, -45, 10) },
-  { id: "barn", name: "Barn", style: "structure", polygon: rect(-10, -25, 35, 5) },
-  { id: "coop", name: "Coop", style: "structure", polygon: rect(50, -20, 72, -4) },
-  { id: "house", name: "House", style: "yard", polygon: rect(-25, -155, 40, -105) },
-  { id: "garden", name: "Garden", style: "yard", polygon: rect(50, -155, 85, -115) },
-  { id: "greenhouse", name: "Greenhouse", style: "structure", polygon: rect(105, -42, 150, -22) },
+/** A shape given as points in meters east and north of the property's middle. */
+const shape = (...points: [number, number][]): LatLon[] => points.map(([x, y]) => plane.toLatLon({ x, y }));
+
+/** A strip `width` meters wide along a line of points: a road or a drive, drawn as a shape. */
+function strip(width: number, ...line: [number, number][]): LatLon[] {
+  const side = (sign: number) =>
+    line.map(([x, y], i) => {
+      const [ax, ay] = line[Math.max(0, i - 1)]!;
+      const [bx, by] = line[Math.min(line.length - 1, i + 1)]!;
+      const len = Math.hypot(bx - ax, by - ay) || 1;
+      return [x + (sign * width * (by - ay)) / (2 * len), y - (sign * width * (bx - ax)) / (2 * len)] as [number, number];
+    });
+  return shape(...side(1), ...side(-1).reverse());
+}
+
+/** The road along the property's west side; the fence follows it, a few meters in. */
+const ROAD: [number, number][] = [
+  [-252, 215],
+  [-205, 90],
+  [-164, 14],
+  [-124, -68],
+  [-97, -215],
 ];
 
-/** An L-shaped fence: the south-east corner is the neighbor's. */
-const FENCE: LatLon[] = [
-  { x: -210, y: -180 },
-  { x: 92, y: -180 },
-  { x: 92, y: -60 },
-  { x: 210, y: -60 },
-  { x: 210, y: 180 },
-  { x: -210, y: 180 },
-].map(plane.toLatLon);
+// Drawn in this order: woods and roads first, so everything else sits on top.
+const ZONES: Zone[] = [
+  { id: "woods", name: "Woods", style: "woods", polygon: shape([62, 200], [150, 200], [150, -200], [42, -200], [72, -42], [72, 40], [92, 118]) },
+  { id: "road", name: "", style: "road", polygon: strip(9, ...ROAD) },
+  { id: "drive", name: "", style: "road", polygon: strip(5, [-13, -16], [-24, -60], [-34, -108], [-82, -146], [-103, -152]) },
+  { id: "north-pasture", name: "North pasture", style: "field", polygon: shape([-198, 114], [138, 114], [138, 192], [-230, 192]) },
+  // The big pasture between the road and the house, down to the drive; a barnyard lane north of it holds the barn and coop.
+  { id: "south-pasture", name: "South pasture", style: "field", polygon: shape([-166, 72], [10, 78], [-14, 30], [-26, -14], [-30, -60], [-40, -104], [-84, -138], [-92, -138], [-104, -62], [-144, 8]) },
+  { id: "barn", name: "Barn", style: "structure", polygon: rect(-155, 90, -129, 110) },
+  { id: "coop", name: "Coop", style: "structure", polygon: rect(-26, 97, -12, 110) },
+  { id: "house", name: "House", style: "yard", polygon: rect(-20, -14, 24, 14) },
+  { id: "garden", name: "Garden", style: "yard", polygon: rect(40, -26, 68, -6) },
+  { id: "greenhouse", name: "Greenhouse", style: "structure", polygon: rect(40, 30, 68, 46) },
+];
+
+/** The fence: along the road on the west, a few meters in, and around the woods to the east. */
+const FENCE: LatLon[] = shape([-236, 200], [150, 200], [150, -200], [-82, -200], [-109, -68], [-149, 14], [-190, 88]);
 
 export function sampleRanchConfig(timeZone = "America/Denver"): RanchConfig {
   return {
@@ -303,7 +328,7 @@ const COLLARS: CollarSpec[] = [
   { collar: "Collar 2", animal: "Scout", species: "dog", home: "barn", battery: 64, signal: "strong", night: { x: 255, y: 228, signal: "fair" } },
   { collar: "Collar 3", animal: "Maple", species: "horse", home: "north-pasture", battery: 71, signal: "strong" },
   { collar: "Collar 4", animal: "Dusty", species: "horse", home: "north-pasture", battery: 14, signal: "fair" },
-  { collar: "Collar 5", animal: "Pepper", species: "goat", home: "south-pasture", battery: 55, signal: "strong", night: { x: -246, y: -95, signal: "weak" } },
+  { collar: "Collar 5", animal: "Pepper", species: "goat", home: "south-pasture", battery: 55, signal: "strong", night: { x: -178, y: -74, signal: "weak" } },
   { collar: "Collar 6", animal: "Clover", species: "goat", home: "south-pasture", battery: 47, signal: "strong" },
 ];
 
@@ -360,12 +385,18 @@ export class SampleCollars implements TrackerFeed {
     const xs = zone.map((p) => p.x);
     const ys = zone.map((p) => p.y);
     const [x0, x1, y0, y1] = [Math.min(...xs) + 6, Math.max(...xs) - 6, Math.min(...ys) + 6, Math.max(...ys) - 6];
-    const spot = (slot: number) => ({ x: x0 + noise(`${c.animal}:${slot}:x`) * (x1 - x0), y: y0 + noise(`${c.animal}:${slot}:y`) * (y1 - y0) });
+    // A zone needn't be a rectangle, so a spot in its bounding box is drawn in toward its middle until it's inside.
+    const middle = labelPoint(zone);
+    const within = (p: Point): Point => {
+      for (let i = 0; i < 12 && !inside(p, zone); i++) p = { x: (p.x + middle.x) / 2, y: (p.y + middle.y) / 2 };
+      return p;
+    };
+    const spot = (slot: number) => within({ x: x0 + noise(`${c.animal}:${slot}:x`) * (x1 - x0), y: y0 + noise(`${c.animal}:${slot}:y`) * (y1 - y0) });
     const slot = Math.floor(at / 300);
     const t = (at % 300) / 300;
     const a = spot(slot);
     const b = spot(slot + 1);
-    return plane.toLatLon({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+    return plane.toLatLon(within({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }));
   }
 }
 

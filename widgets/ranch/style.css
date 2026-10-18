@@ -4,6 +4,8 @@
   --field: #dfe9d3;
   --structure: #e7dcc8;
   --yard: #eef0e4;
+  --woods: #c3d4b6;
+  --road: #d4d0c6;
   --fence: #7a5a32;
   --pin: #2f5d46;
   --alarm: #b3261e;
@@ -14,6 +16,8 @@
   --field: #22301f;
   --structure: #3a3225;
   --yard: #262d24;
+  --woods: #1a2618;
+  --road: #3a3833;
   --fence: #c9a26b;
   --pin: #8cc4a3;
   --alarm: #ff8a80;
@@ -76,6 +80,16 @@
 
 .map .zone.structure {
   fill: var(--structure);
+}
+
+.map .zone.woods {
+  fill: var(--woods);
+  stroke: none;
+}
+
+.map .zone.road {
+  fill: var(--road);
+  stroke: none;
 }
 
 .map .fence {
