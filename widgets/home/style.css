@@ -1,0 +1,287 @@
+/* The home screens' rail of tabs, and the Animals and Automations tabs, on top of shared/base.css and the Today and Ranch styles. */
+
+.home {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.pane {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Tabs down the side, out of the way of anything an assistant floats over the top of the screen. */
+.rail {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: none;
+  width: 4.6rem;
+}
+
+.rail button {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 2px 8px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.rail button svg {
+  width: 1.7rem;
+  height: 1.7rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.rail button[aria-current="page"] {
+  background: var(--forest-soft);
+  color: var(--forest);
+}
+
+.rail .dot {
+  position: absolute;
+  top: 5px;
+  right: 12px;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--late);
+  color: var(--paper);
+  font-size: 0.66rem;
+  line-height: 1.15rem;
+  text-align: center;
+}
+
+/* ---------- Animals ---------- */
+
+.animals {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.collars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.collars li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  column-gap: 10px;
+  align-items: center;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+}
+
+.collars li.outside {
+  border-color: var(--late);
+  background: var(--late-soft);
+}
+
+.collars .initial {
+  grid-row: span 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 50%;
+  background: var(--forest-soft);
+  color: var(--forest);
+  font-weight: 800;
+}
+
+.collars li.outside .initial {
+  background: var(--late);
+  color: var(--paper);
+}
+
+.collars .name {
+  font-weight: 750;
+}
+
+.collars .where {
+  grid-column: 2 / span 2;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.72rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.collars .battery {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.collars .battery .cell {
+  width: 1.6rem;
+  height: 0.7rem;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+  padding: 1px;
+}
+
+.collars .battery .cell span {
+  display: block;
+  height: 100%;
+  border-radius: 1px;
+  background: var(--forest);
+}
+
+.collars .battery.low {
+  color: var(--late);
+  font-weight: 750;
+}
+
+.collars .battery.low .cell span {
+  background: var(--late);
+}
+
+/* ---------- Automations ---------- */
+
+.rules {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.rule {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+}
+
+.rule.on {
+  border-color: var(--forest);
+}
+
+.rule-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rule-top .title {
+  flex: 1;
+  font-weight: 800;
+}
+
+.rule .kind {
+  width: 1.4rem;
+  height: 1.4rem;
+  fill: none;
+  stroke: var(--forest);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.rule.off .kind {
+  stroke: var(--muted);
+}
+
+.rule .when {
+  margin: 0;
+  font-weight: 650;
+}
+
+.rule .then {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.84rem;
+}
+
+.rule .meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.switch {
+  position: relative;
+  flex: none;
+  width: 3.2rem;
+  height: 1.8rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--line);
+  cursor: pointer;
+}
+
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: calc(1.8rem - 6px);
+  height: calc(1.8rem - 6px);
+  border-radius: 50%;
+  background: var(--card);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 30%);
+  transition: transform 0.2s;
+}
+
+.switch[aria-checked="true"] {
+  background: var(--forest);
+}
+
+.switch[aria-checked="true"]::after {
+  transform: translateX(1.4rem);
+}
+
+@media (max-width: 860px) {
+  .home {
+    flex-direction: column;
+  }
+
+  .rail {
+    position: static;
+    flex-direction: row;
+    width: 100%;
+  }
+
+  .rail button {
+    flex: 1;
+  }
+
+  .animals,
+  .rules {
+    grid-template-columns: 1fr;
+  }
+}

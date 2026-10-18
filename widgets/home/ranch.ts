@@ -1,34 +1,20 @@
-import type { CallToolResult } from "@modelcontextprotocol/server";
 import type { Device } from "../../src/ranch/types.ts";
 import type { MapPin, RanchView } from "../../src/ranch/views.ts";
-import { escape, sizeButton, startScreen, type Screen } from "../shared/screen.ts";
-import "../shared/base.css";
-import "./style.css";
+import { escape, sizeButton } from "../shared/screen.ts";
+import type { Home } from "./main.ts";
 
 /**
- * The Ranch screen: the property drawn as a map (fence, zones, a pin for each
+ * The Ranch tab: the property drawn as a map (fence, zones, a pin for each
  * collar, anything outside the fence standing out) and a tile for every
  * device, by place. Tiles switch devices through the same set_device tool the
  * assistant uses, so each device's limits still apply, and a run counts down
  * on the tile whether it started here or by voice.
  */
 
-const root = document.getElementById("app")!;
 const pending = new Set<string>();
 /** A device whose safe state is on, waiting for a second tap to switch it off. */
 const confirming = new Map<string, ReturnType<typeof setTimeout>>();
 let ended = new Set<string>();
-
-const screen: Screen<RanchView> = await startScreen<RanchView>({
-  name: "corral-ranch",
-  read: (r) => {
-    const v = r.structuredContent as RanchView | undefined;
-    return v && v.map && Array.isArray(v.places) ? v : null;
-  },
-  render,
-  refresh: () => screen.app.callServerTool({ name: "refresh_ranch", arguments: {} }) as Promise<CallToolResult>,
-  refreshMs: 20_000,
-});
 
 // ---------- Words ----------
 
@@ -67,8 +53,8 @@ const ICONS: Record<string, string> = {
   waterer: `<path d="M4 11h16l-1.5 8h-13Z"/><path d="M12 3c1.6 2 2.5 3.3 2.5 4.5a2.5 2.5 0 0 1-5 0C9.5 6.3 10.4 5 12 3Z"/>`,
 };
 
-function icon(kind: string): string {
-  return `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${ICONS[kind] ?? `<circle cx="12" cy="12" r="5"/>`}</svg>`;
+export function icon(kind: string, cls = "icon"): string {
+  return `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[kind] ?? `<circle cx="12" cy="12" r="5"/>`}</svg>`;
 }
 
 // ---------- The map ----------
@@ -86,7 +72,7 @@ function pin(p: MapPin): string {
   </g>`;
 }
 
-function map(view: RanchView): string {
+export function map(view: RanchView): string {
   const m = view.map;
   return `<svg class="map" viewBox="0 0 ${m.width} ${m.height}" role="img" aria-label="${escape(`Map of the property. ${view.animals.outside.length ? `Outside the fence: ${view.animals.outside.join(", ")}.` : "Every animal is inside the fence."}`)}">
     <rect class="ground" x="0" y="0" width="${m.width}" height="${m.height}" rx="18"/>
@@ -97,6 +83,12 @@ function map(view: RanchView): string {
     <g class="north" transform="translate(${m.width - 40} ${m.height - 60})"><path d="M0 -26 L12 10 L0 3 L-12 10 Z"/><text y="34">N</text></g>
     <g class="scale" transform="translate(24 ${m.height - 20})"><path d="M0 0 H${m.scale.length}"/><path d="M0 -8 V8 M${m.scale.length} -8 V8"/><text x="${m.scale.length / 2}" y="-14">${escape(m.scale.label)}</text></g>
   </svg>`;
+}
+
+/** The weather line every ranch tab shares. */
+export function weatherLine(view: RanchView): string {
+  const w = view.weather;
+  return w ? `<span class="weather${w.freeze ? " freeze" : ""}"><strong>${escape(w.now)}</strong> ${escape(w.conditions)} · ${escape(w.tonight)}${w.freeze ? ` <span class="badge warn">Freeze</span>` : ""}</span>` : "";
 }
 
 // ---------- Device tiles ----------
@@ -154,18 +146,17 @@ function running(view: RanchView): string {
   return runs ? `${runs} running` : `${on} on`;
 }
 
-function render(view: RanchView) {
+export function ranchHtml(view: RanchView, home: Home): string {
   ended = new Set();
-  const w = view.weather;
-  root.innerHTML = `
+  return `
     <header>
       <div>
         <h1>Ranch</h1>
         <p class="household">${escape([view.household, view.attention ? `${view.attention} to look at` : "All's well"].filter(Boolean).join(" · "))}</p>
       </div>
       <div class="header-end">
-        ${w ? `<span class="weather${w.freeze ? " freeze" : ""}"><strong>${escape(w.now)}</strong> ${escape(w.conditions)} · ${escape(w.tonight)}${w.freeze ? ` <span class="badge warn">Freeze</span>` : ""}</span>` : ""}
-        ${sizeButton(screen)}
+        ${weatherLine(view)}
+        ${sizeButton(home.screen)}
       </div>
     </header>
     <div class="ranch">
@@ -181,27 +172,30 @@ function render(view: RanchView) {
     </div>`;
 }
 
-// Runs count down every second, between refreshes; when one ends, ask for the real state.
-setInterval(() => {
-  for (const el of root.querySelectorAll<HTMLElement>(".countdown[data-ends]")) {
-    const s = left(el.dataset.ends!);
-    el.textContent = clock(s);
-    if (s === 0 && !ended.has(el.dataset.device!)) {
-      ended.add(el.dataset.device!);
-      setTimeout(() => void screen.refreshNow(), 1200);
+/** Runs count down every second, between refreshes; when one ends, ask for the real state. */
+export function startCountdowns(root: HTMLElement, home: Home) {
+  setInterval(() => {
+    for (const el of root.querySelectorAll<HTMLElement>(".countdown[data-ends]")) {
+      const s = left(el.dataset.ends!);
+      el.textContent = clock(s);
+      if (s === 0 && !ended.has(el.dataset.device!)) {
+        ended.add(el.dataset.device!);
+        setTimeout(() => void home.screen.refreshNow(), 1200);
+      }
     }
-  }
-}, 1000);
+  }, 1000);
+}
 
-root.addEventListener("click", (e) => {
-  const target = e.target as HTMLElement;
-  if (target.closest("[data-action=fullscreen]")) return void screen.toggleFullscreen();
+/** A tap on the Ranch tab; true when it was one of its own. */
+export function ranchClick(target: HTMLElement, home: Home): boolean {
   const b = target.closest<HTMLButtonElement>("button[data-device]");
-  if (b?.dataset.device && b.dataset.state) void flip(b.dataset.device, b.dataset.state as "on" | "off", b.dataset.seconds ? Number(b.dataset.seconds) : undefined);
-});
+  if (!b?.dataset.device || !b.dataset.state) return false;
+  void flip(b.dataset.device, b.dataset.state as "on" | "off", b.dataset.seconds ? Number(b.dataset.seconds) : undefined, home);
+  return true;
+}
 
-async function flip(id: string, state: "on" | "off", seconds?: number) {
-  const view = screen.view();
+async function flip(id: string, state: "on" | "off", seconds: number | undefined, home: Home) {
+  const view = home.ranch();
   const d = view?.places.flatMap((p) => p.devices).find((x) => x.id === id);
   if (!view || !d || pending.has(id)) return;
   // Switching off something whose safe state is on (a heater) takes a second tap.
@@ -210,10 +204,10 @@ async function flip(id: string, state: "on" | "off", seconds?: number) {
       id,
       setTimeout(() => {
         confirming.delete(id);
-        screen.rerender();
+        home.screen.rerender();
       }, 4000),
     );
-    return screen.rerender();
+    return home.screen.rerender();
   }
   clearTimeout(confirming.get(id));
   confirming.delete(id);
@@ -221,14 +215,14 @@ async function flip(id: string, state: "on" | "off", seconds?: number) {
   // Show it at once; the tool's answer, read back below, has the last word.
   d.state = state;
   d.run = state === "on" && seconds ? { secondsLeft: seconds, endsAt: new Date(Date.now() + seconds * 1000).toISOString(), endsLabel: "" } : null;
-  screen.rerender();
-  const text = await screen.act("set_device", { device: id, state, ...(seconds ? { seconds } : {}) });
+  home.screen.rerender();
+  const text = await home.screen.act("set_device", { device: id, state, ...(seconds ? { seconds } : {}) });
   pending.delete(id);
   if (text !== null) {
     const summary = (JSON.parse(text) as { summary?: string }).summary ?? `${d.name} ${state}`;
-    screen.toast(summary);
+    home.screen.toast(summary);
     // Tell the assistant, so "is the barn heater on?" right after has the answer.
-    screen.tell("switched", { device: d.name, state }, `On the screen: ${summary}.`);
+    home.screen.tell("switched", { device: d.name, state }, `On the screen: ${summary}.`);
   }
-  await screen.refreshNow();
+  await home.screen.refreshNow();
 }
