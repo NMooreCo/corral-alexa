@@ -22,6 +22,12 @@
   "kv_namespaces": [{ "binding": "OAUTH_KV" }],
   // At most 20 simulator model calls a minute per visitor.
   "ratelimits": [{ "name": "MODEL_LIMIT", "namespace_id": "4201", "simple": { "limit": 20, "period": 60 } }],
+  // The shared sample household (sample mode): one Durable Object per household, so every device sees the same one,
+  // kept in the object's own SQLite database. Named environments don't inherit this binding.
+  "durable_objects": { "bindings": [{ "name": "SAMPLE_HOUSEHOLDS", "class_name": "SampleHouseholdObject" }] },
+  // Declares the class and its SQLite storage: the declarative form that replaces the "migrations" array.
+  // Named environments do inherit this, so production empties it.
+  "exports": { "SampleHouseholdObject": { "type": "durable-object", "storage": "sqlite" } },
   "dev": { "port": 8795 },
   "env": {
     // Linked to Corral: account linking in front, every call made with the person's own Corral token.
@@ -34,16 +40,22 @@
         "PUBLIC_URL": "https://alexa.corral.narralogy.ai"
       },
       "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "2873e0d58fb5483183130ef91bd17ba8" }],
+      // No Durable Object: the linked bridge has no sample household. The binding isn't inherited; exports would be.
+      "durable_objects": { "bindings": [] },
+      "exports": {},
       "observability": { "enabled": true }
     },
     // The sample household, open to anyone, with /preview and the simulated Echo Show at /echo: for judges and demos, never any real household's data.
     "demo": {
       "name": "corral-alexa-demo",
       "routes": [{ "pattern": "alexa-demo.corral.narralogy.ai", "custom_domain": true }],
-      // No CORRAL_URL and no storage on purpose (Wrangler notes that they aren't inherited).
+      // No CORRAL_URL and no KV on purpose (Wrangler notes that they aren't inherited): nothing here can reach a real household.
       "vars": { "BACKEND": "sample", "MODEL_PROVIDER": "anthropic", "BEDROCK_REGION": "us-west-2", "BEDROCK_MODEL": "anthropic.claude-opus-5-5" },
       "kv_namespaces": [],
       "ratelimits": [{ "name": "MODEL_LIMIT", "namespace_id": "4202", "simple": { "limit": 20, "period": 60 } }],
+      // One shared household for every visitor and device, kept through restarts (the first deploy creates the class).
+      "durable_objects": { "bindings": [{ "name": "SAMPLE_HOUSEHOLDS", "class_name": "SampleHouseholdObject" }] },
+      "exports": { "SampleHouseholdObject": { "type": "durable-object", "storage": "sqlite" } },
       "observability": { "enabled": true }
     }
   }

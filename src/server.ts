@@ -166,6 +166,26 @@ export async function buildServer(household: Household): Promise<McpServer> {
     { title: "Refresh today", description: "The Today screen's own refresh.", inputSchema: z.object({}), annotations: readOnly("Refresh today"), _meta: { ui: { resourceUri: TODAY_URI, visibility: ["app"] } } },
     () => asView(() => todayView(household)),
   );
+  // A change made anywhere (another Echo Show, the assistant, a tap) reaches every screen within a few seconds:
+  // a stateless server can't push, so screens ask this cheap counter and refresh when it moves. Only screens call it.
+  if (household.version) {
+    const version = household.version.bind(household);
+    registerAppTool(
+      server,
+      "household_version",
+      {
+        title: "Household changes",
+        description: "A counter that goes up whenever anything in the household changes, for screens to know when to refresh.",
+        inputSchema: z.object({}),
+        annotations: readOnly("Household changes"),
+        _meta: { ui: { visibility: ["app"] } },
+      },
+      async () => {
+        const view = { version: await version() };
+        return { content: [{ type: "text", text: JSON.stringify(view) }], structuredContent: view };
+      },
+    );
+  }
   screen(
     "show_list",
     "Show a list",

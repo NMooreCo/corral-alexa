@@ -35,6 +35,8 @@ export interface Household {
   about(): Promise<HouseholdAbout>;
   /** Calls one of Corral's tools. Throws ToolError for an answer the model should hear and can act on. */
   call(tool: CorralTool, args: Record<string, unknown>): Promise<unknown>;
+  /** A counter that goes up whenever anything in the household changes, when this kind of household keeps one, so screens can tell when to refresh. */
+  version?(): Promise<number>;
 }
 
 export interface HouseholdAbout {

@@ -1,4 +1,5 @@
 import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider";
+import type { SampleHouseholdObject } from "./sample/durable.ts";
 
 export interface Env {
   /** "sample" answers from the built-in sample household, open to anyone; "corral" answers from a real Corral, after account linking. */
@@ -34,4 +35,6 @@ export interface Env {
   MODEL_LIMIT?: RateLimit;
   /** "true" answers the simulator with a practice model instead, for building without a model key. Never deployed. */
   MODEL_MOCK?: string;
+  /** Sample mode: the shared sample households, one Durable Object each. Never bound in corral mode. */
+  SAMPLE_HOUSEHOLDS?: DurableObjectNamespace<SampleHouseholdObject>;
 }
