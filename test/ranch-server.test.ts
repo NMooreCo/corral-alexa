@@ -1,5 +1,5 @@
 import { Temporal } from "temporal-polyfill";
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { serveMcp } from "../src/http.ts";
 import worker, { type Env } from "../src/index.ts";
 import { BRIEFING_URI, RANCH_URI } from "../src/ranch/views.ts";
@@ -29,12 +29,15 @@ const call = async (name: string, args: Record<string, unknown> = {}) => (await 
 
 let forecastCalls: string[] = [];
 beforeEach(() => {
+  // Evening at the ranch, whatever time the tests run: before 10 AM "tonight" is the night that's ending.
+  const today = Temporal.Now.plainDateISO("America/Denver");
+  vi.useFakeTimers({ now: today.toZonedDateTime({ timeZone: "America/Denver", plainTime: "20:00" }).epochMilliseconds, toFake: ["Date"] });
   clearWeatherCache();
-  const today = Temporal.Now.plainDateISO("America/Denver").toString();
-  const stub = openMeteoFetch(openMeteo(today, { lows: [30, 12, 20, 35, 41] }));
+  const stub = openMeteoFetch(openMeteo(today.toString(), { lows: [30, 12, 20, 35, 41] }));
   forecastCalls = stub.urls;
   vi.stubGlobal("fetch", stub.fetch);
 });
+afterEach(() => vi.useRealTimers());
 afterAll(() => vi.unstubAllGlobals());
 
 describe("the ranch over MCP", () => {
