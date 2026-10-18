@@ -2,6 +2,8 @@
 
 Alexa can set a timer. It can't tell you whether it's Dad's weekend, who has the 4:00 pickup, whether the dog got her pill, or that you're down to two bags of horse feed. [Corral](https://corral.narralogy.ai) can. It's the household platform one family and ranch run on every day: the shared calendar, chores and who did them, shopping lists, where everyone is, kids' points, and supplies.
 
+On a ranch it also runs the place: **"Alexa, run the greenhouse misters for 30 seconds"** turns on real misters through a real greenhouse controller, and **"It's going down to 12 tonight. Get the place ready."** has Alexa+ read the forecast, every heater, the animals' GPS collars and who's home, then get the night ready in one confirmation.
+
 **Corral for Alexa+** puts that household inside Alexa+. It's a self-hosted MCP server (spec 2025-11-25, Streamable HTTP) on Cloudflare Workers that gives Alexa+ Corral's tools, draws interactive screens for the Echo Show with [MCP Apps](https://modelcontextprotocol.io/extensions/apps), and links each Alexa account to Corral with OAuth 2.1, so every family's rules come along: private events stay private, a kid's change waits for a parent, and the farm hand only hears about the ranch.
 
 **Try it**
@@ -21,6 +23,10 @@ Alexa can set a timer. It can't tell you whether it's Dad's weekend, who has the
 | "Add tortillas and salsa." | Both go on the grocery list; the **List** screen shows it, and tapping an item checks it off. |
 | "Put the dentist on Thursday at 3:30 for Leo." | It confirms first. From a shared kitchen device the event goes to a parent to approve, and it says who. |
 | (tapping a chore on the screen) | The screen checks it off through Corral and tells the assistant, so "who did the eggs?" right after has the answer. |
+| "Run the greenhouse misters for 30 seconds." | It confirms, then opens the valve through the greenhouse controller (Nick's real ESP32 controller, run locally) and the **Ranch** screen counts the run down. |
+| "It's going down to 12 tonight. Get the place ready." | One turn reads the forecast, every device, the collars, who's home and supplies; one question turns on the tank heaters and coop lamp and gives whoever's home a task to bring in the animals outside the fence; then it offers low propane for the list. |
+| "Good morning." | The **briefing**: swipeable cards for today, the weather, late chores, low supplies, the animals, the greenhouse and devices needing attention. It says the two or three that matter. |
+| "Are the animals in?" | Where each collared animal is on the property map: inside the fence or not, which pasture, how far out and which way. |
 
 ## How it works
 
@@ -33,11 +39,14 @@ flowchart LR
   end
   subgraph Bridge["corral-alexa (Cloudflare Worker)"]
     M["MCP server<br/>2025-11-25 and 2026-07-28"]
-    U["MCP Apps screens<br/>Today, Week, List, Supplies"]
+    U["MCP Apps screens<br/>Today, Week, List, Supplies,<br/>Ranch, Briefing"]
+    R["Ranch connectors<br/>devices, weather, collars"]
     L["Account linking<br/>OAuth 2.1 + PKCE"]
     P["Sample household"]
   end
   B["Claude<br/>Amazon Bedrock or the Claude API"]
+  G["Greenhouse controller<br/>ESP32 on the LAN (local)"]
+  W["Open-Meteo forecast"]
   C["Corral's own MCP server<br/>the household's data and rules"]
   A -- "MCP, Streamable HTTP" --> M
   S -- "MCP, Streamable HTTP" --> M
@@ -47,6 +56,9 @@ flowchart LR
   M -- "linked: the person's Corral token" --> C
   M -- "demo" --> P
   L -. "sign in at Corral" .-> C
+  M --> R
+  R -- "pnpm dev:lan" --> G
+  R --> W
 ```
 
 - **The rules travel with the data.** The bridge never decides who sees or changes what. Linked, every call goes to Corral's own MCP server with the person's own Corral token, and Corral applies the same rules as its app. The sample household answers the same tools with the same JSON, so everything here runs and demos with no account.
@@ -60,13 +72,50 @@ The real Alexa+ developer tools (the MCP Toolkit, the `alexa-ai` CLI and the web
 |---|---|
 | Self-hosted MCP server, spec 2025-11-25, Streamable HTTP | Yes, plus 2026-07-28 for current clients |
 | Round trips under 500 ms | Tool calls answer in about 10 to 20 ms from the edge on the sample household; linked to a real Corral at home, 120 to 350 ms measured end to end |
-| Visuals through MCP Apps | Four screens, each one self-contained HTML (`text/html;profile=mcp-app`) that declares it reaches no other origin |
+| Visuals through MCP Apps | Six screens (including a swipeable briefing carousel and a live property map), each one self-contained HTML (`text/html;profile=mcp-app`) that declares it reaches no other origin |
 | OAuth 2.1 authorization code with PKCE (S256) | Yes ([account linking](#account-linking)) |
 | Protected resource metadata at `/.well-known/oauth-protected-resource` | Served at the root, naming `/mcp`, this server and the scopes |
 | `resource` on authorize and token; a refresh token with every access token | Yes |
 | No dynamic client registration; a fixed client | Alexa's client is made once through `/admin/clients`; nothing else can register |
 | 401 without `WWW-Authenticate` | `/mcp` answers a bare 401 before linking |
 | Tools designed for one-shot extraction and voice | Short, specific descriptions; read tools default to today; changes answer `done` or `waiting_for_approval` with who approves |
+
+## The ranch
+
+Ranch tools sit beside Corral's, and they're generic: what a device is called, what it reads, how long it may run and what it does when it loses its connection are the household's configuration ([`src/sample/ranch.ts`](src/sample/ranch.ts) for the sample), never a code path for one building or animal.
+
+| Tool | What it does |
+|---|---|
+| `devices` | Every device and sensor by place: on or off, a run in progress and when it ends, readings (air, humidity, soil per bed, water temperature, tank levels), limits, what it does if it can't be reached, and anything needing attention |
+| `set_device` | Switch a device on or off, or run it for some seconds or minutes. It enforces each device's own limits: a device with a cap always runs for a set time and a longer run is refused with the limit. It shows the Ranch screen, so a run started by voice counts down there. The skill confirms first. |
+| `weather` | A real forecast from [Open-Meteo](https://open-meteo.com/) (free, no key) for the household's own location and elevation: now, today, tonight's low with a plain freeze flag, wind, precipitation and snow, the next four days. Cached ten minutes; an older forecast (and how old) when it can't refresh. |
+| `trackers` | Where each animal in a GPS collar is on the household's property map: inside the fence or not, which zone, how far out and which way, collar battery, signal and last fix |
+| `show_ranch` | **The Ranch screen**: the property drawn as an SVG map (fence, zones, a pin per collar, anyone outside the fence pulsing) beside a tile per device that switches it, with a countdown on any run. It refreshes itself through a screen-only tool and tells the assistant what was tapped. |
+| `show_briefing` | **The briefing**: a carousel of cards (swipe on touch, buttons otherwise) that tells the assistant which card is showing |
+
+**Connector-shaped.** Devices come from sources, collars from a feed, and the tools only see the generic shapes:
+
+- **The greenhouse** comes through a connector for Nick's ESP32 greenhouse controller's firmware API (`GET /status`, `POST /on?sec=N`, `POST /off`, `X-Api-Key`; one normally closed valve that the firmware closes when a run ends, on any fault and when Wi-Fi drops, an air sensor, and five soil probes reported as raw millivolts). The sample household runs the very same connector against a simulated controller speaking those routes, so its misters, air and beds behave like the real ones. Locally, it can be the real controller ([below](#the-local-greenhouse-connector)).
+- **Animal collars**: Nick's animals wear Halo GPS collars, and Halo has no public API we could find, so the sample simulates six collars behind a generic feed (`TrackerFeed`: animal, battery, signal, last fix, position) that a real feed can fill later. At night two of them are outside the fence for the demo.
+- **The sample's other devices** (stock tank heaters, an automatic waterer, a coop heat lamp, a barn heater, a propane tank, a garden drip line) are simulated: they switch, run on timers and read what the time of day and their state would make them read.
+
+**Fails safe.** A valve's safe failure is off, so its runs always have an end; a heater's is on, so switching one off says it comes back on if it loses its connection, and the screen asks for a second tap. The sample caps the misters at 10 minutes, under the firmware's own 30, so a misheard "thirty minutes" stays a small mistake.
+
+### The local greenhouse connector
+
+The headline demo runs Nick's **real** greenhouse misters from the simulated Echo Show. The controller lives on his home network, so this part is **local only**: it never runs in a deployed Worker, and its address and key never go in `wrangler.jsonc` or any deploy.
+
+1. Put the controller's address and API key in `.dev.vars` (git-ignored), next to the model key:
+
+   ```
+   GREENHOUSE_URL=http://192.0.2.72
+   GREENHOUSE_KEY=the controller's X-Api-Key
+   ```
+
+   `GREENHOUSE_URL` takes an IP, `greenhouse.local` or a full URL. Optionally `GREENHOUSE_MAX_RUN_S` sets the longest run the bridge allows (default 600; never past the firmware's 1800).
+2. Run `pnpm dev:lan` and open `http://127.0.0.1:8795/echo`. Say or type "Run the greenhouse misters for 30 seconds", then "yes". The greenhouse tiles on the Ranch screen say **Live**.
+
+Why a separate script: `wrangler.jsonc` sets `global_fetch_strictly_public`, which keeps every fetch off private addresses (in local dev a call to a LAN address just hangs). `pnpm dev:lan` runs the same Worker without that flag and sets `GREENHOUSE_LAN`; the connector also only switches on while the Worker is served from this machine or the LAN, so plain `pnpm dev`, the demo and production always use the simulated greenhouse. No hardware? `pnpm greenhouse:fake` stands in for the controller at `http://127.0.0.1:8899` (key `fake-key`) with the firmware's routes and JSON, and prints each valve change.
 
 ## The simulated Echo Show
 
@@ -94,7 +143,7 @@ The simulator's brain is **Claude Opus 5.5**, called from the Worker at `POST /e
 
 ## The Agent Skill
 
-[`skills/corral-household`](skills/corral-household/SKILL.md) is an [Agent Skill](https://agentskills.io/) that teaches any agent to run a family's day through Corral's tools by voice: look before changing, confirm in one sentence, respect approvals, keep "Busy" private, credit the right person, speak briefly, and use the screens. It includes everyday requests, a running-low recipe and a tool reference. The server also offers it as the MCP prompt `household-assistant`, and the simulator gives it to Claude.
+[`skills/corral-household`](skills/corral-household/SKILL.md) is an [Agent Skill](https://agentskills.io/) that teaches any agent to run a family's day through Corral's tools by voice: look before changing, confirm in one sentence, respect approvals, keep "Busy" private, credit the right person, speak briefly, and use the screens. On the ranch it confirms before switching anything, keeps to each device's limits and says how a device fails. It includes everyday requests, recipes for running low, getting ready for a freeze (an agentic routine across the forecast, devices, collars, whereabouts, tasks and lists) and good morning, and a tool reference. The server also offers it as the MCP prompt `household-assistant`, and the simulator gives it to Claude.
 
 ## Account linking
 
@@ -130,6 +179,7 @@ pnpm dev
 That builds the screens and starts the Worker at `http://127.0.0.1:8795` with the sample household:
 
 - `/echo` is the simulated Echo Show. With no model key, run `pnpm dev --var MODEL_MOCK:true` to answer with a small practice model, or put `ANTHROPIC_API_KEY` or `BEDROCK_API_KEY` in `.dev.vars`.
+- `pnpm dev:lan` is the same with the real greenhouse controller on the LAN ([the local greenhouse connector](#the-local-greenhouse-connector)).
 - `/mcp` is the MCP server; point any MCP client at it (for example `npx @modelcontextprotocol/inspector`).
 - `/preview` shows any screen in Echo Show 5, 8 and 15 and phone frames, light or dark.
 - `pnpm smoke [url]` talks to a running server the way Alexa+ does and prints timings.
@@ -158,7 +208,8 @@ Builds every page, typechecks (Worker and screens), and runs the tests:
 - every screen's resource;
 - the current protocol for up-to-date clients;
 - account linking end to end against a stand-in Corral (discovery, the hand-off to Corral's sign-in, code and token exchange, calls with the person's token, refresh, revoked access, a declined sign-in, a callback in another browser, an unknown redirect address, the admin route);
-- the simulator's model route (what it sends to Bedrock and to the Claude API, which one it picks, the rate limit, the passcode, size caps).
+- the simulator's model route (what it sends to Bedrock and to the Claude API, which one it picks, the rate limit, the passcode, size caps);
+- the ranch: every tool and both screens over MCP, each device's limits, the greenhouse connector against a fake controller (switching, the run timer, a refused key, a controller that stops answering, what answers at the wrong address) and the rule that keeps it local, the forecast from a stubbed Open-Meteo (tonight's low, freeze flags, caching, an outage), the collars, and the fence geometry (with randomized property checks).
 
 ## Layout
 
@@ -168,12 +219,16 @@ Builds every page, typechecks (Worker and screens), and runs the tests:
 | `src/server.ts` | The MCP server: Corral's tools, the screen tools and their MCP Apps resources, the skill as a prompt |
 | `src/household.ts`, `src/corral.ts`, `src/sample/` | The contract both households answer; a real Corral through its MCP server; the sample household |
 | `src/today.ts`, `src/screens.ts` | What each screen shows |
+| `src/ranch/` | The ranch: devices and their limits, the greenhouse controller connector, the forecast, collars, fence geometry, and the Ranch and briefing views |
+| `src/sample/ranch.ts` | The sample ranch as data: the property map, the greenhouse's names and limits, simulated devices, a simulated controller, simulated collars |
+| `scripts/fake-greenhouse.mjs` | A stand-in greenhouse controller for trying `pnpm dev:lan` without the hardware |
 | `src/link/` | Account linking: the OAuth provider, Corral as the sign-in, `/admin/clients` |
 | `src/echo/` | The simulator's model route (Claude on Bedrock or the Claude API) and the practice model |
 | `widgets/` | The screens (MCP Apps), each built into one HTML file, on `widgets/shared` |
 | `echo/`, `preview/` | The simulated Echo Show and the screen preview |
 | `skills/corral-household/` | The Agent Skill |
 | `docs/feedback.md` | Product feedback and the friction log |
+| `docs/devlog/` | Build notes and friction, by feature |
 
 ## License
 
