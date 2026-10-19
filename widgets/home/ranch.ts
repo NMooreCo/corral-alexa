@@ -72,14 +72,67 @@ function pin(p: MapPin): string {
   </g>`;
 }
 
+/** Collars closer than this, in map units, share one marker, so their names never pile up on each other. */
+const NEAR = 44;
+
+interface Cluster {
+  x: number;
+  y: number;
+  pins: MapPin[];
+}
+
+/** Groups pins that sit nearly on top of each other; one outside the fence never hides among those inside. */
+function clusters(pins: MapPin[]): Cluster[] {
+  const out: Cluster[] = [];
+  for (const p of pins) {
+    const c = out.find((c) => c.pins[0]!.outside === p.outside && Math.hypot(c.x - p.x, c.y - p.y) < NEAR);
+    if (!c) {
+      out.push({ x: p.x, y: p.y, pins: [p] });
+      continue;
+    }
+    c.pins.push(p);
+    c.x = c.pins.reduce((s, q) => s + q.x, 0) / c.pins.length;
+    c.y = c.pins.reduce((s, q) => s + q.y, 0) / c.pins.length;
+  }
+  return out;
+}
+
+/** Several collars in one place: a marker with how many, and their names stacked above it. */
+function group(c: Cluster): string {
+  const pins = [...c.pins].sort((a, b) => a.animal.localeCompare(b.animal));
+  const cls = ["pin", "group", pins[0]!.outside ? "outside" : ""].filter(Boolean).join(" ");
+  const names = pins
+    .map((p, i) => `<tspan x="0" y="${-28 - 26 * (pins.length - 1 - i)}"${p.batteryLow ? ` class="low"` : ""}>${escape(`${p.animal}${p.batteryLow ? ` ${p.battery}%` : ""}`)}</tspan>`)
+    .join("");
+  return `<g class="${cls}" transform="translate(${c.x} ${c.y})">
+    <title>${escape(pins.map((p) => `${p.animal} (${p.species}): ${p.where}. Collar ${p.battery}%, seen ${p.lastSeen}.`).join(" "))}</title>
+    ${pins[0]!.outside ? `<circle class="ring" r="34"/>` : ""}
+    <circle class="dot" r="19"/>
+    <text class="initial" y="7">${pins.length}</text>
+    <text class="name">${names}</text>
+  </g>`;
+}
+
 export function map(view: RanchView): string {
   const m = view.map;
+  const groups = clusters(m.pins);
+  // A place's name moves below a marker sitting on it, rather than hiding under the marker and its name.
+  const nameAt = (z: { x: number; y: number }) => {
+    const on = groups.find((c) => Math.abs(c.x - z.x) < 60 && Math.abs(c.y - z.y) < 26);
+    return on ? { x: z.x, y: on.y + 46 } : z;
+  };
   return `<svg class="map" viewBox="0 0 ${m.width} ${m.height}" role="img" aria-label="${escape(`Map of the property. ${view.animals.outside.length ? `Outside the fence: ${view.animals.outside.join(", ")}.` : "Every animal is inside the fence."}`)}">
     <rect class="ground" x="0" y="0" width="${m.width}" height="${m.height}" rx="18"/>
     ${m.zones.map((z) => `<path class="zone ${escape(z.style)}" d="${z.d}"/>`).join("")}
     <path class="fence" d="${m.fence}"/>
-    ${m.zones.filter((z) => z.name).map((z) => `<text class="zone-name" x="${z.x}" y="${z.y}">${escape(z.name)}</text>`).join("")}
-    ${m.pins.map(pin).join("")}
+    ${m.zones
+      .filter((z) => z.name)
+      .map((z) => {
+        const at = nameAt(z);
+        return `<text class="zone-name" x="${at.x}" y="${at.y}">${escape(z.name)}</text>`;
+      })
+      .join("")}
+    ${groups.map((c) => (c.pins.length === 1 ? pin(c.pins[0]!) : group(c))).join("")}
     <g class="north" transform="translate(${m.width - 40} ${m.height - 60})"><path d="M0 -26 L12 10 L0 3 L-12 10 Z"/><text y="34">N</text></g>
     <g class="scale" transform="translate(24 ${m.height - 20})"><path d="M0 0 H${m.scale.length}"/><path d="M0 -8 V8 M${m.scale.length} -8 V8"/><text x="${m.scale.length / 2}" y="-14">${escape(m.scale.label)}</text></g>
   </svg>`;

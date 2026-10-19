@@ -132,7 +132,8 @@
   stroke-width: 6px;
 }
 
-.map .pin.low .name {
+.map .pin.low .name,
+.map .pin .name .low {
   fill: var(--late);
 }
 
