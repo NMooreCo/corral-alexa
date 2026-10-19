@@ -5,7 +5,11 @@ import { escape, sizeButton, startScreen, type Screen } from "../shared/screen.t
 import "../shared/base.css";
 import "./style.css";
 
-/** What's left of each tracked supply and how long it lasts; a low one goes on a list in one tap. */
+/**
+ * What's left of each tracked supply and how long it lasts; a low one goes on
+ * a list in one tap. One that's on order says the day it arrives, and stops
+ * looking like it needs anything.
+ */
 
 // A month of supply fills the bar; anything past that is plenty.
 const FULL_DAYS = 30;
@@ -30,13 +34,34 @@ function lasts(s: CorralSupply): string {
   return s.daysLeft === 1 ? "About a day left" : `About ${s.daysLeft} days left`;
 }
 
+/** A delivery day as people say it, from today where the screen is: "today", "tomorrow", "Tuesday", or "Oct 27" past this week. */
+function dayWords(date: string): string {
+  const timeZone = screen.context()?.timeZone;
+  const today = new Date().toLocaleDateString("en-CA", { timeZone });
+  const days = Math.round((Date.parse(date) - Date.parse(today)) / 86_400_000);
+  if (days <= 0) return "today";
+  if (days === 1) return "tomorrow";
+  return new Date(`${date}T12:00:00Z`).toLocaleDateString("en-US", days < 7 ? { weekday: "long", timeZone: "UTC" } : { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+/** What's coming for a supply: on order with its day, or ordered and waiting for someone's yes. */
+function orderLine(s: CorralSupply): string {
+  const o = s.onOrder;
+  if (!o) return "";
+  if (o.arrivesOn) return `<div class="order">On order, arrives ${escape(dayWords(o.arrivesOn))} · ${escape(o.amount)}</div>`;
+  return `<div class="order waiting">Ordered ${escape(o.amount)}, waiting for ${escape(o.waitingFor ?? "a yes")}</div>`;
+}
+
 function render(view: SuppliesView) {
-  const low = view.supplies.filter((s) => s.low).length;
+  // A low supply that's on its way is taken care of, so it doesn't count as needing anything.
+  const coming = (s: CorralSupply) => Boolean(s.onOrder?.arrivesOn);
+  const low = view.supplies.filter((s) => s.low && !coming(s)).length;
+  const onOrder = view.supplies.filter(coming).length;
   root.innerHTML = `
     <header>
       <div>
         <h1>Supplies</h1>
-        <p class="household">${escape([low ? `${low} running low` : "Nothing running low", view.household].filter(Boolean).join(" · "))}</p>
+        <p class="household">${escape([low ? `${low} running low` : "Nothing running low", onOrder ? `${onOrder} on order` : "", view.household].filter(Boolean).join(" · "))}</p>
       </div>
       <div class="header-end">${sizeButton(screen)}</div>
     </header>
@@ -45,16 +70,20 @@ function render(view: SuppliesView) {
         ? `<ul class="supplies">${view.supplies
             .map((s) => {
               const fill = s.daysLeft === undefined || s.needsFreshCount ? 0 : Math.max(0.03, Math.min(1, s.daysLeft / FULL_DAYS));
-              const offer = s.low && !s.onList && view.lists.length;
-              return `<li class="supply${s.low ? " low" : ""}">
+              const needs = s.low && !coming(s);
+              // Once it's ordered (or asked for), there's nothing to put on a list.
+              const offer = needs && !s.onList && !s.onOrder && view.lists.length;
+              return `<li class="supply${needs ? " low" : ""}">
                 <div class="top">
                   <span class="title">${escape(s.name)}</span>
-                  ${s.low ? `<span class="badge warn">Low</span>` : ""}
+                  ${needs ? `<span class="badge warn">Low</span>` : ""}
+                  ${coming(s) ? `<span class="badge">On order</span>` : s.onOrder ? `<span class="badge warn">Order waiting</span>` : ""}
                   ${s.onList ? `<span class="badge">On ${escape(s.onList)}</span>` : ""}
                 </div>
                 <div class="amount">${escape(s.onHand)}</div>
                 <div class="bar" role="img" aria-label="${escape(lasts(s))}"><span style="width:${(fill * 100).toFixed(0)}%"></span></div>
                 <div class="meta">${escape(lasts(s))}</div>
+                ${orderLine(s)}
                 ${
                   offer
                     ? `<div class="add">${view.lists
