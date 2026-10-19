@@ -159,29 +159,29 @@ export function seed(now: Temporal.Instant, timeZone = "America/Denver"): Sample
   const holly = { id: id(), name: "Holly Rivera", shortName: "Holly", roles: ["Parent"] };
   const eli = { id: id(), name: "Eli Rivera", shortName: "Eli", roles: ["Kid"] };
   const jak = { id: id(), name: "Jak Rivera", shortName: "Jak", roles: ["Kid"] };
-  const jordan = { id: id(), name: "Jordan Blake", shortName: "Jordan", roles: ["Farm hand"] };
+  const jon = { id: id(), name: "Jon Blake", shortName: "Jon", roles: ["Farm hand"] };
 
   const events: SampleEvent[] = [
     ...(weekday ? [{ id: id(), title: "School drop-off", start: at(0, "07:40"), end: at(0, "08:00"), people: [eli.id, jak.id], drivers: [holly.id], location: "Juniper Elementary", calendar: "School" }] : []),
-    { id: id(), title: "Farrier visit", start: at(0, "10:00"), end: at(0, "11:00"), people: [jordan.id], drivers: [], location: "Barn", calendar: "Ranch" },
+    { id: id(), title: "Farrier visit", start: at(0, "10:00"), end: at(0, "11:00"), people: [jon.id], drivers: [], location: "Barn", calendar: "Ranch" },
     { id: id(), title: "Birthday gift shopping", start: at(0, "12:00"), end: at(0, "13:00"), people: [nick.id], drivers: [], location: "Downtown", calendar: "Family", private: true, owner: nick.id },
     { id: id(), title: "Soccer practice", start: at(0, "15:30"), end: at(0, "16:45"), people: [eli.id], drivers: [nick.id], location: "Riverside Fields", calendar: "Family" },
     { id: id(), title: "Family movie night", start: at(0, "18:30"), end: at(0, "20:30"), people: [], drivers: [], location: "Home", calendar: "Family" },
     { id: id(), title: "Leia's vet checkup", start: at(1, "09:00"), end: at(1, "09:30"), people: [holly.id], drivers: [holly.id], location: "Valley Vet", calendar: "Family" },
     { id: id(), title: "Piano lesson", start: at(1, "16:00"), end: at(1, "16:45"), people: [jak.id], drivers: [nick.id], location: "Ms. Okafor's", calendar: "Family" },
-    { id: id(), title: "Hay delivery", start: date(2), end: date(2), people: [jordan.id], drivers: [], location: "Barn", calendar: "Ranch" },
+    { id: id(), title: "Hay delivery", start: date(2), end: date(2), people: [jon.id], drivers: [], location: "Barn", calendar: "Ranch" },
     { id: id(), title: "Science fair", start: at(3, "18:00"), end: at(3, "19:30"), people: [eli.id, nick.id, holly.id], drivers: [holly.id], location: "Juniper Elementary", calendar: "School" },
   ];
 
   const tasks: SampleTask[] = [
-    { id: id(), title: "Feed the horses (morning)", due: at(0, "07:00"), assignees: [jordan.id], status: "done", doneBy: jordan.id, asks: [{ key: "fed", label: "Amount fed", type: "quantity", unit: "lb" }] },
+    { id: id(), title: "Feed the horses (morning)", due: at(0, "07:00"), assignees: [jon.id], status: "done", doneBy: jon.id, asks: [{ key: "fed", label: "Amount fed", type: "quantity", unit: "lb" }] },
     { id: id(), title: "Give Leia the allergy pill", due: at(0, "08:00"), assignees: [eli.id], status: "open", doneBy: null },
     { id: id(), title: "Collect eggs", due: at(0, "09:00"), assignees: "anyone", status: "open", doneBy: null, asks: [{ key: "eggs", label: "Eggs", type: "number" }] },
     { id: id(), title: "Water the garden", due: date(0), assignees: "anyone", status: "open", doneBy: null },
     { id: id(), title: "Empty the dishwasher", due: at(0, "17:00"), assignees: [jak.id], status: "open", doneBy: null },
-    { id: id(), title: "Feed the horses (evening)", due: at(0, "17:30"), assignees: [jordan.id], status: "open", doneBy: null, asks: [{ key: "fed", label: "Amount fed", type: "quantity", unit: "lb" }] },
+    { id: id(), title: "Feed the horses (evening)", due: at(0, "17:30"), assignees: [jon.id], status: "open", doneBy: null, asks: [{ key: "fed", label: "Amount fed", type: "quantity", unit: "lb" }] },
     { id: id(), title: "Take out the trash", due: at(0, "19:00"), assignees: [jak.id, eli.id], status: "open", doneBy: null },
-    { id: id(), title: "Clean the chicken coop", due: at(1, "10:00"), assignees: [jordan.id], status: "open", doneBy: null },
+    { id: id(), title: "Clean the chicken coop", due: at(1, "10:00"), assignees: [jon.id], status: "open", doneBy: null },
   ];
 
   const lists: SampleList[] = [
@@ -234,7 +234,7 @@ export function seed(now: Temporal.Instant, timeZone = "America/Denver"): Sample
     day(holly.id, d, school ? [["Home", "00:00"], ["Work", "08:00"], ["Home", "17:30"]] : [["Home", "00:00"]]);
     day(eli.id, d, school ? [["Home", "00:00"], ["School", "07:45"], ["Riverside Fields", "15:20"], ["Home", "16:50"]] : [["Home", "00:00"]]);
     day(jak.id, d, school ? [["Home", "00:00"], ["School", "07:45"], ["Home", "15:15"]] : [["Home", "00:00"]]);
-    day(jordan.id, d, school ? [["Off the ranch", "00:00"], ["Barn", "07:00"], ["Off the ranch", "16:00"]] : [["Off the ranch", "00:00"]]);
+    day(jon.id, d, school ? [["Off the ranch", "00:00"], ["Barn", "07:00"], ["Off the ranch", "16:00"]] : [["Off the ranch", "00:00"]]);
   }
 
   return {
@@ -243,7 +243,7 @@ export function seed(now: Temporal.Instant, timeZone = "America/Denver"): Sample
     actingAs: "the kitchen screen",
     roles: sampleRoles(),
     calendars: ["Family", "School", "Ranch"],
-    people: [nick, holly, eli, jak, jordan],
+    people: [nick, holly, eli, jak, jon],
     events,
     tasks,
     lists,

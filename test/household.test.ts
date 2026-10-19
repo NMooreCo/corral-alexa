@@ -334,7 +334,7 @@ describe("the two-device view", () => {
       const turn = (context: Record<string, string>) => ({
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ messages: [{ role: "user", content: "Jordan fed the horses." }], tools: [], context: { timeZone: "America/Denver", ...context } }),
+        body: JSON.stringify({ messages: [{ role: "user", content: "Jon fed the horses." }], tools: [], context: { timeZone: "America/Denver", ...context } }),
       });
       const env: Env = { BACKEND: "sample", ANTHROPIC_API_KEY: "key" };
       expect((await call(env, "/echo/model", turn({ place: "Barn" }))).status).toBe(200);

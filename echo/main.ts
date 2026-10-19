@@ -55,7 +55,7 @@ const SUGGESTIONS: (string | { text: string; as: string })[] = [
 ];
 // What to try on a display somewhere else on the place.
 const PLACE_SUGGESTIONS: Record<string, string[]> = {
-  barn: ["Jordan fed the horses.", "We used two bales of hay.", "What chores are left today?"],
+  barn: ["Jon fed the horses.", "We used two bales of hay.", "What chores are left today?"],
 };
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;

@@ -26,7 +26,7 @@ describe("who's speaking", () => {
     const h = household();
     expect(actorFor(h.state, "eli")).toMatchObject({ person: { shortName: "Eli" }, role: { name: "Kid" } });
     expect(actorFor(h.state, " Nick Rivera ")).toMatchObject({ person: { shortName: "Nick" }, role: { name: "Parent" } });
-    expect(actorFor(h.state, "Jordan")).toMatchObject({ role: { name: "Farm hand" } });
+    expect(actorFor(h.state, "Jon")).toMatchObject({ role: { name: "Farm hand" } });
   });
 
   it("makes anyone it doesn't know a guest, so a mistake never gets more than a guest may", () => {
@@ -76,29 +76,29 @@ describe("private events", () => {
 describe("the farm hand", () => {
   it("sees only the ranch calendar", async () => {
     const h = household();
-    expect(titles(await h.as("Jordan").call("calendar", { from: "2026-10-16", to: "2026-10-22" }))).toEqual(["Farrier visit", "Hay delivery"]);
+    expect(titles(await h.as("Jon").call("calendar", { from: "2026-10-16", to: "2026-10-22" }))).toEqual(["Farrier visit", "Hay delivery"]);
     expect(titles(await h.as("Nick").call("calendar", {}))).toContain("Soccer practice");
   });
 
   it("hears their own chores and ones up for grabs, and only where they are", async () => {
     const h = household();
-    const tasks = (await h.as("Jordan").call("tasks", { include_done: true })) as CorralTask[];
+    const tasks = (await h.as("Jon").call("tasks", { include_done: true })) as CorralTask[];
     expect(tasks.map((t) => t.title)).toEqual(["Feed the horses (morning)", "Collect eggs", "Feed the horses (evening)", "Water the garden"]);
-    expect(((await h.as("Jordan").call("whereabouts", {})) as CorralWhere[]).map((w) => w.name)).toEqual(["Jordan Blake"]);
-    await expect(h.as("Jordan").call("whereabouts", { person: "Eli" })).rejects.toThrow("Where others are isn't shared with Jordan.");
+    expect(((await h.as("Jon").call("whereabouts", {})) as CorralWhere[]).map((w) => w.name)).toEqual(["Jon Blake"]);
+    await expect(h.as("Jon").call("whereabouts", { person: "Eli" })).rejects.toThrow("Where others are isn't shared with Jon.");
   });
 
   it("adds to the ranch calendar right away, and only there", async () => {
     const h = household();
-    expect(await h.as("Jordan").call("add_event", { title: "Vet for the mare", start: "2026-10-19T09:00" })).toMatchObject({ status: "done", summary: "Vet for the mare, Mon, Oct 19, 9:00 AM" });
-    expect(titles(await h.as("Jordan").call("calendar", { from: "2026-10-19", to: "2026-10-19" }))).toEqual(["Vet for the mare"]);
-    await expect(h.as("Jordan").call("add_event", { title: "Pizza", start: "2026-10-19T18:00", calendar: "Family" })).rejects.toThrow("Events go on the Ranch calendar.");
+    expect(await h.as("Jon").call("add_event", { title: "Vet for the mare", start: "2026-10-19T09:00" })).toMatchObject({ status: "done", summary: "Vet for the mare, Mon, Oct 19, 9:00 AM" });
+    expect(titles(await h.as("Jon").call("calendar", { from: "2026-10-19", to: "2026-10-19" }))).toEqual(["Vet for the mare"]);
+    await expect(h.as("Jon").call("add_event", { title: "Pizza", start: "2026-10-19T18:00", calendar: "Family" })).rejects.toThrow("Events go on the Ranch calendar.");
   });
 
   it("can't check off a chore they can't see", async () => {
     const h = household();
     const dishes = await taskId(h, "Empty the dishwasher");
-    await expect(h.as("Jordan").call("complete_task", { task: dishes })).rejects.toThrow("Use the task's id from the tasks tool.");
+    await expect(h.as("Jon").call("complete_task", { task: dishes })).rejects.toThrow("Use the task's id from the tasks tool.");
   });
 });
 
@@ -244,7 +244,7 @@ describe("approvals", () => {
     const h = household();
     const { requestId } = (await h.as("Eli").call("add_event", SLEEPOVER)) as { requestId: string };
     await expect(h.as("Eli").call("decide_approval", { request: requestId, decision: "approve" })).rejects.toThrow("They can't approve or decline their own request, which waits for Nick or Holly.");
-    for (const who of ["Jak", "Jordan"]) {
+    for (const who of ["Jak", "Jon"]) {
       await expect(h.as(who).call("decide_approval", { request: requestId, decision: "approve" })).rejects.toThrow("Only Nick or Holly can approve or decline requests.");
     }
     await expect(h.call("decide_approval", { request: requestId, decision: "approve" })).rejects.toThrow("Requests aren't decided on a shared screen: Nick or Holly decide them as themselves.");

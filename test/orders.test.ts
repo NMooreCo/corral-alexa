@@ -187,9 +187,9 @@ describe("a kid's order", () => {
 
   it("waits for a parent from the farm hand and the kitchen screen too, and the household's data can let a kid order", async () => {
     const h = household();
-    expect(await h.as("Jordan").call("place_order", { items: [{ supply: "hay" }] })).toMatchObject({ status: "waiting_for_approval", approvers: ["Nick", "Holly"] });
+    expect(await h.as("Jon").call("place_order", { items: [{ supply: "hay" }] })).toMatchObject({ status: "waiting_for_approval", approvers: ["Nick", "Holly"] });
     expect(await h.call("place_order", { items: [{ supply: "hay" }] })).toMatchObject({ status: "waiting_for_approval", approvers: ["Nick", "Holly"] });
-    expect((await orders(h)).map((o) => o.by)).toEqual(["Jordan", "The kitchen screen"]);
+    expect((await orders(h)).map((o) => o.by)).toEqual(["Jon", "The kitchen screen"]);
     // Changing the data changes the rule, with no code naming anyone.
     h.state.roles.find((r) => r.name === "Kid")!.orders = true;
     expect(await h.as("Eli").call("place_order", { items: [{ supply: "dog food" }] })).toMatchObject({ status: "done" });

@@ -58,7 +58,7 @@ Often a shared device in the kitchen or the barn, sometimes one person's phone. 
 | "Add milk." / "We got the milk." | `add_list_item` (Groceries unless they name a list) / `check_list_item`. |
 | "How many points does Jak have?" | `points`; say the points and what they're worth. |
 | "Put the dentist on Thursday at 3:30 for Jak." | Confirm, then `add_event` with `people: ["Jak"]`. Report an approval if it waits for one. |
-| "Remind Jordan to clean the coop tomorrow." | Confirm, then `add_task` with `assignees` and `due`. |
+| "Remind Jon to clean the coop tomorrow." | Confirm, then `add_task` with `assignees` and `due`. |
 | "Can I have a sleepover at Ava's on Friday?" (a kid) | Offer to ask the parents, then `add_event`; it comes back waiting, so say who it went to. |
 | "Anything waiting for me?" | `show_approvals` on a screen, otherwise `approvals`; say how many and the first one or two. |
 | "Approve Eli's sleepover." | `approvals` for its id, then `decide_approval` with `decision: "approve"`. |

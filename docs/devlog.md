@@ -54,7 +54,7 @@ What we did, in order, with what went wrong and what we decided. Product frictio
   - The simulated Echo Show also built its speaker list before a demo started the household over. It now reloads it after the reset, so a renamed family can't leave it sending a name the household no longer has.
 - **Better answers, checked with the real model.** We ran the full demo three times and fixed what we heard:
   - Alexa added asides after her question ("Want me to ask them? And Eli, Leia's pill is still waiting."), which buried the question. Now she sticks to what was asked unless it's urgent, and a question is always the last thing she says.
-  - A kid asking for the coop lamp was offered it and then refused. `devices` now tells someone who can't switch devices who can, so Alexa says so straight away: "I can't switch the ranch devices for you, Jak, but Nick, Holly or Jordan can."
+  - A kid asking for the coop lamp was offered it and then refused. `devices` now tells someone who can't switch devices who can, so Alexa says so straight away: "I can't switch the ranch devices for you, Jak, but Nick, Holly or Jon can."
   - Most answers are now 10 to 30 words. The freeze answers run longer in the daytime, because a heat lamp's 12-hour limit can't cover tonight yet, and Alexa says so.
 - **Re-recorded the promo with our family, in the evening, without waiting for it.** The freeze beat needs the dogs outside the fence, which happens only at night. So local development can now shift the household's clock (`CLOCK_SHIFT_MINUTES`), and the recorder shifts the browser's clock to match with Playwright's clock. The video says so in its opening line.
   - Long answers now page their captions sentence by sentence, in time with the voice, instead of filling the screen.

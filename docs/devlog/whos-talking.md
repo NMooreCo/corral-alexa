@@ -37,7 +37,7 @@ Branch `whos-talking`. Alexa+ recognizes voices, so the simulated Echo Show now 
   2. As Sam: "Anything waiting for me?" Claude called `show_approvals` and said "Sam, two requests are waiting for you: Leo wants ice cream on the grocery list, and Maya wants a sleepover at Ava's Friday night at 6."
   3. A real click on Approve inside the screen: the screen called `decide_approval` (logged "as Sam"), showed the card as Approved, and told the assistant "On the screen: Approved Maya's request: Sleepover at Ava's, Fri, Oct 23, 6:00 PM."
   4. (First run.) "Is it on the calendar? Show me the week." Claude called `show_week` from Friday and the Week screen showed the sleepover on Fri 23.
-- Switching to Maya turned Sam's gift shopping into Busy on the Today screen; Jordan's Today screen showed only the farrier, his chores and his own whereabouts; as a guest, "Leo emptied the dishwasher" was refused and the Today screen showed no whereabouts.
+- Switching to Maya turned Sam's gift shopping into Busy on the Today screen; Jon's Today screen showed only the farrier, his chores and his own whereabouts; as a guest, "Leo emptied the dishwasher" was refused and the Today screen showed no whereabouts.
 - The picker at phone width (375 px) fits with no sideways scroll.
 
 ### Not verified

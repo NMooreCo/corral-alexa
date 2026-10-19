@@ -65,7 +65,7 @@ describe("the sample household's chores", () => {
     expect(open.find((t) => t.title === "Empty the dishwasher")?.status).toBe("open");
     expect(open.some((t) => t.status === "done")).toBe(false);
     const all = (await household().call("tasks", { include_done: true })) as CorralTask[];
-    expect(all.find((t) => t.title === "Feed the horses (morning)")).toMatchObject({ status: "done", doneBy: "Jordan Blake" });
+    expect(all.find((t) => t.title === "Feed the horses (morning)")).toMatchObject({ status: "done", doneBy: "Jon Blake" });
   });
 
   it("checks a chore off with credit to whoever did it, and undoes it", async () => {
@@ -168,7 +168,7 @@ describe("the sample household's whereabouts", () => {
   it("says where each person is, until when, and where they go next", async () => {
     const where = (await household().call("whereabouts", {})) as CorralWhere[];
     expect(where.find((w) => w.name === "Eli Rivera")).toEqual({ name: "Eli Rivera", location: "School", until: "Fri, Oct 16, 3:20 PM", then: "Riverside Fields" });
-    expect(where.find((w) => w.name === "Jordan Blake")).toMatchObject({ location: "Barn", until: "Fri, Oct 16, 4:00 PM", then: "Off the ranch" });
+    expect(where.find((w) => w.name === "Jon Blake")).toMatchObject({ location: "Barn", until: "Fri, Oct 16, 4:00 PM", then: "Off the ranch" });
   });
 
   it("treats staying put over midnight as one stay", async () => {
@@ -192,7 +192,7 @@ describe("the sample household's whereabouts", () => {
   });
 
   it("puts someone at an event's place on a day their usual schedule has them elsewhere", async () => {
-    const [jordan] = (await household(SATURDAY).call("whereabouts", { person: "Jordan" })) as CorralWhere[];
-    expect(jordan).toEqual({ name: "Jordan Blake", location: "Barn", until: "Sat, Oct 17, 11:00 AM", then: "Off the ranch" });
+    const [jon] = (await household(SATURDAY).call("whereabouts", { person: "Jon" })) as CorralWhere[];
+    expect(jon).toEqual({ name: "Jon Blake", location: "Barn", until: "Sat, Oct 17, 11:00 AM", then: "Off the ranch" });
   });
 });

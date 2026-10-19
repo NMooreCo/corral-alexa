@@ -161,17 +161,17 @@ describe("who may switch the ranch's devices", () => {
     const lamp = { device: "coop heat lamp", state: "on" };
     const kid = await as("Jak")("set_device", lamp);
     expect(kid.isError).toBe(true);
-    expect(kid.content[0].text).toBe("Jak can't switch the ranch's devices. Nick, Holly or Jordan can.");
+    expect(kid.content[0].text).toBe("Jak can't switch the ranch's devices. Nick, Holly or Jon can.");
     const guest = await as("guest")("set_device", lamp);
     expect(guest.isError).toBe(true);
-    expect(guest.content[0].text).toContain("Nick, Holly or Jordan can.");
+    expect(guest.content[0].text).toContain("Nick, Holly or Jon can.");
 
-    for (const grownUp of ["Nick", "Jordan"]) expect((await as(grownUp)("set_device", lamp)).isError).toBeFalsy();
+    for (const grownUp of ["Nick", "Jon"]) expect((await as(grownUp)("set_device", lamp)).isError).toBeFalsy();
   });
 
   it("tells a kid who can switch a device when they look at it, before anything is offered", async () => {
     const kid = JSON.parse((await as("Jak")("devices", { device: "coop heat lamp" })).content[0].text);
-    expect(kid.switching).toBe("Jak can't switch the ranch's devices. Nick, Holly or Jordan can.");
+    expect(kid.switching).toBe("Jak can't switch the ranch's devices. Nick, Holly or Jon can.");
     expect(kid.devices[0].name).toBe("Coop heat lamp");
     const parent = JSON.parse((await as("Nick")("devices", { device: "coop heat lamp" })).content[0].text);
     expect(Array.isArray(parent)).toBe(true);
@@ -180,8 +180,8 @@ describe("who may switch the ranch's devices", () => {
   it("lets the same people change the automations, and shows the change on the Automations tab", async () => {
     const kid = await as("Jak")("set_automation", { automation: "Freeze protection", enabled: true });
     expect(kid.isError).toBe(true);
-    expect(kid.content[0].text).toContain("Nick, Holly or Jordan can.");
-    expect(JSON.parse((await as("Jak")("automations")).content[0].text).changing).toContain("Nick, Holly or Jordan can.");
+    expect(kid.content[0].text).toContain("Nick, Holly or Jon can.");
+    expect(JSON.parse((await as("Jak")("automations")).content[0].text).changing).toContain("Nick, Holly or Jon can.");
 
     const parent = await as("Nick")("set_automation", { automation: "Freeze protection", enabled: true });
     expect(parent.isError).toBeFalsy();
