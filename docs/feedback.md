@@ -42,6 +42,7 @@ Written while building, so each entry is what actually happened. For the Devpost
 | A per-request "who's speaking" claim for multi-user devices (signed, in `_meta` or a header), or guidance that each recognized voice links separately | Alexa+ knows voices, but MCP identity is one bearer token per connection, so a family's rules can't follow the person speaking (F12) | Important |
 | A standard change signal for stateless MCP servers and MCP Apps (a change token in a tool result's `_meta` that hosts watch or poll) | Every app with shared state on two devices reinvents a poll (F11) | Nice to have |
 | A way to mark a tool as an action that updates a screen, as distinct from one that opens a screen | Hosts and previews that open screens by calling their tools with no arguments call actions like `set_device` too (F14) | Nice to have |
+| An app-to-host request to open another tool's screen (with arguments), without a model turn | A touch screen needs taps that move between screens instantly; today a screen can only reach another through the model, so ours had to merge into one bundle with tabs (F18) | Important |
 
 ## Friction log
 
@@ -68,6 +69,7 @@ Written while building, so each entry is what actually happened. For the Devpost
 ### F3. No `WWW-Authenticate` on a 401
 
 - **Task:** answer an unlinked call so Alexa+ starts account linking.
+- **Steps:** read the MCP authorization spec (a 401 with a `WWW-Authenticate` challenge naming the resource metadata), then the Alexa+ account-linking quickstart, then built the 401 on `/mcp`.
 - **Expected:** the MCP spec's 401 with a `WWW-Authenticate` challenge pointing at the metadata.
 - **Actual:** the quickstart says the server returns 401 "without a `WWW-Authenticate` header", and lists the header as not supported yet. It isn't clear whether its presence is ignored or breaks linking.
 - **Severity:** Medium.
@@ -77,6 +79,7 @@ Written while building, so each entry is what actually happened. For the Devpost
 ### F4. The fixed client's redirect URIs
 
 - **Task:** create Alexa's OAuth client on the bridge.
+- **Steps:** read the account-linking pages for Alexa's redirect URIs; found the CLI step that prints them; tried to create the client before running it.
 - **Expected:** Alexa's redirect URIs in the docs, so the client can be made complete in one step.
 - **Actual:** they're shown only after `alexa-ai configure-account-linking`, which needs the client id first.
 - **Severity:** Low.
@@ -86,21 +89,28 @@ Written while building, so each entry is what actually happened. For the Devpost
 ### F5. Local Inspector described but not available
 
 - **Task:** check the Today screen in Alexa's device frames.
+- **Steps:** followed the Local Inspector page; ran `npm install @alexa-ai/addon-local-inspector` against the public registry.
 - **Expected:** `@alexa-ai/addon-local-inspector`, a local proxy, installable from the docs.
 - **Actual:** not on the public registry; it comes with the gated tooling.
 - **Severity:** Medium.
-- **Workaround:** built a stand-in MCP Apps host with Echo Show 5, 8 and 15 frames (`/preview`).
+- **Workaround:** built a stand-in MCP Apps host with Echo Show 5, 8 and 15 frames (`/preview`), then the full simulated Echo Show (`/echo`).
 - **Suggestion:** publish the inspector on its own; it runs locally and needs no partner access.
 
 ### F6. Small inconsistencies in the account-linking pages
 
+- **Task:** build account linking from the published pages alone.
+- **Steps:** read the account-linking guide, its checklist and the Local Inspector page side by side while writing the OAuth client and the `initialize` handler.
+- **Expected:** the pages agree on what's required.
 - **Actual:** the client secret is "optional" in one place and required in the checklist; the Local Inspector page's example `initialize` uses protocol `2025-06-18` while the toolkit requires `2025-11-25`.
 - **Severity:** Low.
+- **Workaround:** followed the stricter of each pair (a client secret; protocol `2025-11-25`).
 - **Suggestion:** align them.
 
 ### F7. MCP Apps 2.x needs the v2 MCP SDK
 
 - **Task:** add an MCP App to a server built on `@modelcontextprotocol/sdk` 1.x.
+- **Steps:** installed `@modelcontextprotocol/ext-apps` 2.0.3 beside the v1 SDK and registered a screen tool with its helpers.
+- **Expected:** the helpers' types to fit the server already in use, or a clear version error.
 - **Actual:** `@modelcontextprotocol/ext-apps` 2.x imports its types from `@modelcontextprotocol/server` (v2), so with the v1 SDK installed the helpers' types don't line up, without a clear error.
 - **Severity:** Low.
 - **Workaround:** moved to the v2 SDK (`@modelcontextprotocol/server` 2.3.1).
@@ -119,6 +129,8 @@ Written while building, so each entry is what actually happened. For the Devpost
 ### F9. The quota form and what it covers
 
 - **Task:** ask for a small Opus 5.5 quota for a demo.
+- **Steps:** opened Service Quotas for Amazon Bedrock, searched for Opus 5.5, and filled in the increase form for a few thousand tokens a minute.
+- **Expected:** a request sized to a demo, against the one quota the Messages API endpoint uses.
 - **Actual:** the form won't accept less than the AWS default (30,000,000 tokens a minute), so a modest ask isn't possible; there are two Opus 5.5 token quotas (global and regional cross-region) and it isn't clear which one the Messages API endpoint draws on; no requests-per-minute quota is listed for Opus 5.5 even though older models have one. Both requests went to Pending with no estimate.
 - **Severity:** Medium.
 - **Workaround:** requested both token quotas at the minimum the form allows.
@@ -127,14 +139,18 @@ Written while building, so each entry is what actually happened. For the Devpost
 ### F10. Testing sandboxed MCP Apps screens
 
 - **Task:** check the screens in the simulator with browser automation (clicks and screenshots), as part of verifying each change.
+- **Steps:** opened `/echo` under Playwright, asked for the Today screen, then tried to click a chore and capture the screen.
+- **Expected:** automation could reach into the screen the way it reaches the rest of the page, or a documented way to drive one.
 - **Actual:** a screen runs in a sandboxed `srcdoc` frame (`allow-scripts`, no same origin), as it should, so automation can't click inside it or read its DOM, and screenshots of it sometimes came back blank. A bug that hid the screen looked the same as the capture failing.
 - **Severity:** Low.
-- **Workaround:** tested taps through the bridge in unit tests, and read `AppBridge`'s debug messages in the console to confirm a screen initialized and received its data.
+- **Workaround:** tested taps through the bridge in unit tests, read `AppBridge`'s debug messages in the console to confirm a screen initialized and received its data, and later drove screens through Playwright's frame access with in-page clicks.
 - **Suggestion:** a test harness for MCP Apps (drive a screen through `AppBridge` and read what it rendered), or a documented debug mode for hosts.
 
 ### F11. No way to tell a screen its data changed
 
 - **Task:** keep a kitchen and a barn Echo Show in step on one household.
+- **Steps:** checked a chore off by voice on the barn device and watched the kitchen device's screen; looked for a server-to-screen signal in MCP and MCP Apps.
+- **Expected:** a way for the server to tell an open screen its data changed.
 - **Actual:** a stateless MCP server can't push: notifications and resource subscriptions need a session, and MCP Apps has no server-to-screen hint. Every screen polls.
 - **Severity:** Medium.
 - **Workaround:** a screen-only `household_version` tool that each screen asks every 3 seconds while it's visible, refreshing when the counter moves.
@@ -143,6 +159,8 @@ Written while building, so each entry is what actually happened. For the Devpost
 ### F12. No standard for who's speaking on a shared device
 
 - **Task:** let the family's rules follow the person talking to a kitchen Echo (a kid's request waits for a parent; a guest changes nothing).
+- **Steps:** read the MCP authorization spec and the Alexa+ add-on docs for a per-request identity; modeled voice profiles in the simulator.
+- **Expected:** a documented way for Alexa+ to tell an add-on which recognized person is talking.
 - **Actual:** MCP identity is the bearer token, one account per connection. Voice ID knows who's talking, but neither MCP nor the Alexa+ docs describe passing a recognized person per request.
 - **Severity:** Medium.
 - **Workaround:** the simulator sends the speaker in a header that only the sample household reads; linked to a real Corral, each person would link their own account.
@@ -150,6 +168,9 @@ Written while building, so each entry is what actually happened. For the Devpost
 
 ### F13. Changing a header mid-connection in the MCP client SDK
 
+- **Task:** switch who's speaking in the simulator without dropping its MCP connection.
+- **Steps:** built one `StreamableHTTPClientTransport` per device and changed the speaker header between turns.
+- **Expected:** a documented way to change a request header for later requests.
 - **Actual:** `StreamableHTTPClientTransport` takes `requestInit` once, at construction. Switching the speaker without reconnecting works only because 2.3.1 rebuilds each request's headers from `requestInit.headers`, which isn't documented; reconnecting instead would orphan every `AppBridge` holding the old client.
 - **Severity:** Low.
 - **Workaround:** a test guards the behavior so an upgrade can't silently pin the first speaker.
@@ -157,19 +178,29 @@ Written while building, so each entry is what actually happened. For the Devpost
 
 ### F14. Actions that update a screen look like screens
 
+- **Task:** let a device switched by voice show its countdown on the Ranch screen.
+- **Steps:** gave `set_device` the Ranch screen's resource, then opened every screen tool from our preview host.
+- **Expected:** a way to mark a tool as an action that updates a screen, apart from a tool that opens one.
 - **Actual:** `set_device` shows the Ranch screen so a run started by voice counts down there, but nothing distinguishes "an action that updates this screen" from "a tool that opens this screen". A host or preview that opens screens by calling their tools with no arguments calls the action too, and gets an error.
 - **Severity:** Low.
 - **Workaround:** our preview skips screen tools with required arguments.
+- **Suggestion:** a `_meta.ui` flag for actions, so hosts know a tool updates a screen rather than opening one.
 
 ### F15. `content` versus `structuredContent` for a large view
 
+- **Task:** send the Ranch screen its map without making the model read it.
+- **Steps:** returned the full view in `structuredContent` and checked what the spec says belongs in `content`.
+- **Expected:** guidance on what Alexa+ passes to the model from a tool result that has a screen.
 - **Actual:** the spec says structured content should also come back as text. For the Ranch screen that's kilobytes of map geometry the model shouldn't read, so `show_ranch` sends a short summary as text. It isn't clear whether Alexa+ gives `structuredContent` to the model, which decides whether that's a waste or a necessity.
 - **Severity:** Low.
+- **Workaround:** a short summary in `content`, and the full view only in `structuredContent`.
 - **Suggestion:** say what Alexa+ shows the model from a tool result with a screen.
 
 ### F16. Wrangler: a LAN fetch hangs under `global_fetch_strictly_public`
 
 - **Task:** reach our greenhouse controller on the home network from `wrangler dev`.
+- **Steps:** set the controller's LAN address, ran `wrangler dev` with the project's compatibility flags, and called the controller's status endpoint with a 3 second `AbortSignal.timeout`.
+- **Expected:** the call to succeed, or to fail fast with an error.
 - **Actual:** with the flag set, a fetch to a LAN address neither failed nor honored `AbortSignal.timeout`; it hung until the caller gave up, and nothing pointed at the flag, so the controller looked down.
 - **Severity:** Medium.
 - **Workaround:** `pnpm dev:lan` runs locally without the flag.
@@ -177,6 +208,20 @@ Written while building, so each entry is what actually happened. For the Devpost
 
 ### F17. Wrangler: Durable Object config across environments, and Windows
 
+- **Task:** add a Durable Object to the demo environment but not to production.
+- **Steps:** declared the class and binding at the top level of `wrangler.jsonc`, then gave each environment its own settings; restarted `wrangler dev` on Windows between changes.
+- **Expected:** environments to inherit or omit the Durable Object cleanly, and a restart to start fresh.
 - **Actual:** `durable_objects` bindings aren't inherited by environments while `exports` and `migrations` are, so an environment with no Durable Object must empty both, and Wrangler still warns about the binding it left out on purpose. The docs prefer `exports`, but most examples still show `migrations`. On Windows, stopping `wrangler dev` left `workerd` processes holding the port, and the next run printed "Ready" while the old one kept answering with old settings.
 - **Severity:** Low.
+- **Workaround:** emptied `exports` and the binding in production on purpose, and ended stray `workerd` processes by hand before each run.
 - **Suggestion:** a way to say "no Durable Object here on purpose", examples that use `exports`, and stopping child processes with `wrangler dev`.
+
+### F18. An MCP App can't open another screen
+
+- **Task:** on an Echo Show, let people tap from the Today screen to the ranch, the animals and the automations.
+- **Steps:** built each as its own MCP Apps resource (`ui://corral/today.html`, `ui://corral/ranch.html`), then looked in `@modelcontextprotocol/ext-apps` for a way for one screen to show another tool's screen.
+- **Expected:** an app request like "open this tool's screen with these arguments", handled by the host without a model turn.
+- **Actual:** a screen can call server tools, update the model's context and send a message to the conversation, but it can't swap to another resource. Sending a message goes through the model, which is slow for a tap and may not happen.
+- **Severity:** Medium.
+- **Workaround:** merged the Today and Ranch screens into one bundle with a rail of tabs (Today, Ranch, Animals, Automations), each tab fetching its data through the screens' own refresh tools.
+- **Suggestion:** an app-to-host request to open another tool's screen, so screens can link to each other without the model.
