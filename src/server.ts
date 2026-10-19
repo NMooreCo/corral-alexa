@@ -1,10 +1,11 @@
 import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
 import { McpServer, type CallToolResult } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
+import { Temporal } from "temporal-polyfill";
 import { APPROVALS_URI, approvalsView } from "./approvals.ts";
 import { UpstreamAuthError } from "./corral.ts";
 import { APPROVAL_TOOLS, ORDER_TOOLS, ToolError, type Household, type HouseholdAbout, type HouseholdTool } from "./household.ts";
-import type { Ranch } from "./ranch/index.ts";
+import { ALERT_KINDS, type Ranch } from "./ranch/index.ts";
 import { ADD_AUTOMATION, AUTOMATIONS, RANCH_INSTRUCTIONS, RANCH_TOOLS, SET_AUTOMATION, SET_DEVICE } from "./ranch/tools.ts";
 import { BRIEFING_URI, RANCH_URI, briefingView, ranchSummary, ranchView, type RanchTab, type RanchView } from "./ranch/views.ts";
 import { LIST_URI, SUPPLIES_URI, WEEK_URI, listView, suppliesView, weekView } from "./screens.ts";
@@ -405,6 +406,35 @@ export async function buildServer(household: Household, ranch?: Ranch): Promise<
           return answer(() => Promise.reject(err));
         }
       },
+    );
+    // What a device says on its own (an animal leaving the fence, an automation that ran), for a device that polls for it:
+    // stateless MCP can't push, so the simulator asks every few seconds, as the screens do for their change counter.
+    server.registerTool(
+      "alerts",
+      {
+        title: "Alerts",
+        description: "What the household should hear about without asking, since `since` (an instant from the last answer's cursor): an animal that just left the fence, an automation that ran. For a device that speaks up; not for the assistant to call.",
+        inputSchema: z.object({ since: z.string().describe("The cursor from the last call; leave it out the first time").optional() }),
+        annotations: readOnly("Alerts"),
+        _meta: { ui: { visibility: ["app"] } },
+      },
+      (args) =>
+        answer(async () => {
+          await ranch.tick();
+          let from = ranch.now();
+          if (typeof args.since === "string") {
+            try {
+              from = Temporal.Instant.from(args.since);
+            } catch {
+              throw new ToolError("since is the cursor an earlier call answered.");
+            }
+          }
+          const alerts = ranch
+            .history(from)
+            .filter((h) => ALERT_KINDS.includes(h.kind) && Temporal.Instant.compare(h.at, from) > 0)
+            .map((h) => ({ at: h.at.toString(), kind: h.kind, text: h.text }));
+          return { alerts, cursor: alerts.at(-1)?.at ?? from.toString() };
+        }),
     );
     screen(
       "show_briefing",

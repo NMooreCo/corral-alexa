@@ -38,11 +38,13 @@ describe("serving Alexa+ (MCP 2025-11-25 over Streamable HTTP)", () => {
   it("lists Corral's tools and the Today screen tool, pointing at its screen", async () => {
     const { body } = await rpc(SAMPLE, "tools/list");
     const tools = body!.result!.tools as { name: string; annotations?: { readOnlyHint?: boolean }; _meta?: { ui?: { resourceUri?: string; visibility?: string[] } } }[];
-    const ranch = ["devices", "set_device", "weather", "trackers", "show_ranch", "refresh_ranch", "show_briefing", "automations", "set_automation", "add_automation"];
+    const ranch = ["devices", "set_device", "weather", "trackers", "show_ranch", "refresh_ranch", "show_briefing", "automations", "set_automation", "add_automation", "alerts"];
     expect(tools.map((t) => t.name).sort()).toEqual([...CORRAL_TOOLS, ...APPROVAL_TOOLS, ...ORDER_TOOLS, "show_today", "refresh_today", "household_version", "show_list", "show_week", "show_supplies", "show_approvals", ...ranch].sort());
     expect(tools.find((t) => t.name === "show_today")?._meta?.ui?.resourceUri).toBe(TODAY_URI);
     // The screen's own refresh is the screen's alone: hosts keep it from the model.
     expect(tools.find((t) => t.name === "refresh_today")?._meta?.ui?.visibility).toEqual(["app"]);
+    // A device's alerts are its own business, not the assistant's.
+    expect(tools.find((t) => t.name === "alerts")?._meta?.ui?.visibility).toEqual(["app"]);
     expect(tools.find((t) => t.name === "calendar")?.annotations?.readOnlyHint).toBe(true);
     expect(tools.find((t) => t.name === "complete_task")?.annotations?.readOnlyHint).toBe(false);
   });

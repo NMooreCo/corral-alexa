@@ -164,6 +164,64 @@ body {
   animation: pulse 0.7s ease-in-out infinite;
 }
 
+/* Speaking up on its own, the way an Echo's light shows a notification. */
+.lightbar[data-state="notify"] {
+  opacity: 1;
+  background: #f2b65a;
+  box-shadow: 0 0 24px #f2b65a;
+  animation: pulse 0.9s ease-in-out infinite;
+}
+
+/* What the device says on its own, over whatever's on the screen. */
+.alert {
+  position: absolute;
+  top: 74px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  width: min(84%, 980px);
+  padding: 18px 26px;
+  border: 3px solid #f2b65a;
+  border-radius: 22px;
+  background: rgb(20 14 4 / 0.94);
+  color: #fff;
+  box-shadow: 0 18px 50px rgb(0 0 0 / 0.55);
+}
+
+.alert[hidden] {
+  display: none;
+}
+
+.alert p {
+  margin: 0;
+}
+
+.alert-icon {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #f2b65a;
+  box-shadow: 0 0 0 6px rgb(242 182 90 / 0.25);
+}
+
+.alert-kicker {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #f2b65a;
+}
+
+.alert-text {
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
 @keyframes pulse {
   50% {
     filter: brightness(0.55);

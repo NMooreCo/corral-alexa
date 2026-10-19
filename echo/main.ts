@@ -69,6 +69,8 @@ const captionEl = $("caption");
 const heardEl = $("heard");
 const saidEl = $("said");
 const lightbar = $("lightbar");
+const alertEl = $("alert");
+const alertTextEl = $("alert-text");
 const micBtn = $<HTMLButtonElement>("mic");
 const micLabel = $("mic-label");
 const askForm = $<HTMLFormElement>("ask-form");
@@ -101,6 +103,8 @@ const state = {
   messages: [] as Msg[],
   /** What someone did on the screen since the assistant last spoke. */
   screenNotes: [] as string[],
+  /** What the device said on its own since the person last spoke, for the assistant's next turn. */
+  alertNotes: [] as string[],
   busy: false,
   /** Who's calling tools right now, for the traffic log. */
   actor: "screen" as "assistant" | "screen" | "page",
@@ -150,7 +154,7 @@ function tick() {
 }
 setInterval(tick, 15_000);
 
-function setLight(s: "idle" | "listening" | "thinking" | "speaking") {
+function setLight(s: "idle" | "listening" | "thinking" | "speaking" | "notify") {
   lightbar.dataset.state = s;
 }
 
@@ -597,6 +601,8 @@ async function ask(text: string) {
   if (who) content.push({ type: "text", text: who });
   const notes = state.screenNotes.splice(0);
   if (notes.length) content.push({ type: "text", text: `(On the screen since you last spoke: ${notes.join(" ")})` });
+  const told = state.alertNotes.splice(0);
+  if (told.length) content.push({ type: "text", text: `(You said on your own since they last spoke: ${told.join(" ")})` });
   content.push({ type: "text", text });
   state.messages.push({ role: "user", content });
   try {
@@ -860,6 +866,8 @@ for (const s of embedded ? tries.slice(0, 3) : tries) {
 interface DemoBeat {
   as: string;
   say: string;
+  /** Instead of a line: say what the household just heard about on its own (an alert), waiting for one if it hasn't come yet. */
+  alert?: boolean;
   ifAsked?: boolean;
   linger?: number;
   /** Longer still when a recording taps through the screen's tabs here (?taps=1). */
@@ -886,6 +894,8 @@ const DEMO: DemoBeat[] = [
   { as: "Nick", say: "Yes.", ifAsked: true, linger: 6000, short: true },
   { as: "Jak", say: "Can you turn on the coop heat lamp?", short: true },
   { as: "Jak", say: "Yes please.", ifAsked: true },
+  // The barn speaks up: Hunter slips out a couple of minutes into the evening.
+  { as: "", say: "", alert: true, linger: 2500, short: true },
   { as: "Nick", say: "It's going down to 12 tonight. Get the place ready.", linger: 3000, short: true },
   { as: "Nick", say: "Yes, do all of that.", ifAsked: true, linger: 4000, short: true },
   { as: "Nick", say: "Do all of that on its own whenever it's going to freeze.", linger: 3000, short: true },
@@ -936,6 +946,12 @@ async function playDemo(short = false, part: DemoPart = "all") {
     const beats = (short ? DEMO.filter((b) => b.short) : DEMO).filter((b) => (part === "evening" ? !b.morning : part === "morning" ? b.morning : true));
     for (const beat of beats) {
       if (run.stop) break;
+      if (beat.alert) {
+        const text = await nextAlert(60_000);
+        if (text) await speakUp(text);
+        await pause(beat.linger ?? 2500);
+        continue;
+      }
       if (beat.morning && !householdMorning) {
         if (!(await setClock("morning"))) break;
         await pause(2500);
@@ -955,8 +971,95 @@ async function playDemo(short = false, part: DemoPart = "all") {
     }
   } finally {
     demo = null;
+    // What came in while the demo held it isn't news anymore.
+    heldAlerts.length = 0;
     playButton.textContent = "Play the demo";
   }
+}
+
+// ---------- Speaking up ----------
+
+/**
+ * A device that speaks up on its own: an animal leaving the fence, an
+ * automation that ran. Stateless MCP can't push, so the page asks the
+ * screen-only `alerts` tool every few seconds, as screens ask for the
+ * household's change counter. On the two-device page the barn speaks up;
+ * the kitchen leaves it to the barn. While the demo plays, alerts wait for its
+ * alert beat, so they never talk over a conversation.
+ */
+const ALERT_EVERY_MS = 3_000;
+const speaksUp = !embedded || place.toLowerCase() === "barn";
+const heldAlerts: string[] = [];
+let alertCursor: string | undefined;
+
+async function watchAlerts() {
+  if (!speaksUp) return;
+  for (;;) {
+    await pause(ALERT_EVERY_MS);
+    if (state.busy) continue;
+    const was = state.actor;
+    state.actor = "page";
+    try {
+      const result = await client.callTool({ name: "alerts", arguments: alertCursor ? { since: alertCursor } : {} });
+      const text = (result.content as { type: string; text?: string }[] | undefined)?.find((c) => c.type === "text")?.text;
+      if (!result.isError && text) {
+        const answer = JSON.parse(text) as { alerts: { text: string }[]; cursor: string };
+        alertCursor = answer.cursor;
+        heldAlerts.push(...answer.alerts.map((a) => a.text));
+      }
+    } catch {
+      // The next ask tries again.
+    } finally {
+      state.actor = was;
+    }
+    if (heldAlerts.length && !demo && !state.busy && lightbar.dataset.state === "idle") await speakUp(heldAlerts.splice(0).join(" "));
+  }
+}
+
+/** The next alert, waiting up to `ms` for one. */
+async function nextAlert(ms: number): Promise<string | null> {
+  const until = Date.now() + ms;
+  while (!heldAlerts.length && Date.now() < until) await pause(250);
+  return heldAlerts.length ? heldAlerts.splice(0).join(" ") : null;
+}
+
+/** A soft two-note chime, before the device says something on its own. */
+function chime() {
+  try {
+    const audio = new AudioContext();
+    const start = audio.currentTime;
+    [880, 1318.5].forEach((hz, i) => {
+      const tone = audio.createOscillator();
+      const gain = audio.createGain();
+      const at = start + i * 0.18;
+      tone.frequency.value = hz;
+      gain.gain.setValueAtTime(0, at);
+      gain.gain.linearRampToValueAtTime(0.16, at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.5);
+      tone.connect(gain).connect(audio.destination);
+      tone.start(at);
+      tone.stop(at + 0.55);
+    });
+    setTimeout(() => void audio.close(), 1200);
+  } catch {
+    // No sound here; the banner and the voice still say it.
+  }
+}
+
+/** Says an alert out loud with a banner over the screen, and keeps it for the assistant's next turn. */
+async function speakUp(text: string) {
+  chime();
+  setLight("notify");
+  alertTextEl.textContent = text;
+  alertEl.hidden = false;
+  addLog(modelLog, "page", `Said on its own: ${text}`);
+  state.alertNotes.push(text);
+  await pause(700);
+  // Measures said the way people say them.
+  speak(`Heads up: ${text.replace(/\b(\d+) ft\b/g, "$1 feet").replace(/\b(\d+) m\b/g, "$1 meters")}`);
+  await untilQuiet();
+  await pause(1800);
+  alertEl.hidden = true;
 }
 
 playButton.addEventListener("click", () => void playDemo());
@@ -977,6 +1080,7 @@ async function home() {
 try {
   await connect();
   await home();
+  void watchAlerts();
   // /echo?demo=1 plays the demo on its own, for recording a take; ?demo=short plays only its headline beats.
   const take = params.get("demo");
   if ((take === "1" || take === "short") && !embedded) {

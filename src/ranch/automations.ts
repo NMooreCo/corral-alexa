@@ -60,7 +60,7 @@ export interface AutomationContext {
   /** Tonight's forecast low in the household's units, or null when the forecast can't be read. */
   tonightLow: () => Promise<number | null>;
   /** Keeps what happened (an automation run, turned on or off, added) for the ranch's history. */
-  note?: (text: string) => void;
+  note?: (text: string, kind?: "automation" | "run") => void;
 }
 
 interface Rule extends AutomationSpec {
@@ -147,7 +147,7 @@ export class Automations {
         }
       }
       r.lastRun = { at: now, did, failed };
-      this.#ctx.note?.(`${r.name} ran: ${[...did, ...failed].join("; ") || "nothing to do"}`);
+      this.#ctx.note?.(`${r.name} ran: ${[...did, ...failed].join("; ") || "nothing to do"}`, "run");
     }
   }
 

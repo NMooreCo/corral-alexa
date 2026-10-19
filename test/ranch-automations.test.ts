@@ -115,4 +115,26 @@ describe("the ranch's automations", () => {
     expect(told).toHaveLength(2);
     expect(ranch.history(at("06:30"))).toEqual([]);
   });
+
+  it("says when an animal leaves the fence, once, from the second look on", async () => {
+    const { ranch, move } = ranchAt("20:10");
+    await ranch.tick(); // Pepper's been out since dusk: the first look only learns that
+    move("20:16");
+    await ranch.tick();
+    expect(ranch.history(at("00:00")).filter((h) => h.kind === "animal")).toEqual([]);
+    move("20:18");
+    await ranch.tick();
+    await ranch.tick();
+    const left = ranch.history(at("00:00")).filter((h) => h.kind === "animal");
+    expect(left.map((h) => h.text)).toEqual([expect.stringMatching(/^Hunter just left the fence, about \d+ ft out to the north-east, near the Woods$/)]);
+  });
+
+  it("keeps an automation's run as something to say out loud, and its switch as just history", async () => {
+    const { ranch, move } = ranchAt("05:55");
+    await ranch.tick();
+    await ranch.automations.set("freeze protection", true);
+    move("06:01");
+    await ranch.tick();
+    expect(ranch.history(at("00:00")).map((h) => h.kind)).toEqual(["automation", "run"]);
+  });
 });

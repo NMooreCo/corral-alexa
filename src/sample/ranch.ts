@@ -338,12 +338,13 @@ interface CollarSpec {
   home: string;
   battery: number;
   signal: TrackerFix["signal"];
-  /** Where it wanders off to at night, in meters from the property's middle, for the demo. */
-  night?: { x: number; y: number; signal: TrackerFix["signal"] };
+  /** Where it wanders off to at night, in meters from the property's middle, for the demo, and from when ("20:17"; NIGHT's start when not said). */
+  night?: { x: number; y: number; signal: TrackerFix["signal"]; from?: string };
 }
 
 const COLLARS: CollarSpec[] = [
-  { collar: "Collar 1", animal: "Hunter", species: "dog", home: "barn", battery: 64, signal: "strong", night: { x: 255, y: 228, signal: "fair" } },
+  // Hunter slips out a couple of minutes into the demo's 8:15 PM, so the barn hears about it while the demo plays.
+  { collar: "Collar 1", animal: "Hunter", species: "dog", home: "barn", battery: 64, signal: "strong", night: { x: 255, y: 228, signal: "fair", from: "20:17" } },
   { collar: "Collar 2", animal: "Chewy", species: "dog", home: "house", battery: 82, signal: "strong" },
   { collar: "Collar 3", animal: "Leia", species: "dog", home: "house", battery: 77, signal: "strong" },
   { collar: "Collar 4", animal: "Billie", species: "dog", home: "barn", battery: 69, signal: "strong" },
@@ -380,11 +381,12 @@ export class SampleCollars implements TrackerFeed {
 
   async fixes(): Promise<TrackerFix[]> {
     const now = this.#now();
-    const hour = now.toZonedDateTimeISO(this.#timeZone).hour;
-    const night = hour >= NIGHT.from || hour < NIGHT.to;
+    const local = now.toZonedDateTimeISO(this.#timeZone);
+    const minute = local.hour * 60 + local.minute;
     const seconds = now.epochMilliseconds / 1000;
     return COLLARS.map((c, i) => {
-      const out = night && c.night;
+      const from = c.night?.from ? Number(c.night.from.slice(0, 2)) * 60 + Number(c.night.from.slice(3, 5)) : NIGHT.from * 60;
+      const out = Boolean(c.night) && (minute >= from || minute < NIGHT.to * 60);
       // Each collar reports on its own two-minute beat (ten when the signal's weak).
       const every = out && c.night!.signal === "weak" ? 600 : 120;
       const offset = i * 17;

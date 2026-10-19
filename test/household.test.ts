@@ -284,7 +284,8 @@ describe("the sample household's Durable Object", () => {
     const today = (await tool(env, "show_today")) as { at: string };
     expect(Temporal.Instant.from(today.at).toZonedDateTimeISO("America/Denver").hour).toBe(20);
     const trackers = (await tool(env, "trackers")) as { outsideFence: string[] };
-    expect(trackers.outsideFence).toEqual(["Hunter", "Pepper"]);
+    // Pepper's out at dusk; Hunter slips out a couple of minutes into the demo's evening.
+    expect(trackers.outsideFence).toEqual(["Pepper"]);
 
     const back = (await (await call(env, "/household/clock", { ...evening, headers: { ...evening.headers, "x-demo-passcode": "hay bale" }, body: JSON.stringify({ mode: "now" }) })).json()) as { clock: unknown };
     expect(back.clock).toEqual({ now: FRIDAY.toString(), offsetMinutes: 0, evening: false, morning: false });
@@ -347,6 +348,28 @@ describe("the sample household's Durable Object", () => {
     // Back to the real time starts it over.
     const back = await setClock("now");
     expect(back).toMatchObject({ day: "2026-10-16", clock: { morning: false, evening: false } });
+  });
+
+  it("tells a device what it should say on its own: Hunter slipping out a couple of minutes into the evening", async () => {
+    const { env } = sampleEnv();
+    await call(env, "/household/clock", { method: "POST", body: JSON.stringify({ mode: "evening" }), headers: { "content-type": "application/json" } });
+    // The first ask only learns who's out (Pepper, since dusk) and answers a cursor.
+    const first = (await tool(env, "alerts")) as { alerts: unknown[]; cursor: string };
+    expect(first.alerts).toEqual([]);
+    // Three minutes on, Hunter's out past the fence, and the next ask says so, once.
+    vi.setSystemTime(FRIDAY.add({ minutes: 3 }).epochMilliseconds);
+    const next = (await tool(env, "alerts", { since: first.cursor })) as { alerts: { kind: string; text: string }[]; cursor: string };
+    expect(next.alerts).toHaveLength(1);
+    expect(next.alerts[0]).toMatchObject({ kind: "animal" });
+    expect(next.alerts[0]!.text).toMatch(/^Hunter just left the fence, about \d+ ft out to the north-east, near the Woods$/);
+    expect(((await tool(env, "alerts", { since: next.cursor })) as { alerts: unknown[] }).alerts).toEqual([]);
+    // A cursor that isn't one is said plainly.
+    const bad = await call(env, "/mcp", {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2025-11-25" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "alerts", arguments: { since: "yesterday" } } }),
+    });
+    expect(await bad.text()).toContain("since is the cursor an earlier call answered");
   });
 
   it("starts over with no passcode when the server has none", async () => {
