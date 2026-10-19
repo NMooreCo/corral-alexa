@@ -42,7 +42,7 @@ flowchart LR
   subgraph Assistants
     A["Alexa+ on an Echo Show"]
     S["Simulated Echo Show<br/>(this repo, /echo)"]
-    O["Claude, ChatGPT,<br/>any MCP client"]
+    O["Claude,<br/>any MCP client"]
   end
   subgraph Bridge["corral-alexa (Cloudflare Worker)"]
     M["MCP server<br/>2025-11-25 and 2026-07-28"]
@@ -70,7 +70,7 @@ flowchart LR
 
 - **The rules travel with the data.** The bridge never decides who sees or changes what. Linked, every call goes to Corral's own MCP server with the person's own Corral token, and Corral applies the same rules as its app. The sample household answers the same tools with the same JSON, so everything here runs and demos with no account.
 - **Rules follow the person.** Alexa+ recognizes family members by voice, and each person links their own Corral account, so who's talking comes from their token and Corral applies their role: a kid's plans wait for a parent, a private event reads as Busy to anyone but its owner, the farm hand sees the ranch calendar. The sample household has the same roles as data. With no sign-in in sample mode, the simulator names the speaker in an `x-demo-person` header; only the sample reads it, a name it doesn't know is a guest, and the linked server ignores it completely.
-- **One server, every assistant.** Alexa+ speaks MCP 2025-11-25; current clients speak 2026-07-28. Both are served statelessly from one endpoint with the MCP TypeScript SDK's `createMcpHandler`, so the same server, screens and skill also work in Claude, ChatGPT or Home Assistant.
+- **One server, every assistant.** Alexa+ speaks MCP 2025-11-25; current clients speak 2026-07-28. Both are served statelessly from one endpoint with the MCP TypeScript SDK's `createMcpHandler`, so the same server, screens and skill also work in other assistants: added to Claude as a custom connector, it calls the same tools and renders the same screens in the chat, unchanged.
 - **One shared household, kept across sessions.** In the demo, the sample household is a Cloudflare Durable Object (`src/sample/durable.ts`): every `/mcp` request goes to the one object for that household, which serves MCP from inside itself and keeps the household in its own SQLite database. So two Echo Shows, Alexa+ and the simulator, or a judge and a teammate see the same chores, and a restart or deploy keeps them. Its times are laid out around today, so it starts over when the household's day turns over, and `POST /household/reset` starts it over on purpose. Linked to a real Corral, Corral is the shared state and there is no Durable Object.
 - **Screens that catch up.** A stateless MCP server can't push to a screen, so the household keeps a change counter and every screen asks it every 3 seconds while it's showing (`household_version`, a tool only screens can call, kept out of the model's tool list). When it moves, the screen refreshes. A change on one device reaches every other screen within a few seconds, on real Echo Shows as in the simulator.
 
