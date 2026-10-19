@@ -811,7 +811,9 @@ const DEMO: DemoBeat[] = [
   { as: "Jak", say: "Yes please.", ifAsked: true },
   { as: "Nick", say: "It's going down to 12 tonight. Get the place ready.", linger: 3000, short: true },
   { as: "Nick", say: "Yes, do all of that.", ifAsked: true, linger: 4000, short: true },
-  { as: "Nick", say: "Yes please.", ifAsked: true, linger: 3000, short: true },
+  // Alexa offers the low propane; Nick has it ordered, and the Supplies screen shows it on order with its day.
+  { as: "Nick", say: "Order the propane.", short: true },
+  { as: "Nick", say: "Yes.", ifAsked: true, linger: 4000, short: true },
   { as: "Nick", say: "Do all of that on its own whenever it's going to freeze.", linger: 3000, short: true },
   { as: "Nick", say: "Yes.", ifAsked: true, linger: 5000, short: true },
 ];

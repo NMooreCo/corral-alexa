@@ -20,7 +20,8 @@ On a ranch it also runs the place: **"Alexa, run the greenhouse misters for 30 s
 | "What's going on today?" | The **Today** screen: the calendar with what's on now and next, chores to tap off, and who's where. It keeps itself current. |
 | "What's our weekend look like?" | The **Week** screen: seven days, today marked, who's driving. |
 | "Jak emptied the dishwasher." | The chore is checked off with credit to Jak, and the screen updates. |
-| "We're down to two bags of horse feed." | The count is recorded, the **Supplies** screen shows about three days left, and it offers to put feed on the feed store list. |
+| "We're down to two bags of horse feed." | The count is recorded, the **Supplies** screen shows about three days left, and it offers to order the usual four bags, with the price and the day they'd come, or to put feed on the feed store list. |
+| "Order the propane." | It confirms in one sentence ("Order 100 gallons of propane from Valley Feed & Propane for $289, delivered Tuesday?"), then orders it, and the **Supplies** screen shows it on order with its day. A kid's order goes to a parent to approve, and a parent's order over the household's $300 limit goes to the other parent. |
 | "Add tortillas and salsa." | Both go on the grocery list; the **List** screen shows it, and tapping an item checks it off. |
 | "Put the dentist on Thursday at 3:30 for Jak." | It confirms first. A parent's change happens right away; from a kid, or from a shared kitchen device, the event goes to a parent to approve, and it says who. |
 | Eli: "Can I have a sleepover at Ava's on Friday?" | It offers to ask, and the request goes to Nick and Holly. Nothing is on the calendar yet. |
@@ -28,7 +29,7 @@ On a ranch it also runs the place: **"Alexa, run the greenhouse misters for 30 s
 | (tapping a chore on the screen) | The screen checks it off through Corral and tells the assistant, so "who did the eggs?" right after has the answer. |
 | (a chore checked off on the kitchen Echo Show) | The barn Echo Show's screen shows it within a few seconds: every device shares one household, kept through restarts until its day turns over. |
 | "Run the greenhouse misters for 30 seconds." | It confirms, then opens the valve through the greenhouse controller (a real ESP32 controller on the LAN, run locally) and the **Ranch** screen counts the run down. |
-| "It's going down to 12 tonight. Get the place ready." | One turn reads the forecast, every device, the collars, who's home and supplies; one question turns on the tank heaters and coop lamp and gives whoever's home a task to bring in the animals outside the fence; then it offers low propane for the list. |
+| "It's going down to 12 tonight. Get the place ready." | One turn reads the forecast, every device, the collars, who's home and supplies; one question turns on the tank heaters and coop lamp and gives whoever's home a task to bring in the animals outside the fence; then it offers to order the low propane. |
 | "Good morning." | The **briefing**: swipeable cards for today, the weather, late chores, low supplies, the animals, the greenhouse and devices needing attention. It says the two or three that matter. |
 | "Are the animals in?" | Where each collared animal is on the property map: inside the fence or not, which pasture, how far out and which way. |
 | (tapping the rail on the Today screen) | Today, the Ranch, the **Animals** (the map large, every collar's place and battery) and the **Automations** are tabs on one screen, so a tap moves between them without asking the assistant. |
@@ -127,6 +128,21 @@ The headline demo runs our **real** greenhouse misters from the simulated Echo S
 
 Why a separate script: `wrangler.jsonc` sets `global_fetch_strictly_public`, which keeps every fetch off private addresses (in local dev a call to a LAN address just hangs). `pnpm dev:lan` runs the same Worker without that flag and sets `GREENHOUSE_LAN`; the connector also only switches on while the Worker is served from this machine or the LAN, so plain `pnpm dev`, the demo and production always use the simulated greenhouse. No hardware? `pnpm greenhouse:fake` stands in for the controller at `http://127.0.0.1:8899` (key `fake-key`) with the firmware's routes and JSON, and prints each valve change.
 
+## Ordering supplies
+
+Kids ask and parents decide, with money too. When something runs low, Alexa+ can order it from the household's store after one confirmation that names the amount, the store, the price and the day it comes, and the same rules as everything else apply:
+
+| Tool | What it does |
+|---|---|
+| `place_order` | Orders supplies by the household's own names for them, each in the store's units (its usual amount when none is said), from the store that sells them. It answers what was ordered, the total ("$289.00") and the day it arrives, or who it's waiting for. It shows the Supplies screen, where it's on order with its day. The skill confirms first. |
+| `orders` | What's on order, from where, what it cost and when it arrives, and anything still waiting for someone's yes. |
+| `supplies` | Also says, for each supply, any order for it that hasn't come and how a store sells it (the usual amount, its price and the day it would arrive), so "Order 100 gallons of propane for $289, delivered Tuesday?" comes from one read. |
+
+- **Who may order is a role's permission, as data** ([`src/sample/roles.ts`](src/sample/roles.ts)), like switching devices. A parent's order is placed right away. A kid's goes to a parent through the same approvals as a sleepover, so it's on the Approvals screen and a parent's Approve places it. The farm hand's and the shared kitchen screen's orders wait for a parent too, and a guest can't order at all.
+- **A spending limit for one order** is a household setting in cents ($300 in the sample). A parent's order over it waits for the other parent, and the answer says so and who decides; no one approves their own request, and a household with no one else to approve says so rather than leaving it waiting for no one.
+- **Connector-shaped.** A store is a `Supplier` ([`src/orders.ts`](src/orders.ts)): a catalog that maps the household's supplies to its products (the unit each is sold in, the usual order, a unit price in cents and the days to deliver) and a way to place an order that answers its delivery date. The sample's store, Valley Feed & Propane ([`src/sample/supplier.ts`](src/sample/supplier.ts)), is made up and its orders go nowhere; a real store would plug in behind the same interface, the way the real greenhouse controller does for devices. Money is integer cents throughout.
+- **Kept like everything else.** Orders are part of the sample household's state in its Durable Object. An order is delivered on its delivery day, and Corral's own server has no stores yet, so a linked household doesn't offer these tools.
+
 ## The simulated Echo Show
 
 [`/echo`](https://alexa-demo.corral.narralogy.ai/echo) stands in for Alexa+ on an Echo Show 8, as the FAQ invites: **the page is a real MCP client** of this server. It sends `initialize`, `tools/list`, `resources/read` and `tools/call` over Streamable HTTP, and shows every call in a live traffic log beside the device.
@@ -156,7 +172,7 @@ The simulator's brain is **Claude Opus 5.5**, called from the Worker at `POST /e
 
 ## The Agent Skill
 
-[`skills/corral-household`](skills/corral-household/SKILL.md) is an [Agent Skill](https://agentskills.io/) that teaches any agent to run a family's day through Corral's tools by voice: know who's speaking, look before changing, confirm in one sentence, respect approvals (and leave deciding them to the people who give them), keep "Busy" private, credit the right person, speak briefly, and use the screens. On the ranch it confirms before switching anything, keeps to each device's limits and says how a device fails. It includes everyday requests, recipes for running low, getting ready for a freeze (an agentic routine across the forecast, devices, collars, whereabouts, tasks and lists) and good morning, and a tool reference. The server also offers it as the MCP prompt `household-assistant`, and the simulator gives it to Claude.
+[`skills/corral-household`](skills/corral-household/SKILL.md) is an [Agent Skill](https://agentskills.io/) that teaches any agent to run a family's day through Corral's tools by voice: know who's speaking, look before changing, confirm in one sentence, respect approvals (and leave deciding them to the people who give them), keep "Busy" private, credit the right person, speak briefly, and use the screens. On the ranch it confirms before switching anything, keeps to each device's limits and says how a device fails. It includes everyday requests, recipes for running low (ordering what a store sells, with its price and day, after one yes), getting ready for a freeze (an agentic routine across the forecast, devices, collars, whereabouts, tasks and lists) and good morning, and a tool reference. The server also offers it as the MCP prompt `household-assistant`, and the simulator gives it to Claude.
 
 ## Account linking
 
@@ -228,6 +244,7 @@ Builds every page, typechecks (Worker and screens), and runs the tests:
 - the current protocol for up-to-date clients;
 - account linking end to end against a stand-in Corral (discovery, the hand-off to Corral's sign-in, code and token exchange, calls with the person's token, refresh, revoked access, a declined sign-in, a callback in another browser, an unknown redirect address, the admin route);
 - the simulator's model route (what it sends to Bedrock and to the Claude API, which one it picks, the rate limit, the passcode, size caps);
+- ordering: a parent's order with its total in cents and delivery day, a kid's going to a parent and a parent's yes placing it, the spending limit sending a big order to the other parent, what can't be ordered, choosing a store, a store that won't take an order, delivery, and orders kept through a restart;
 - the ranch: every tool and both screens over MCP, each device's limits, the greenhouse connector against a fake controller (switching, the run timer, a refused key, a controller that stops answering, what answers at the wrong address) and the rule that keeps it local, the forecast from a stubbed Open-Meteo (tonight's low, freeze flags, caching, an outage), the collars, and the fence geometry (with randomized property checks).
 
 ## Layout
@@ -238,6 +255,7 @@ Builds every page, typechecks (Worker and screens), and runs the tests:
 | `src/server.ts` | The MCP server: Corral's tools, the screen tools and their MCP Apps resources, the skill as a prompt |
 | `src/household.ts`, `src/corral.ts`, `src/sample/` | The contract both households answer; a real Corral through its MCP server; the sample household, with its roles in `roles.ts`, shared through its Durable Object (`durable.ts`, `shared.ts`, `store.ts`, `routes.ts`) |
 | `src/today.ts`, `src/screens.ts`, `src/approvals.ts` | What each screen shows |
+| `src/orders.ts`, `src/sample/supplier.ts` | Ordering supplies: the store connector and how an order is worked out and said; the sample's made-up store |
 | `src/ranch/` | The ranch: devices and their limits, the greenhouse controller connector, the forecast, collars, fence geometry, and the Ranch and briefing views |
 | `src/sample/ranch.ts` | The sample ranch as data: the property map, the greenhouse's names and limits, simulated devices, a simulated controller, simulated collars |
 | `scripts/fake-greenhouse.mjs` | A stand-in greenhouse controller for trying `pnpm dev:lan` without the hardware |

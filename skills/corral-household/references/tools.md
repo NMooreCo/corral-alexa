@@ -2,7 +2,7 @@
 
 The same names, arguments and answers as Corral's own MCP server. Answers are JSON. A change answers either `{ "status": "done", "summary": ... }` or `{ "status": "waiting_for_approval", "summary": ..., "approvers": [...], "requestId": ... }`.
 
-Every answer is for whoever the connection speaks for: in Alexa+, the person whose voice it recognized, through their own linked Corral account. What they may see and whether a change waits come from their role: a kid's events, tasks for someone else, list items and skips wait for a parent; check-offs never wait; a private event reads as Busy to anyone but its owner; the farm hand sees the ranch calendar; a guest only reads.
+Every answer is for whoever the connection speaks for: in Alexa+, the person whose voice it recognized, through their own linked Corral account. What they may see and whether a change waits come from their role: a kid's events, tasks for someone else, list items, skips and orders wait for a parent; an order over the household's limit waits for someone besides whoever placed it; check-offs never wait; a private event reads as Busy to anyone but its owner; the farm hand sees the ranch calendar; a guest only reads.
 
 ## Reading
 
@@ -14,7 +14,8 @@ Every answer is for whoever the connection speaks for: in Alexa+, the person who
 | `people` | none | `name`, `shortName`, `roles` |
 | `lists` | `list` (optional) | Without a list, the list names; with one, `items` with `text`, `quantity`, `waitingForApproval` |
 | `points` | none | `balances` (per person, what they have, like "140 points" and "$12.50 of allowance") and `turnsInto` |
-| `supplies` | none | `id`, `name`, `onHand` ("6 bags"), `daysLeft`, `runsOut` (a date), `low`, `onList` |
+| `supplies` | none | `id`, `name`, `onHand` ("6 bags"), `daysLeft`, `runsOut` (a date), `low`, `onList`; where the household orders from stores, `onOrder` (an order that hasn't come: `order`, `amount` like "100 gallons", `supplier`, `arrives` like "Tue, Oct 20" or null while it waits, `waitingFor`) and `reorder` (how a store sells it: `supplier`, `amount`, `price` like "$289.00", `arrives` if ordered now) |
+| `orders` | none | Orders, waiting ones first, then by the day they arrive: `id`, `supplier`, `items` ("100 gallons of propane"), `total` ("$289.00"), `totalCents`, `status` (`waiting_for_approval`, `placed`, `delivered`), `arrives` (null while it waits), `by`, `waitingFor` (who can say yes), `live` (false for a sample store, where nothing is really ordered) |
 | `approvals` | none | `toDecide` (requests this person may decide, oldest first: `id`, `from`, `asks`, `since`), `yoursWaiting` (their own still waiting: `id`, `asks`, `since`, `decidedBy`), and `requests` when they can't decide here (who does) |
 
 ## Changing
@@ -30,7 +31,8 @@ Every answer is for whoever the connection speaks for: in Alexa+, the person who
 | `add_list_item` | `text` (required), `list`, `quantity` | |
 | `check_list_item` | `text` (required), `list` | Found by its words. |
 | `update_supply` | `supply` (name or id), `change` (`used`, `added`, `count`), `amount`, `where` | "Out of" is a count of 0. |
-| `decide_approval` | `request` (id from `approvals`), `decision` (`approve` or `decline`) | Only for someone who approves requests, never their own. Approving makes the change it asks for. |
+| `decide_approval` | `request` (id from `approvals`), `decision` (`approve` or `decline`) | Only for someone who approves requests, never their own. Approving makes the change it asks for; an approved order is placed, and the answer says when it `arrives`. |
+| `place_order` | `items`: a list of `{ "supply", "quantity"? }` (a supply's name or id; how many of the store's units, its usual amount when left out), `supplier` (when more than one store sells it) | Orders right away: `{ "status": "done", "summary": ..., "order", "total": "$289.00", "arrives": "Tue, Oct 20" }`. A kid's order, or one over the household's limit, comes back `waiting_for_approval` with `approvers` (and a `note` saying why, for the limit). A supply no store sells, a store that isn't there and an amount that isn't a whole number are refused. Shows the Supplies screen. Confirm first, with the amount, store, price and day. |
 
 ## The ranch
 
@@ -53,9 +55,9 @@ Devices, readings and limits are the household's own configuration; these tools 
 | `show_today` | The Today screen: calendar with what's on now and next, chores to tap off, who's where. It keeps itself current. |
 | `show_week` | Seven days of the calendar (`from`, default today), today marked, who's driving. |
 | `show_list` | One list (`list`, default the first) with items to tap off and the other lists to switch to. |
-| `show_supplies` | Each supply's amount, days left and whether it's low; a low one goes on a list in one tap. |
+| `show_supplies` | Each supply's amount, days left and whether it's low; a low one goes on a list in one tap. One on order says the day it arrives, and one waiting for a yes says whose. |
 | `show_approvals` | Requests waiting for this person, each with Approve and Decline, and their own requests still waiting. |
 | `show_ranch` | The ranch's tabs, opened by `view`: `ranch` (the default: a tile per device that switches it, with runs counting down, and how the animals are), `animals` (a map of the property with the fence, zones and a pin per collar, anyone outside the fence standing out, beside each collar's place and battery) or `automations` (each one with a switch). The Today and Ranch screens share one set of tabs, so people can tap between them. It keeps itself current. |
 | `show_briefing` | The morning briefing as swipeable cards; you're told which card is showing. |
 
-`approvals`, `decide_approval` and `show_approvals` follow the shape of Corral's own inbox and request decisions. Corral's MCP server doesn't let connected apps decide requests yet, so a server linked to a real Corral leaves them out; the sample household has them.
+`approvals`, `decide_approval` and `show_approvals` follow the shape of Corral's own inbox and request decisions. Corral's MCP server doesn't let connected apps decide requests yet, so a server linked to a real Corral leaves them out; the sample household has them. The same goes for `orders` and `place_order`: Corral has no stores to order from yet, and the sample household orders from a made-up sample store, Valley Feed & Propane.
