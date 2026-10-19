@@ -919,8 +919,8 @@ async function playDemo(short = false, part: DemoPart = "all") {
         if (!(await setClock("morning"))) break;
         await pause(2500);
       }
-      // A yes is only said to a question.
-      if (beat.ifAsked && !saidEl.textContent?.trim().endsWith("?")) continue;
+      // A yes is only said to a question, wherever in her answer she asked it.
+      if (beat.ifAsked && !saidEl.textContent?.includes("?")) continue;
       const speaker = state.speakers.find((p) => p.said === beat.as);
       if (speaker && speaker !== state.speaker) {
         await setSpeaker(speaker);
