@@ -131,6 +131,15 @@ describe("the speaker header in corral mode", () => {
     expect(names).not.toContain("show_approvals");
   });
 
+  it("offers no ordering tools, since Corral's own server has no stores to order from", async () => {
+    fakeCorral();
+    const list = await rpc(env(), "tools/list", {}, { ...linked, ...as("Nick") });
+    const names = (list.body!.result!.tools as { name: string }[]).map((t) => t.name);
+    expect(names).toContain("supplies");
+    expect(names).not.toContain("orders");
+    expect(names).not.toContain("place_order");
+  });
+
   it("still needs a sign-in: the header alone gets a bare 401", async () => {
     fakeCorral();
     expect((await rpc(env(), "tools/call", { name: "calendar", arguments: {} }, as("Nick"))).status).toBe(401);

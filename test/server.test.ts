@@ -1,9 +1,10 @@
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { describe, expect, it } from "vitest";
-import { APPROVAL_TOOLS, CORRAL_TOOLS } from "../src/household.ts";
+import { APPROVAL_TOOLS, CORRAL_TOOLS, ORDER_TOOLS } from "../src/household.ts";
 import worker, { type Env } from "../src/index.ts";
 
 const CTX = { waitUntil() {}, passThroughOnException() {}, props: {} } as unknown as ExecutionContext;
+import { SUPPLIES_URI } from "../src/screens.ts";
 import { TODAY_URI } from "../src/today.ts";
 
 const SAMPLE: Env = { BACKEND: "sample" };
@@ -38,7 +39,7 @@ describe("serving Alexa+ (MCP 2025-11-25 over Streamable HTTP)", () => {
     const { body } = await rpc(SAMPLE, "tools/list");
     const tools = body!.result!.tools as { name: string; annotations?: { readOnlyHint?: boolean }; _meta?: { ui?: { resourceUri?: string; visibility?: string[] } } }[];
     const ranch = ["devices", "set_device", "weather", "trackers", "show_ranch", "refresh_ranch", "show_briefing", "automations", "set_automation", "add_automation"];
-    expect(tools.map((t) => t.name).sort()).toEqual([...CORRAL_TOOLS, ...APPROVAL_TOOLS, "show_today", "refresh_today", "household_version", "show_list", "show_week", "show_supplies", "show_approvals", ...ranch].sort());
+    expect(tools.map((t) => t.name).sort()).toEqual([...CORRAL_TOOLS, ...APPROVAL_TOOLS, ...ORDER_TOOLS, "show_today", "refresh_today", "household_version", "show_list", "show_week", "show_supplies", "show_approvals", ...ranch].sort());
     expect(tools.find((t) => t.name === "show_today")?._meta?.ui?.resourceUri).toBe(TODAY_URI);
     // The screen's own refresh is the screen's alone: hosts keep it from the model.
     expect(tools.find((t) => t.name === "refresh_today")?._meta?.ui?.visibility).toEqual(["app"]);
@@ -74,8 +75,8 @@ describe("serving Alexa+ (MCP 2025-11-25 over Streamable HTTP)", () => {
   it("gives every screen tool its own self-contained page", async () => {
     const { body } = await rpc(SAMPLE, "tools/list");
     const screens = (body!.result!.tools as { name: string; _meta?: { ui?: { resourceUri?: string; visibility?: string[] } } }[]).filter((t) => t._meta?.ui?.resourceUri && !t._meta.ui.visibility);
-    // Switching a ranch device or changing an automation shows the Ranch screen, so the change is in front of whoever asked.
-    expect(screens.map((t) => t.name).sort()).toEqual(["add_automation", "set_automation", "set_device", "show_approvals", "show_briefing", "show_list", "show_ranch", "show_supplies", "show_today", "show_week"]);
+    // Switching a ranch device or changing an automation shows the Ranch screen, and placing an order the Supplies screen, so the change is in front of whoever asked.
+    expect(screens.map((t) => t.name).sort()).toEqual(["add_automation", "place_order", "set_automation", "set_device", "show_approvals", "show_briefing", "show_list", "show_ranch", "show_supplies", "show_today", "show_week"]);
     for (const t of screens) {
       const read = await rpc(SAMPLE, "resources/read", { uri: t._meta!.ui!.resourceUri });
       const [page] = read.body!.result!.contents as { mimeType: string; text: string }[];
@@ -98,6 +99,24 @@ describe("serving Alexa+ (MCP 2025-11-25 over Streamable HTTP)", () => {
     const supplies = (await rpc(SAMPLE, "tools/call", { name: "show_supplies", arguments: {} })).body!.result!.structuredContent;
     expect(supplies.supplies.map((s: { name: string }) => s.name)).toContain("Horse feed");
     expect(supplies.lists).toContain("Feed store");
+  });
+
+  it("orders supplies, answering the order to the assistant and showing it on order on the Supplies screen", async () => {
+    const { body } = await rpc(SAMPLE, "tools/list");
+    const tools = body!.result!.tools as { name: string; annotations: Record<string, boolean>; inputSchema: { required?: string[] }; _meta?: { ui?: { resourceUri?: string } } }[];
+    const place = tools.find((t) => t.name === "place_order")!;
+    expect(place.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false, openWorldHint: true });
+    expect(place.inputSchema.required).toEqual(["items"]);
+    expect(place._meta?.ui?.resourceUri).toBe(SUPPLIES_URI);
+    expect(tools.find((t) => t.name === "orders")?.annotations).toMatchObject({ readOnlyHint: true });
+
+    const result = (await rpc(SAMPLE, "tools/call", { name: "place_order", arguments: { items: [{ supply: "propane" }] } }, { "x-demo-person": "Nick" })).body!.result!;
+    expect(JSON.parse(result.content[0].text)).toMatchObject({ status: "done", summary: expect.stringMatching(/^Ordered 100 gallons of propane from Valley Feed & Propane: \$289\.00, arriving \w{3}, \w{3} \d{1,2}$/), total: "$289.00" });
+    const propane = result.structuredContent.supplies.find((s: { name: string }) => s.name === "Propane");
+    expect(propane).toMatchObject({ low: true, onOrder: { amount: "100 gallons", supplier: "Valley Feed & Propane", arrivesOn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) } });
+
+    const orders = JSON.parse((await rpc(SAMPLE, "tools/call", { name: "orders", arguments: {} })).body!.result!.content[0].text);
+    expect(orders).toEqual([expect.objectContaining({ items: ["100 gallons of propane"], total: "$289.00", totalCents: 28900, status: "placed", by: "Nick", live: false })]);
   });
 
   it("names the household's time zone in its instructions", async () => {

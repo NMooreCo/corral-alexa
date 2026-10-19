@@ -1,15 +1,20 @@
 import { Temporal } from "temporal-polyfill";
 import type { CorralApprovals } from "../approvals.ts";
-import { ToolError, type CorralChange, type CorralEvent, type CorralTask, type CorralWhere, type Household, type HouseholdTool } from "../household.ts";
+import { ToolError, type CorralChange, type CorralEvent, type CorralSupply, type CorralTask, type CorralWhere, type Household, type HouseholdTool } from "../household.ts";
+import { amountWords, and, lineWords, quote, type CorralOrder, type CorralReorder, type CorralSupplyOrder, type Supplier } from "../orders.ts";
 import { clock, dollars, isAllDay, unitAmount, whenLabel } from "./labels.ts";
-import { actorFor, actorOf, approversOf, either, personNamed, refusalFor, type PlanChange, type SampleActor } from "./roles.ts";
-import { seed, type SampleEvent, type SamplePerson, type SampleRequest, type SampleState, type SampleStay, type SampleTask } from "./seed.ts";
+import { actorFor, actorOf, approversOf, either, personNamed, refusalFor, type PlanChange, type RequestChange, type SampleActor } from "./roles.ts";
+import { seed, type SampleEvent, type SampleOrder, type SamplePerson, type SampleRequest, type SampleState, type SampleStay, type SampleSupply, type SampleTask } from "./seed.ts";
+import { SampleSupplier } from "./supplier.ts";
 import { now as clockNow } from "../clock.ts";
 
 type Args = Record<string, unknown>;
 
 /** The tools that change something. A role that only reads gets none of them. */
-const CHANGES = new Set<HouseholdTool>(["add_event", "add_task", "complete_task", "undo_task", "claim_task", "skip_task", "add_list_item", "check_list_item", "update_supply", "decide_approval"]);
+const CHANGES = new Set<HouseholdTool>(["add_event", "add_task", "complete_task", "undo_task", "claim_task", "skip_task", "add_list_item", "check_list_item", "update_supply", "decide_approval", "place_order"]);
+
+/** The most supplies one order asks for. */
+const MAX_ORDER_ITEMS = 12;
 
 /**
  * The sample household, answering Corral's tools the way Corral does, so the
@@ -22,12 +27,18 @@ const CHANGES = new Set<HouseholdTool>(["add_event", "add_task", "complete_task"
 export class SampleHousehold implements Household {
   readonly state: SampleState;
   readonly decidesRequests = true;
+  readonly placesOrders = true;
   readonly #now: () => Temporal.Instant;
+  /** The stores it orders supplies from: the sample's own made-up store, unless others are given. */
+  readonly #suppliers: Supplier[];
+  /** Requests being decided right now. */
+  readonly #deciding = new Set<string>();
 
   /** A fresh household laid out around today, or `state` as it was kept. */
-  constructor(opts: { now?: () => Temporal.Instant; timeZone?: string; state?: SampleState } = {}) {
+  constructor(opts: { now?: () => Temporal.Instant; timeZone?: string; state?: SampleState; suppliers?: Supplier[] } = {}) {
     this.#now = opts.now ?? clockNow;
     this.state = opts.state ?? seed(this.#now(), opts.timeZone);
+    this.#suppliers = opts.suppliers ?? [new SampleSupplier({ now: this.#now, timeZone: this.state.timeZone })];
   }
 
   get name(): string {
@@ -51,6 +62,7 @@ export class SampleHousehold implements Household {
     return {
       name: this.name,
       decidesRequests: true,
+      placesOrders: true,
       about: () => this.about(),
       call: (tool, args) => this.callAs(actorFor(this.state, speaker), tool, args),
       refusal: (action) => refusalFor(this.state, actorFor(this.state, speaker), action),
@@ -95,6 +107,10 @@ export class SampleHousehold implements Household {
         return this.approvals(actor);
       case "decide_approval":
         return this.decide(actor, args);
+      case "orders":
+        return this.orders();
+      case "place_order":
+        return this.placeOrder(actor, args);
     }
   }
 
@@ -234,9 +250,12 @@ export class SampleHousehold implements Household {
     return { balances: kids, turnsInto: [`${this.state.pointsPerFiveDollars} points make $5.00 of allowance`] };
   }
 
-  private supplies() {
+  private async supplies(): Promise<CorralSupply[]> {
+    const reorders = await this.reorders();
     return this.state.supplies.map((s) => {
       const daysLeft = Math.floor(s.quantity / s.perDay);
+      const onOrder = this.onOrder(s);
+      const reorder = reorders.get(s.name.toLowerCase());
       return {
         id: s.id,
         name: s.name,
@@ -247,8 +266,73 @@ export class SampleHousehold implements Household {
         runsOut: this.today().add({ days: daysLeft }).toString(),
         low: s.quantity <= s.lowAt,
         onList: s.onList,
+        ...(onOrder ? { onOrder } : {}),
+        ...(reorder ? { reorder } : {}),
       };
     });
+  }
+
+  /** How each supply a store sells is usually ordered, by its name in lowercase; the first store that sells it says. A store that doesn't answer just says nothing. */
+  private async reorders(): Promise<Map<string, CorralReorder>> {
+    const out = new Map<string, CorralReorder>();
+    const catalogs = await Promise.all(this.#suppliers.map(async (supplier) => ({ supplier, products: await supplier.catalog().catch(() => []) })));
+    for (const { supplier, products } of catalogs) {
+      for (const p of products) {
+        const key = p.supply.trim().toLowerCase();
+        if (out.has(key) || !this.state.supplies.some((s) => s.name.toLowerCase() === key)) continue;
+        out.set(key, { supplier: supplier.name, amount: amountWords(p.usualQuantity, p.unit), price: dollars(p.usualQuantity * p.unitPriceCents), arrives: whenLabel(this.today().add({ days: p.deliveryDays }).toString()) });
+      }
+    }
+    return out;
+  }
+
+  /** The order for a supply that hasn't come yet: the placed one that comes soonest, else one waiting for a yes. */
+  private onOrder(s: SampleSupply): CorralSupplyOrder | null {
+    const open = this.state.orders
+      .filter((o) => this.orderStatus(o) !== "delivered" && o.lines.some((l) => l.supply.toLowerCase() === s.name.toLowerCase()))
+      .sort((a, b) => (a.deliveryDate ?? "9999").localeCompare(b.deliveryDate ?? "9999"));
+    const o = open[0];
+    if (!o) return null;
+    const line = o.lines.find((l) => l.supply.toLowerCase() === s.name.toLowerCase())!;
+    return {
+      order: o.id,
+      amount: amountWords(line.quantity, line.unit),
+      supplier: o.supplier.name,
+      arrives: o.deliveryDate ? whenLabel(o.deliveryDate) : null,
+      arrivesOn: o.deliveryDate,
+      ...(o.status === "waiting_for_approval" ? { waitingFor: this.waitingFor(o) } : {}),
+    };
+  }
+
+  /** Every order, in words: waiting ones first, then what's coming soonest, then what's come. */
+  private orders(): CorralOrder[] {
+    const rank = { waiting_for_approval: 0, placed: 1, delivered: 2 } as const;
+    return this.state.orders
+      .map((o) => ({ o, status: this.orderStatus(o) }))
+      .sort((a, b) => rank[a.status] - rank[b.status] || (a.status === "delivered" ? -1 : 1) * (a.o.deliveryDate ?? a.o.at).localeCompare(b.o.deliveryDate ?? b.o.at))
+      .map(({ o, status }) => ({
+        id: o.id,
+        supplier: o.supplier.name,
+        items: o.lines.map(lineWords),
+        total: dollars(o.totalCents),
+        totalCents: o.totalCents,
+        status,
+        arrives: o.deliveryDate ? whenLabel(o.deliveryDate) : null,
+        by: o.by ? this.shortNameOf(o.by) : this.screenName(),
+        ...(status === "waiting_for_approval" ? { waitingFor: this.waitingFor(o) } : {}),
+        live: o.supplier.live,
+      }));
+  }
+
+  /** A placed order is delivered once its delivery day comes, in the household's time zone. */
+  private orderStatus(o: SampleOrder): CorralOrder["status"] {
+    if (o.status === "placed" && o.deliveryDate && Temporal.PlainDate.compare(Temporal.PlainDate.from(o.deliveryDate), this.today()) <= 0) return "delivered";
+    return o.status;
+  }
+
+  /** Who can say yes to a waiting order: anyone who approves, besides whoever placed it. */
+  private waitingFor(o: SampleOrder): string {
+    return this.decidedBy(o.by ? this.state.people.find((p) => p.id === o.by) : null);
   }
 
   // ---------- Changing ----------
@@ -259,11 +343,11 @@ export class SampleHousehold implements Household {
     return rule === "always" || (rule === "for_others" && forOthers);
   }
 
-  /** Keeps a change as a request for an approver, and says so, the way Corral answers. */
-  private hold(actor: SampleActor, tool: PlanChange, args: Args, summary: string): CorralChange {
+  /** Keeps a change as a request for an approver, and says so, the way Corral answers; `note` says why, when that's worth saying. */
+  private hold(actor: SampleActor, tool: RequestChange, args: Args, summary: string, note?: string): CorralChange & { status: "waiting_for_approval" } {
     const id = crypto.randomUUID();
     this.state.requests.push({ id, from: actor.person?.id ?? null, summary, at: this.#now().toZonedDateTimeISO(this.state.timeZone).toString(), change: { tool, args }, status: "pending" });
-    return { status: "waiting_for_approval", summary, approvers: this.approvers().filter((p) => p.id !== actor.person?.id).map((p) => p.shortName), requestId: id };
+    return { status: "waiting_for_approval", summary, approvers: this.approvers().filter((p) => p.id !== actor.person?.id).map((p) => p.shortName), requestId: id, ...(note ? { note } : {}) };
   }
 
   /** `approved`: an approver said yes to it, so it happens now whoever asked. */
@@ -356,9 +440,14 @@ export class SampleHousehold implements Household {
     return { status: "done", summary: `Checked off ${found.it.text} on ${found.l.name}` };
   }
 
+  /** A supply by its id or however someone says its name, or none. */
+  private supplyNamed(v: unknown): SampleSupply | undefined {
+    const said = String(v ?? "").trim().toLowerCase();
+    return this.state.supplies.find((x) => x.id === v || x.name.toLowerCase() === said) ?? this.state.supplies.find((x) => said && x.name.toLowerCase().includes(said));
+  }
+
   private updateSupply(args: Args): CorralChange {
-    const said = String(args.supply ?? "").trim().toLowerCase();
-    const s = this.state.supplies.find((x) => x.id === args.supply || x.name.toLowerCase() === said) ?? this.state.supplies.find((x) => said && x.name.toLowerCase().includes(said));
+    const s = this.supplyNamed(args.supply);
     if (!s) throw new ToolError(`There's no supply called "${args.supply}" here. Look it up with the supplies tool.`);
     const amount = Number(args.amount);
     if (!Number.isFinite(amount) || amount < 0) throw new ToolError("Give an amount of 0 or more.");
@@ -367,6 +456,75 @@ export class SampleHousehold implements Household {
     else if (args.change === "count") s.quantity = amount;
     else throw new ToolError('The change is "used", "added" or "count".');
     return { status: "done", summary: `${s.name}: ${unitAmount(s.quantity, s.unit)} left` };
+  }
+
+  // ---------- Ordering ----------
+
+  /**
+   * Orders supplies from one of the household's stores. Someone whose role
+   * doesn't order (a kid, the farm hand, the shared screen) asks instead, so
+   * it waits for a parent; an order over the household's limit waits for
+   * someone besides whoever placed it. Otherwise it's placed with the store
+   * now, and the answer says what it cost and when it comes.
+   */
+  private async placeOrder(actor: SampleActor, args: Args): Promise<CorralChange> {
+    const raw = Array.isArray(args.items) ? args.items : [];
+    if (!raw.length || raw.length > MAX_ORDER_ITEMS) throw new ToolError(`Say what to order: one to ${MAX_ORDER_ITEMS} of the supplies from the supplies tool.`);
+    const items = raw.map((it) => {
+      const item = (it && typeof it === "object" ? it : { supply: it }) as Args;
+      const s = this.supplyNamed(item.supply);
+      if (!s) throw new ToolError(`There's no supply called "${String(item.supply ?? "")}" here to order. Supplies: ${this.state.supplies.map((x) => x.name).join(", ")}.`);
+      return { supply: s.name, quantity: item.quantity };
+    });
+    const q = await quote(this.#suppliers, items, { supplier: args.supplier, today: this.today() });
+    const what = `${and(q.lines.map(lineWords))} from ${q.supplier.name}`;
+    const order: SampleOrder = {
+      id: crypto.randomUUID(),
+      supplier: { id: q.supplier.id, name: q.supplier.name, live: q.supplier.live },
+      lines: q.lines,
+      totalCents: q.totalCents,
+      by: actor.person?.id ?? null,
+      at: this.#now().toZonedDateTimeISO(this.state.timeZone).toString(),
+      status: "waiting_for_approval",
+      deliveryDate: null,
+      reference: null,
+      request: null,
+    };
+
+    const limit = this.state.orderLimitCents;
+    const overLimit = limit !== null && q.totalCents > limit;
+    if (!actor.role.orders || overLimit) {
+      const others = this.approvers().filter((p) => p.id !== actor.person?.id);
+      const over = overLimit ? `It's ${dollars(q.totalCents)}, over ${this.state.name}'s ${dollars(limit!)} limit for one order` : "";
+      if (overLimit && actor.role.orders && !others.length) throw new ToolError(`${over}, and no one else here approves requests, so nothing was ordered.`);
+      // A kid's order waits anyway; the limit is worth saying only when it's why.
+      const note = overLimit && actor.role.orders ? `${over}, so ${either(others.map((p) => p.shortName))} decides.` : undefined;
+      const held = this.hold(actor, "place_order", { order: order.id }, `Order ${what}, ${dollars(q.totalCents)}`, note);
+      order.request = held.requestId;
+      this.state.orders.push(order);
+      return held;
+    }
+    await this.send(order);
+    this.state.orders.push(order);
+    const arrives = whenLabel(order.deliveryDate!);
+    return { status: "done", summary: `Ordered ${what}: ${dollars(order.totalCents)}, arriving ${arrives}`, order: order.id, total: dollars(order.totalCents), arrives };
+  }
+
+  /** Places an order with its store, and keeps what the store answered. If the store won't take it, nothing changes. */
+  private async send(order: SampleOrder): Promise<void> {
+    const supplier = this.#suppliers.find((s) => s.id === order.supplier.id);
+    if (!supplier) throw new ToolError(`${order.supplier.name} isn't one of ${this.state.name}'s stores anymore, so nothing was ordered.`);
+    let receipt;
+    try {
+      receipt = await supplier.placeOrder(order.lines.map((l) => ({ product: l.product, quantity: l.quantity })));
+    } catch (err) {
+      if (err instanceof ToolError) throw err;
+      throw new ToolError(`${supplier.name} didn't take the order just now, so nothing was ordered. Try again in a moment.`);
+    }
+    order.status = "placed";
+    order.deliveryDate = receipt.deliveryDate;
+    order.reference = receipt.reference;
+    order.totalCents = receipt.totalCents;
   }
 
   // ---------- Approvals ----------
@@ -397,45 +555,71 @@ export class SampleHousehold implements Household {
     return `Requests aren't decided on a shared screen: ${this.decidedBy()} decide them as themselves.`;
   }
 
-  private decide(actor: SampleActor, args: Args): CorralChange {
+  private async decide(actor: SampleActor, args: Args): Promise<CorralChange> {
     const me = actor.person;
     if (!me) throw new ToolError(this.screenNote());
     const r = this.state.requests.find((x) => x.id === args.request);
-    if (!actor.role.approves) {
-      if (r?.from === me.id) throw new ToolError(`They can't approve or decline their own request, which waits for ${this.decidedBy(me)}.`);
-      throw new ToolError(`Only ${this.decidedBy()} can approve or decline requests.`);
-    }
+    // No one decides their own request, a parent's big order included.
+    if (r?.from === me.id) throw new ToolError(`They can't approve or decline their own request, which waits for ${this.decidedBy(me)}.`);
+    if (!actor.role.approves) throw new ToolError(`Only ${this.decidedBy()} can approve or decline requests.`);
     if (!r) throw new ToolError("Use the request's id from the approvals tool.");
     if (r.status !== "pending") throw new ToolError(`That request was already ${r.status}${r.decidedBy ? ` by ${this.shortNameOf(r.decidedBy)}` : ""}.`);
     if (args.decision !== "approve" && args.decision !== "decline") throw new ToolError('The decision is "approve" or "decline".');
     // Approving makes the change as it was asked, as whoever asked; if it can't happen now, the request stays.
-    if (args.decision === "approve") this.apply(r);
-    else this.discard(r);
+    // An order waits on its store, so a second yes while the first is still out can't place it twice.
+    if (this.#deciding.has(r.id)) throw new ToolError("That request is being decided right now.");
+    this.#deciding.add(r.id);
+    let placed: SampleOrder | null = null;
+    try {
+      if (args.decision === "approve") placed = await this.apply(r);
+      else this.discard(r);
+    } finally {
+      this.#deciding.delete(r.id);
+    }
     r.status = args.decision === "approve" ? "approved" : "declined";
     r.decidedBy = me.id;
     const asker = r.from ? `${this.shortNameOf(r.from)}'s` : `${this.state.actingAs}'s`;
-    return { status: "done", summary: `${args.decision === "approve" ? "Approved" : "Declined"} ${asker} request: ${r.summary}` };
+    const summary = `${args.decision === "approve" ? "Approved" : "Declined"} ${asker} request: ${r.summary}`;
+    if (!placed?.deliveryDate) return { status: "done", summary };
+    const arrives = whenLabel(placed.deliveryDate);
+    return { status: "done", summary: `${summary}. It arrives ${arrives}.`, order: placed.id, arrives };
   }
 
-  private apply(r: SampleRequest): void {
+  /** Makes the change a request asked for. An order is placed with its store, and comes back so the answer can say when it arrives. */
+  private async apply(r: SampleRequest): Promise<SampleOrder | null> {
     const from = r.from ? this.state.people.find((p) => p.id === r.from) : undefined;
     const asker = from ? actorOf(this.state, from) : actorFor(this.state, null);
     const { tool, args } = r.change;
     if (tool === "add_event") this.addEvent(asker, args, true);
     else if (tool === "add_task") this.addTask(asker, args, true);
     else if (tool === "skip_task") this.markTask(asker, "skip_task", args, true);
-    else {
+    else if (tool === "place_order") {
+      const order = this.waitingOrder(r);
+      if (!order) throw new ToolError("That order isn't waiting anymore.");
+      await this.send(order);
+      return order;
+    } else {
       const item = this.waitingItem(r);
       if (item) item.approved = true;
     }
+    return null;
   }
 
-  /** Declining a list item takes it back off the list; anything else was never made. */
+  /** Declining a list item takes it back off the list, and declining an order takes it off the orders; anything else was never made. */
   private discard(r: SampleRequest): void {
+    if (r.change.tool === "place_order") {
+      const order = this.waitingOrder(r);
+      if (order) this.state.orders.splice(this.state.orders.indexOf(order), 1);
+      return;
+    }
     if (r.change.tool !== "add_list_item") return;
     const item = this.waitingItem(r);
     const list = this.state.lists.find((l) => l.items.includes(item!));
     if (item && list) list.items.splice(list.items.indexOf(item), 1);
+  }
+
+  private waitingOrder(r: SampleRequest): SampleOrder | undefined {
+    return this.state.orders.find((o) => o.request === r.id && o.status === "waiting_for_approval");
   }
 
   private waitingItem(r: SampleRequest) {
@@ -446,7 +630,11 @@ export class SampleHousehold implements Household {
 
   /** "Eli", or "The kitchen screen". */
   private askedBy(r: SampleRequest): string {
-    if (r.from) return this.shortNameOf(r.from);
+    return r.from ? this.shortNameOf(r.from) : this.screenName();
+  }
+
+  /** "The kitchen screen", for something no one in particular did. */
+  private screenName(): string {
     return this.state.actingAs.charAt(0).toUpperCase() + this.state.actingAs.slice(1);
   }
 

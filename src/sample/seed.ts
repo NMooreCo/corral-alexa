@@ -1,6 +1,7 @@
 import { Temporal } from "temporal-polyfill";
 import type { CorralAsk } from "../household.ts";
-import { sampleRoles, type PlanChange, type SampleRole } from "./roles.ts";
+import type { OrderLine } from "../orders.ts";
+import { sampleRoles, type RequestChange, type SampleRole } from "./roles.ts";
 
 /**
  * The sample household: a family ranch with two parents, two kids and a farm
@@ -93,10 +94,31 @@ export interface SampleRequest {
   summary: string;
   /** When it was asked, zoned. */
   at: string;
-  /** The change, as the tool that made it would make it. */
-  change: { tool: PlanChange; args: Record<string, unknown> };
+  /** The change, as the tool that made it would make it; an order names the waiting order it places. */
+  change: { tool: RequestChange; args: Record<string, unknown> };
   status: "pending" | "approved" | "declined";
   decidedBy?: string;
+}
+
+/** An order from one of the household's stores, placed or waiting for someone's yes. */
+export interface SampleOrder {
+  id: string;
+  /** The store it's from, as it was when it was ordered. */
+  supplier: { id: string; name: string; live: boolean };
+  lines: OrderLine[];
+  totalCents: number;
+  /** Who placed it, a person's id; null when it came from the shared screen. */
+  by: string | null;
+  /** When it was asked for, zoned. */
+  at: string;
+  /** A placed order is delivered once its delivery day comes. */
+  status: "waiting_for_approval" | "placed";
+  /** The day it arrives, like "2026-10-20", once it's placed. */
+  deliveryDate: string | null;
+  /** The store's reference, once it's placed. */
+  reference: string | null;
+  /** The request it waited on, when it needed a yes. */
+  request: string | null;
 }
 
 export interface SampleState {
@@ -119,6 +141,10 @@ export interface SampleState {
   pointsPerFiveDollars: number;
   /** Changes asked for, waiting or decided. */
   requests: SampleRequest[];
+  /** Orders from the household's stores. */
+  orders: SampleOrder[];
+  /** An order over this many cents waits for a yes from someone besides whoever placed it, so no one spends that much alone; null for no limit. */
+  orderLimitCents: number | null;
 }
 
 export function seed(now: Temporal.Instant, timeZone = "America/Denver"): SampleState {
@@ -185,6 +211,8 @@ export function seed(now: Temporal.Instant, timeZone = "America/Denver"): Sample
     { id: id(), name: "Hay", quantity: 46, unit: "bale", perDay: 2, lowAt: 10, onList: null },
     { id: id(), name: "Dog food", quantity: 4, unit: "lb", perDay: 1.25, lowAt: 5, onList: null },
     { id: id(), name: "Layer pellets", quantity: 1, unit: "bag", perDay: 0.2, lowAt: 1, onList: "Feed store" },
+    // The 250 gallon tank the ranch's propane tank reads as a percent: 18% is 45 gallons, and it's low under 20%.
+    { id: id(), name: "Propane", quantity: 45, unit: "gallon", perDay: 3.5, lowAt: 50, onList: null },
   ];
 
   // Today and tomorrow, back to back for each person; staying put over midnight is one stay.
@@ -228,5 +256,7 @@ export function seed(now: Temporal.Instant, timeZone = "America/Denver"): Sample
     pointsPerFiveDollars: 100,
     // The ice cream on the grocery list is Jak's ask, waiting for a parent.
     requests: [{ id: id(), from: jak.id, summary: "Ice cream on Groceries", at: now.subtract({ minutes: 90 }).toZonedDateTimeISO(timeZone).toString(), change: { tool: "add_list_item", args: { list: "Groceries", text: "Ice cream" } }, status: "pending" }],
+    orders: [],
+    orderLimitCents: 30_000,
   };
 }

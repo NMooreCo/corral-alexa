@@ -1,3 +1,5 @@
+import type { CorralReorder, CorralSupplyOrder } from "./orders.ts";
+
 /**
  * The household the tools answer from. Both kinds, the built-in sample and a
  * real Corral, answer Corral's own MCP tools by name, with the same arguments
@@ -36,13 +38,24 @@ export type CorralTool = (typeof CORRAL_TOOLS)[number];
 export const APPROVAL_TOOLS = ["approvals", "decide_approval"] as const;
 
 export type ApprovalTool = (typeof APPROVAL_TOOLS)[number];
-export type HouseholdTool = CorralTool | ApprovalTool;
+
+/**
+ * Ordering supplies from the household's stores. Corral's own MCP server has
+ * no stores to order from yet, so a linked household doesn't offer these;
+ * the sample household does, from a sample store.
+ */
+export const ORDER_TOOLS = ["orders", "place_order"] as const;
+
+export type OrderTool = (typeof ORDER_TOOLS)[number];
+export type HouseholdTool = CorralTool | ApprovalTool | OrderTool;
 
 export interface Household {
   /** The household's name, when already known, for screens and the server's instructions. */
   readonly name?: string;
   /** Whether it answers the approval tools. */
   readonly decidesRequests?: boolean;
+  /** Whether it answers the order tools: it has stores to order supplies from. */
+  readonly placesOrders?: boolean;
   /** The household's name and time zone, looked up if need be. */
   about(): Promise<HouseholdAbout>;
   /** Calls one of its tools. Throws ToolError for an answer the model should hear and can act on. */
@@ -78,6 +91,10 @@ export interface CorralSupply {
   low: boolean;
   /** The list it's already on, if any. */
   onList: string | null;
+  /** An order for it that hasn't come yet, when the household orders supplies. */
+  onOrder?: CorralSupplyOrder;
+  /** How a store the household orders from sells it, when one does. */
+  reorder?: CorralReorder;
 }
 
 /** A list item as Corral's lists tool says it. */
@@ -143,4 +160,4 @@ export interface CorralWhere {
 /** The answer to a change: done now, or sent to someone to approve. */
 export type CorralChange =
   | { status: "done"; summary: string; [more: string]: unknown }
-  | { status: "waiting_for_approval"; summary: string; approvers: string[]; requestId: string };
+  | { status: "waiting_for_approval"; summary: string; approvers: string[]; requestId: string; note?: string };

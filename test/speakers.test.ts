@@ -126,6 +126,7 @@ describe("a guest", () => {
       ["add_task", { title: "Feed the cat" }],
       ["update_supply", { supply: "Hay", change: "count", amount: 3 }],
       ["decide_approval", { request: h.state.requests[0]!.id, decision: "approve" }],
+      ["place_order", { items: [{ supply: "Hay" }] }],
     ];
     for (const [tool, args] of tries) {
       await expect(h.as("Stranger").call(tool, args)).rejects.toThrow(new ToolError("Only people in Juniper Hollow can change things here, by voice or on the screen, and this voice isn't one of them."));

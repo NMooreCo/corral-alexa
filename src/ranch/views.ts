@@ -1,3 +1,4 @@
+import { Temporal } from "temporal-polyfill";
 import { ToolError, type CorralEvent, type CorralSupply, type CorralTask, type CorralWhere, type Household } from "../household.ts";
 import { labelPoint, mapFrame, pathOf, propertyPlane } from "./geo.ts";
 import type { Ranch } from "./index.ts";
@@ -184,6 +185,15 @@ function greeting(hour: number): string {
 
 const list = <T>(p: Promise<unknown>) => optional(p).then((v) => (Array.isArray(v) ? (v as T[]) : []));
 
+/** A day as people say it from `today`: "today", "tomorrow", "Tuesday" within the week, else "Mon, Nov 2". */
+function dayName(date: string, today: Temporal.PlainDate): string {
+  const day = Temporal.PlainDate.from(date);
+  const days = today.until(day).days;
+  if (days <= 0) return "today";
+  if (days === 1) return "tomorrow";
+  return day.toLocaleString("en-US", days < 7 ? { weekday: "long" } : { weekday: "short", month: "short", day: "numeric" });
+}
+
 /** Today's label prefix ("Sat, Oct 17, ") off a Corral time, leaving "10:00 AM to 11:00 AM". */
 function timeOf(when: string, today: string): string {
   if (when.endsWith("(all day)")) return "All day";
@@ -255,14 +265,17 @@ export async function briefingView(household: Household, ranch: Ranch): Promise<
     warn: late.length > 0,
   });
 
-  // Low supplies.
+  // Low supplies. One that's on order, or on a list, is taken care of.
   const low = supplies.filter((s) => s.low);
+  const handled = (s: CorralSupply) => Boolean(s.onList || s.onOrder?.arrivesOn);
+  const status = (s: CorralSupply) =>
+    s.onOrder?.arrivesOn ? ` (on order, arrives ${dayName(s.onOrder.arrivesOn, local.toPlainDate())})` : s.onOrder ? ` (ordered, waiting for ${s.onOrder.waitingFor ?? "a yes"})` : s.onList ? ` (on ${s.onList})` : " (not on a list)";
   cards.push({
     id: "supplies",
     title: "Supplies",
     headline: low.length ? `${low.length} running low` : "Nothing running low",
-    lines: low.map((s) => ({ text: `${s.name}: ${s.onHand}${s.daysLeft !== undefined ? `, about ${s.daysLeft} day${s.daysLeft === 1 ? "" : "s"}` : ""}${s.onList ? ` (on ${s.onList})` : " (not on a list)"}`, warn: !s.onList })),
-    warn: low.some((s) => !s.onList),
+    lines: low.map((s) => ({ text: `${s.name}: ${s.onHand}${s.daysLeft !== undefined ? `, about ${s.daysLeft} day${s.daysLeft === 1 ? "" : "s"}` : ""}${status(s)}`, warn: !handled(s) })),
+    warn: low.some((s) => !handled(s)),
   });
 
   // Animals.
