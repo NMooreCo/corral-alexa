@@ -38,11 +38,11 @@ Written while building, so each entry is what actually happened. For the Devpost
 | A public sandbox of the web simulator (or the Local Inspector) for hackathons and independent developers | Builders can't see how their MCP App renders on an Echo Show, or how Alexa+ chooses their tools, before partnership | Critical |
 | Read path-specific protected resource metadata (RFC 9728 section 3.1) as well as the root document | Standard MCP servers and OAuth libraries serve only the path-specific one, so every server needs a workaround | Important |
 | Publish Alexa's account-linking redirect URIs, or support Client ID Metadata Documents | Removes the create-placeholder-then-update dance for the fixed client | Important |
-| Say whether a `WWW-Authenticate` header on a 401 is ignored or breaks linking | It's the MCP spec's primary discovery signal; servers shouldn't have to strip it for one client | Important |
+| Ignore a `WWW-Authenticate` header on a 401 instead of failing account linking | It's the MCP spec's primary discovery signal and standard OAuth libraries add it; today every server has to strip it for one client (F3) | Important |
 | An Alexa+ identity for shared devices (a household screen rather than one person) in account linking | A kitchen Echo is used by the whole family; linking it as one adult's account reads that adult's private things aloud | Nice to have |
 | A per-request "who's speaking" claim for multi-user devices (signed, in `_meta` or a header), or guidance that each recognized voice links separately | Alexa+ knows voices, but MCP identity is one bearer token per connection, so a family's rules can't follow the person speaking (F12) | Important |
 | A standard change signal for stateless MCP servers and MCP Apps (a change token in a tool result's `_meta` that hosts watch or poll) | Every app with shared state on two devices reinvents a poll (F11) | Nice to have |
-| A way for an MCP add-on to start a proactive notification on the household's devices (the chime, the yellow light, a spoken "heads up"), with who should hear it | A ranch needs to hear "a dog just left the fence" when it happens, not when someone asks; stateless MCP can't push, so our simulator polls a screen-only tool, which a real Echo couldn't | Important |
+| Document how an MCP add-on starts a proactive notification on the household's devices (the chime, the yellow light, a spoken "heads up"), with who should hear it | The Alexa team told us add-ons get a way to do this, but the MCP Toolkit pages don't show it. A ranch needs to hear "a dog just left the fence" when it happens, not when someone asks; stateless MCP can't push, so our simulator polls a screen-only tool instead | Important |
 | A way to mark a tool as an action that updates a screen, as distinct from one that opens a screen | Hosts and previews that open screens by calling their tools with no arguments call actions like `set_device` too (F14) | Nice to have |
 | An app-to-host request to open another tool's screen (with arguments), without a model turn | A touch screen needs taps that move between screens instantly; today a screen can only reach another through the model, so ours had to merge into one bundle with tabs (F18) | Important |
 
@@ -73,10 +73,10 @@ Written while building, so each entry is what actually happened. For the Devpost
 - **Task:** answer an unlinked call so Alexa+ starts account linking.
 - **Steps:** read the MCP authorization spec (a 401 with a `WWW-Authenticate` challenge naming the resource metadata), then the Alexa+ account-linking quickstart, then built the 401 on `/mcp`.
 - **Expected:** the MCP spec's 401 with a `WWW-Authenticate` challenge pointing at the metadata.
-- **Actual:** the quickstart says the server returns 401 "without a `WWW-Authenticate` header", and lists the header as not supported yet. It isn't clear whether its presence is ignored or breaks linking.
+- **Actual:** the quickstart says the server returns 401 "without a `WWW-Authenticate` header", and lists the header as not supported yet, without saying what happens if it's there. The Alexa team confirmed on the hackathon Discord that it breaks linking.
 - **Severity:** Medium.
 - **Workaround:** the bridge strips the header on `/mcp` (spec-following clients fall back to the well-known address).
-- **Suggestion:** say "ignored" if it is, so servers can keep the spec's challenge.
+- **Suggestion:** ignore the header, so servers can keep the spec's challenge; until then, have the quickstart say it breaks linking, not just that it isn't supported.
 
 ### F4. The fixed client's redirect URIs
 

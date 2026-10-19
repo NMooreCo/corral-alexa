@@ -17,7 +17,7 @@ const providers = new Map<string, OAuthProvider<Env>>();
 
 /**
  * Alexa+ reads the protected resource metadata from its well-known address
- * and doesn't take a challenge header on a 401 yet, so /mcp answers 401 bare.
+ * and a challenge header on a 401 breaks its account linking, so /mcp answers 401 bare.
  * MCP clients that would read the header find the same metadata by its
  * well-known address instead, as the spec has them do when it's missing.
  */
