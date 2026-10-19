@@ -1,5 +1,7 @@
 # Corral for Alexa+
 
+[![Check](https://github.com/NMooreCo/corral-alexa/actions/workflows/check.yml/badge.svg)](https://github.com/NMooreCo/corral-alexa/actions/workflows/check.yml)
+
 Alexa can set a timer. It can't tell you whose turn it is to cook, who has the 4:00 pickup, whether the dog got her pill, or that you're down to two bags of horse feed. [Corral](https://corral.narralogy.ai) can. It's the household platform one family and ranch run on every day: the shared calendar, chores and who did them, shopping lists, where everyone is, kids' points, and supplies.
 
 On a ranch it also runs the place: **"Alexa, run the greenhouse misters for 30 seconds"** turns on real misters through a real greenhouse controller, and **"It's going down to 12 tonight. Get the place ready."** has Alexa+ read the forecast, every heater, the animals' GPS collars and who's home, then get the night ready in one confirmation.
@@ -12,6 +14,7 @@ On a ranch it also runs the place: **"Alexa, run the greenhouse misters for 30 s
 
 - **[The simulated Echo Show](https://alexa-demo.corral.narralogy.ai/echo)**: talk to it (or type), watch it call Corral's tools over MCP, tap the screens, and pick who's speaking to watch the family's rules follow the person. It runs on a made-up household, Juniper Hollow. The demo passcode is in the submission's testing instructions.
 - **[Two Echo Shows, one household](https://alexa-demo.corral.narralogy.ai/echo?devices=2)**: a kitchen Echo Show 8 and a barn Echo Show 5 side by side. Check a chore off on one and watch the other catch up.
+- **Your own household:** each visitor to the simulator gets a sample household of their own, kept in their browser, so nobody else's "Make it evening" or "Next morning" moves your clock. Its id is in the address, so the link shares it with another device or a teammate; `?household=demo` joins the shared one the MCP endpoint uses.
 - **The MCP server**: `https://alexa-demo.corral.narralogy.ai/mcp` (the sample household, open) and `https://alexa.corral.narralogy.ai/mcp` (linked to a real Corral, behind account linking).
 - **In Claude**: add `https://alexa-demo.corral.narralogy.ai/mcp` as a custom connector (no sign-in) and ask "What's going on tonight at Juniper Hollow? Show me the day." Claude calls the same tools and draws the same screens in the chat, tabs and all.
 - **The Agent Skill**: [`skills/corral-household`](skills/corral-household/SKILL.md), also served as the MCP prompt `household-assistant`.
@@ -241,7 +244,7 @@ The demo's shared household is a SQLite-backed Durable Object, declared with Wra
 pnpm check
 ```
 
-Builds every page, typechecks (Worker and screens), and runs the tests:
+Builds every page, typechecks (Worker and screens), and runs the tests. GitHub Actions runs the same on every push ([`.github/workflows/check.yml`](.github/workflows/check.yml)):
 
 - the sample household's answers;
 - who's talking: each role's rules as data (private events, the farm hand, guests, what waits for a parent), approvals from a kid's request through a parent's yes to the calendar, the speaker header in sample mode, and corral mode ignoring it;
