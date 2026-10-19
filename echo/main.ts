@@ -144,7 +144,7 @@ new ResizeObserver(fit).observe(embedded ? stageEl : deviceEl);
 if (embedded) addEventListener("resize", fit);
 
 function tick() {
-  $("idle-clock").textContent = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: householdTimeZone() });
+  $("idle-clock").textContent = householdNow().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: householdTimeZone() });
 }
 setInterval(tick, 15_000);
 
@@ -227,6 +227,51 @@ const uiByTool = new Map<string, string>();
 const uiHtml = new Map<string, string>();
 let instructions = "";
 
+/** How far the household's clock is from this device's: a household can run at another hour (evening, for the demo). */
+let householdSkewMs = 0;
+let householdEvening = false;
+
+/** Now, by the household's clock. */
+function householdNow(): Date {
+  return new Date(Date.now() + householdSkewMs);
+}
+
+/** Reads the household's clock from /household, and says on the button what it's set to. */
+async function readClock() {
+  const res = await fetch(householdUrl("/household"), { cache: "no-store" }).catch(() => null);
+  const body = (await res?.json().catch(() => null)) as { clock?: { now?: string; evening?: boolean } } | null;
+  if (body?.clock?.now && !Number.isNaN(Date.parse(body.clock.now))) householdSkewMs = Date.parse(body.clock.now) - Date.now();
+  householdEvening = Boolean(body?.clock?.evening);
+  $("evening").textContent = householdEvening ? "Back to the real time" : "Make it evening";
+  tick();
+}
+
+/** Sets the household's clock to evening or back to the real time; the household starts over at that hour. True when it worked. */
+async function setClock(mode: "evening" | "now"): Promise<boolean> {
+  const res = await fetch(householdUrl("/household/clock"), {
+    method: "POST",
+    headers: { "content-type": "application/json", ...(passcode() ? { "x-demo-passcode": passcode()! } : {}) },
+    body: JSON.stringify({ mode }),
+  }).catch(() => null);
+  if (res?.status === 401) {
+    const tried = passcode() !== null;
+    if (tried) rememberPasscode(null);
+    askForPasscode(tried ? "That passcode didn't work. Check it and try again." : "Enter the demo passcode to set the household's clock.");
+    return false;
+  }
+  if (!res?.ok) {
+    caption("", "Couldn't set the household's clock. Try again.");
+    return false;
+  }
+  await readClock();
+  newConversation();
+  await loadSpeakers();
+  addLog(modelLog, "page", mode === "evening" ? "Set the household's clock to evening" : "Set the household's clock back to the real time");
+  await home().catch(() => {});
+  return true;
+}
+$("evening").addEventListener("click", () => void setClock(householdEvening ? "now" : "evening"));
+
 function householdTimeZone(): string {
   return /time zone is ([A-Za-z_]+\/[A-Za-z_/]+)/.exec(instructions)?.[1] ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
@@ -258,6 +303,7 @@ async function connect() {
     if (page?.text) uiHtml.set(uri, page.text);
   }
   await loadSpeakers();
+  await readClock();
   state.actor = "screen";
   tick();
 }
@@ -462,7 +508,7 @@ async function callModel(): Promise<Reply> {
     body: JSON.stringify({
       messages: state.messages,
       tools: modelTools,
-      context: { instructions, timeZone, now: new Date().toLocaleString("en-US", { timeZone, dateStyle: "full", timeStyle: "short" }), ...(place ? { place } : {}) },
+      context: { instructions, timeZone, now: householdNow().toLocaleString("en-US", { timeZone, dateStyle: "full", timeStyle: "short" }), ...(place ? { place } : {}) },
     }),
   });
   const body = (await res.json().catch(() => ({}))) as Reply & { error?: { code?: string; message?: string } };
@@ -738,6 +784,7 @@ addEventListener("message", (e) => {
   if (msg.action === "new-conversation") {
     newConversation();
     void loadSpeakers();
+    void readClock();
   }
   if (msg.action === "home") void home().catch(() => {});
   if (msg.action === "passcode") askForPasscode(msg.note ?? "Enter the demo passcode.");
@@ -843,7 +890,9 @@ async function playDemo(short = false) {
   handsFreeEl.checked = false;
   recognition?.stop();
   try {
-    await startOver();
+    // The demo is an evening at the ranch whatever the time, so the household's clock is set to evening (which starts it over).
+    if (householdEvening) await startOver();
+    else if (!(await setClock("evening"))) return;
     if (!passcodeForm.hidden) return; // It needs the passcode first; the card is showing.
     await pause(2500);
     for (const beat of short ? DEMO.filter((b) => b.short) : DEMO) {

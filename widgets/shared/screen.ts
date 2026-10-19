@@ -47,6 +47,18 @@ export interface Screen<V> {
  */
 const SYNC_MS = 3_000;
 
+/**
+ * How far the household's clock is from this device's, from the `at` a view
+ * carries. A simulator can run its household at another hour, and a screen's
+ * clock, "now" and countdowns follow the household rather than the device.
+ */
+let skewMs = 0;
+
+/** Now, by the household's clock. */
+export function householdNow(): Date {
+  return new Date(Date.now() + skewMs);
+}
+
 export async function startScreen<V>(opts: ScreenOptions<V>): Promise<Screen<V>> {
   const app = new App({ name: opts.name, version: "0.2.0" });
   let view: V | null = null;
@@ -65,6 +77,8 @@ export async function startScreen<V>(opts: ScreenOptions<V>): Promise<Screen<V>>
 
   const rerender = () => view && opts.render(view);
   const show = (result: CallToolResult) => {
+    const at = (result.structuredContent as { at?: unknown } | undefined)?.at;
+    if (typeof at === "string" && !Number.isNaN(Date.parse(at))) skewMs = Date.parse(at) - Date.now();
     const v = opts.read(result);
     if (v) {
       view = v;
@@ -207,7 +221,7 @@ export function firstName(name: string): string {
 
 /** Today as Corral labels days ("Fri, Oct 16"), in the host's time zone. */
 export function todayLabel(timeZone?: string): string {
-  return new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone });
+  return householdNow().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone });
 }
 
 /** Corral says times like "Fri, Oct 16, 3:30 PM"; today's own date is left off. */

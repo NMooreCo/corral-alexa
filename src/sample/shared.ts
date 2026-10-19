@@ -39,6 +39,11 @@ export class SharedSample implements Household {
   /** A sample household decides its own requests, so a parent can approve a kid's. */
   readonly decidesRequests = true;
 
+  /** Now, by the household's clock. */
+  now(): Temporal.Instant {
+    return this.#now();
+  }
+
   about(): Promise<HouseholdAbout> {
     return this.#current().about();
   }
@@ -64,6 +69,7 @@ export class SharedSample implements Household {
       call: (tool, args) => shared.#callAs(speaker, tool, args),
       version: () => shared.version(),
       refusal: (action) => shared.#current().as(speaker).refusal?.(action) ?? null,
+      now: () => shared.now(),
     };
   }
 

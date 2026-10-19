@@ -257,7 +257,7 @@ describe("the sample household's Durable Object", () => {
 
   it("says how the household stands, and starts it over after the demo passcode", async () => {
     const { env } = sampleEnv({ DEMO_PASSCODE: "hay bale" });
-    expect(await (await call(env, "/household")).json()).toEqual({ household: "demo", name: "Juniper Hollow", day: "2026-10-16", version: 1 });
+    expect(await (await call(env, "/household")).json()).toEqual({ household: "demo", name: "Juniper Hollow", day: "2026-10-16", version: 1, clock: { now: FRIDAY.toString(), offsetMinutes: 0, evening: false } });
     await tool(env, "complete_task", { task: await choreId(env, "Collect eggs") });
 
     expect((await call(env, "/household/reset", { method: "POST" })).status).toBe(401);
@@ -266,8 +266,28 @@ describe("the sample household's Durable Object", () => {
     expect(await chore(env, "Collect eggs")).toMatchObject({ status: "done" });
 
     const res = await call(env, "/household/reset", { method: "POST", headers: { "x-demo-passcode": " hay bale " } });
-    expect(await res.json()).toEqual({ household: "demo", name: "Juniper Hollow", day: "2026-10-16", version: 3 });
+    expect(await res.json()).toMatchObject({ household: "demo", name: "Juniper Hollow", day: "2026-10-16", version: 3 });
     expect(await chore(env, "Collect eggs")).toMatchObject({ status: "overdue" });
+  });
+
+  it("runs the household at evening when a visitor asks, so the demo's evening is there at any hour", async () => {
+    const { env } = sampleEnv({ DEMO_PASSCODE: "hay bale" });
+    const evening = { method: "POST", body: JSON.stringify({ mode: "evening" }), headers: { "content-type": "application/json" } };
+    expect((await call(env, "/household/clock", evening)).status).toBe(401);
+    expect((await call(env, "/household/clock", { ...evening, headers: { ...evening.headers, "x-demo-passcode": "hay bale" }, body: JSON.stringify({ mode: "noon" }) })).status).toBe(400);
+
+    const set = (await (await call(env, "/household/clock", { ...evening, headers: { ...evening.headers, "x-demo-passcode": "hay bale" } })).json()) as { clock: { now: string } };
+    // Friday at 10:30 AM in Denver becomes 8:15 PM the same day.
+    expect(set).toMatchObject({ day: "2026-10-16", clock: { offsetMinutes: 585, evening: true } });
+    expect(Temporal.Instant.from(set.clock.now).toZonedDateTimeISO("America/Denver").toPlainTime().toString()).toBe("20:15:00");
+    // Everything about the household follows: the Today screen's clock and the animals out for the night.
+    const today = (await tool(env, "show_today")) as { at: string };
+    expect(Temporal.Instant.from(today.at).toZonedDateTimeISO("America/Denver").hour).toBe(20);
+    const trackers = (await tool(env, "trackers")) as { outsideFence: string[] };
+    expect(trackers.outsideFence).toEqual(["Hunter", "Pepper"]);
+
+    const back = (await (await call(env, "/household/clock", { ...evening, headers: { ...evening.headers, "x-demo-passcode": "hay bale" }, body: JSON.stringify({ mode: "now" }) })).json()) as { clock: unknown };
+    expect(back.clock).toEqual({ now: FRIDAY.toString(), offsetMinutes: 0, evening: false });
   });
 
   it("starts over with no passcode when the server has none", async () => {

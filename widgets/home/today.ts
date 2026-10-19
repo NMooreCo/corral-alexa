@@ -1,6 +1,6 @@
 import type { CorralEvent, CorralTask, CorralWhere } from "../../src/household.ts";
 import type { TodayView } from "../../src/today.ts";
-import { escape, firstName, sizeButton, withoutToday } from "../shared/screen.ts";
+import { escape, firstName, householdNow, sizeButton, withoutToday } from "../shared/screen.ts";
 import type { Home } from "./main.ts";
 
 /**
@@ -20,7 +20,7 @@ function minutesOf(clock: string | undefined): number | null {
 }
 
 function nowMinutes(zone: string | undefined): number {
-  const parts = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", hour12: false, timeZone: zone }).formatToParts(new Date());
+  const parts = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", hour12: false, timeZone: zone }).formatToParts(householdNow());
   const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
   return (get("hour") % 24) * 60 + get("minute");
 }
@@ -55,8 +55,8 @@ export function todayHtml(view: TodayView, home: Home): string {
   const where = (w: CorralWhere) => (w.until ? `until ${withoutToday(w.until, zone)}${w.then ? `, then ${w.then}` : ""}` : "");
   const left = view.tasks.filter((t) => t.status !== "done" && t.status !== "skipped").length;
   const late = view.tasks.filter((t) => t.status === "overdue").length;
-  const date = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: zone });
-  const clock = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: zone });
+  const date = householdNow().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: zone });
+  const clock = householdNow().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: zone });
   const { now, next } = nowAndNext(view.events, eventTime, zone);
   return `
     <header>

@@ -1,6 +1,6 @@
 import type { Device } from "../../src/ranch/types.ts";
 import type { MapPin, RanchView } from "../../src/ranch/views.ts";
-import { escape, sizeButton } from "../shared/screen.ts";
+import { escape, householdNow, sizeButton } from "../shared/screen.ts";
 import type { Home } from "./main.ts";
 
 /**
@@ -30,7 +30,7 @@ function short(seconds: number): string {
 }
 
 function left(endsAt: string): number {
-  return Math.max(0, Math.ceil((Date.parse(endsAt) - Date.now()) / 1000));
+  return Math.max(0, Math.ceil((Date.parse(endsAt) - householdNow().getTime()) / 1000));
 }
 
 function clock(seconds: number): string {
@@ -210,7 +210,7 @@ async function flip(id: string, state: "on" | "off", seconds: number | undefined
   pending.add(id);
   // Show it at once; the tool's answer, read back below, has the last word.
   d.state = state;
-  d.run = state === "on" && seconds ? { secondsLeft: seconds, endsAt: new Date(Date.now() + seconds * 1000).toISOString(), endsLabel: "" } : null;
+  d.run = state === "on" && seconds ? { secondsLeft: seconds, endsAt: new Date(householdNow().getTime() + seconds * 1000).toISOString(), endsLabel: "" } : null;
   home.screen.rerender();
   const text = await home.screen.act("set_device", { device: id, state, ...(seconds ? { seconds } : {}) });
   pending.delete(id);

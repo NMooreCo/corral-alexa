@@ -1,4 +1,5 @@
 import { ToolError, type CorralEvent, type CorralTask, type CorralWhere, type Household } from "./household.ts";
+import { now as clockNow } from "./clock.ts";
 
 /** The Today screen's address, an MCP Apps resource. */
 export const TODAY_URI = "ui://corral/today.html";
@@ -6,6 +7,8 @@ export const TODAY_URI = "ui://corral/today.html";
 /** What the Today screen shows: today's calendar, today's chores (done ones too) and who's where. */
 export type TodayView = {
   household: string | null;
+  /** When this was made, by the household's clock, so the screen's clock and "now" follow the household. */
+  at: string;
   events: CorralEvent[];
   tasks: CorralTask[];
   whereabouts: CorralWhere[];
@@ -24,7 +27,7 @@ export async function todayView(household: Household): Promise<TodayView> {
     part<CorralTask[]>(household.call("tasks", { include_done: true })),
     part<CorralWhere[]>(household.call("whereabouts", {})),
   ]);
-  return { household: about.name ?? null, events, tasks, whereabouts };
+  return { household: about.name ?? null, at: (household.now?.() ?? clockNow()).toString(), events, tasks, whereabouts };
 }
 
 async function part<T extends unknown[]>(answer: Promise<unknown>): Promise<T> {

@@ -4,6 +4,8 @@ import { SharedSample } from "./shared.ts";
 import { memoryStore } from "./store.ts";
 import { SampleRanchHolder } from "./ranch.ts";
 import { SPEAKER_HEADER, speakerOf } from "./roles.ts";
+import { HouseholdClock } from "../clock.ts";
+import { EVENING, clockStatus } from "./durable.ts";
 
 /** The household everyone shares unless a request names another with ?household=. */
 export const DEFAULT_HOUSEHOLD = "demo";
@@ -19,12 +21,18 @@ export function householdId(url: URL): string | null {
  * config without it), each household lives as long as this isolate, as the
  * sample did before it had a Durable Object.
  */
-const local = new Map<string, { household: SharedSample; ranch: SampleRanchHolder }>();
-function localSample(id: string): { household: SharedSample; ranch: SampleRanchHolder } {
+interface LocalSample {
+  household: SharedSample;
+  ranch: SampleRanchHolder;
+  clock: HouseholdClock;
+}
+const local = new Map<string, LocalSample>();
+function localSample(id: string): LocalSample {
   let sample = local.get(id);
   if (!sample) {
     if (local.size >= 32) local.clear();
-    local.set(id, (sample = { household: new SharedSample(memoryStore()), ranch: new SampleRanchHolder() }));
+    const clock = new HouseholdClock();
+    local.set(id, (sample = { household: new SharedSample(memoryStore(), { now: clock.now }), ranch: new SampleRanchHolder(), clock }));
   }
   return sample;
 }
@@ -36,28 +44,43 @@ function passcodeOk(request: Request, env: Env): boolean {
 
 /**
  * Sample mode's household routes. /mcp goes to the household's Durable
- * Object, which serves MCP from it. /household says its name, day and change
- * counter, and POST /household/reset starts it over (for a fresh demo take),
- * after the demo passcode when the server has one.
+ * Object, which serves MCP from it. /household says its name, day, change
+ * counter and clock. POST /household/reset starts it over (for a fresh demo
+ * take), and POST /household/clock with {"mode": "evening"} or "now" sets its
+ * clock and starts it over at that hour, both after the demo passcode when
+ * the server has one.
  */
 export async function householdRoute(request: Request, env: Env): Promise<Response | null> {
   const url = new URL(request.url);
-  if (url.pathname !== "/mcp" && url.pathname !== "/household" && url.pathname !== "/household/reset") return null;
+  if (url.pathname !== "/mcp" && url.pathname !== "/household" && url.pathname !== "/household/reset" && url.pathname !== "/household/clock") return null;
   const id = householdId(url);
   if (!id) return json(400, { error: { code: "bad_household", message: "A household id is lowercase letters, digits and dashes, up to 40 of them." } });
   const object = env.SAMPLE_HOUSEHOLDS?.getByName(id);
 
   if (url.pathname === "/mcp") {
     if (object) return object.fetch(request);
-    const { household, ranch } = localSample(id);
+    const { household, ranch, clock } = localSample(id);
     const { timeZone } = await household.about();
-    return serveMcp(request, household.as(speakerOf(request.headers.get(SPEAKER_HEADER))), ranch.ranchFor(env, request.url, timeZone));
+    return serveMcp(request, household.as(speakerOf(request.headers.get(SPEAKER_HEADER))), ranch.ranchFor(env, request.url, timeZone, clock.now));
   }
 
   if (url.pathname === "/household") {
     if (request.method !== "GET" && request.method !== "HEAD") return json(405, { error: { code: "method", message: "GET /household." } }, { allow: "GET, HEAD" });
-    const status = object ? await object.status() : localHousehold(id).status();
+    const status = object ? await object.status() : { ...localHousehold(id).status(), clock: clockStatus(localSample(id).clock) };
     return json(200, { household: id, ...status }, { "cache-control": "no-store" });
+  }
+
+  if (url.pathname === "/household/clock") {
+    if (request.method !== "POST") return json(405, { error: { code: "method", message: 'POST /household/clock with {"mode": "evening"} or {"mode": "now"}.' } }, { allow: "POST" });
+    if (!passcodeOk(request, env)) return json(401, { error: { code: "passcode", message: "Enter the demo passcode to set the household's clock." } });
+    const body = (await request.json().catch(() => null)) as { mode?: unknown } | null;
+    if (body?.mode !== "evening" && body?.mode !== "now") return json(400, { error: { code: "mode", message: 'The mode is "evening" or "now".' } });
+    if (object) return json(200, { household: id, ...(await object.setClock(body.mode)) });
+    const sample = localSample(id);
+    const { timeZone } = await sample.household.about();
+    sample.clock.set(body.mode === "evening" ? HouseholdClock.offsetTo(EVENING, timeZone ?? "UTC") : 0);
+    sample.ranch.reset();
+    return json(200, { household: id, ...sample.household.reset(), clock: clockStatus(sample.clock) });
   }
 
   if (request.method !== "POST") return json(405, { error: { code: "method", message: "POST /household/reset to start the household over." } }, { allow: "POST" });

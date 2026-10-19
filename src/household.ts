@@ -1,3 +1,4 @@
+import type { Temporal } from "temporal-polyfill";
 /**
  * The household the tools answer from. Both kinds, the built-in sample and a
  * real Corral, answer Corral's own MCP tools by name, with the same arguments
@@ -51,6 +52,8 @@ export interface Household {
   version?(): Promise<number>;
   /** Why this speaker may not do something beyond the household's own tools, said for people, or null when they may. A household that knows no speakers leaves it out. */
   refusal?(action: HouseholdAction): string | null;
+  /** Now, for this household, when it keeps its own clock (a simulator's sample can run at another hour). */
+  now?(): Temporal.Instant;
 }
 
 /** What a household says yes or no to beyond its own tools, like switching one of its ranch's devices. */
