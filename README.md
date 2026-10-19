@@ -1,6 +1,6 @@
 # Corral for Alexa+
 
-Alexa can set a timer. It can't tell you whether it's Dad's weekend, who has the 4:00 pickup, whether the dog got her pill, or that you're down to two bags of horse feed. [Corral](https://corral.narralogy.ai) can. It's the household platform one family and ranch run on every day: the shared calendar, chores and who did them, shopping lists, where everyone is, kids' points, and supplies.
+Alexa can set a timer. It can't tell you whose turn it is to cook, who has the 4:00 pickup, whether the dog got her pill, or that you're down to two bags of horse feed. [Corral](https://corral.narralogy.ai) can. It's the household platform one family and ranch run on every day: the shared calendar, chores and who did them, shopping lists, where everyone is, kids' points, and supplies.
 
 On a ranch it also runs the place: **"Alexa, run the greenhouse misters for 30 seconds"** turns on real misters through a real greenhouse controller, and **"It's going down to 12 tonight. Get the place ready."** has Alexa+ read the forecast, every heater, the animals' GPS collars and who's home, then get the night ready in one confirmation.
 

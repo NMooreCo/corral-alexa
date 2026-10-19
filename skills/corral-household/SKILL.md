@@ -52,7 +52,7 @@ Often a shared device in the kitchen or the barn, sometimes one person's phone. 
 | "What's our weekend look like?" | `show_week` from Saturday (or `calendar` for Saturday and Sunday); say the busiest day and who's driving. |
 | "Show me the grocery list." | `show_list` with the list; say how many things are on it. |
 | "Who's picking up Eli?" | `calendar` with `person` and a short date range; the answer is in `drivers`. |
-| "Is Jak at his dad's this weekend?" | `whereabouts` with `person` and `at` on Saturday morning; it says until when. |
+| "Is Jak at practice Saturday?" | `whereabouts` with `person` and `at` on Saturday morning; it says until when. |
 | "Eli emptied the dishwasher." | `tasks` (include done), find it, `complete_task` with `by: "Eli"`. |
 | "I'll do the garden." | `claim_task` with `by` (taking it isn't finishing it). |
 | "Add milk." / "We got the milk." | `add_list_item` (Groceries unless they name a list) / `check_list_item`. |
