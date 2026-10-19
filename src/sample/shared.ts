@@ -38,6 +38,8 @@ export class SharedSample implements Household {
 
   /** A sample household decides its own requests, so a parent can approve a kid's. */
   readonly decidesRequests = true;
+  /** And it orders supplies, from its sample store. */
+  readonly placesOrders = true;
 
   /** Now, by the household's clock. */
   now(): Temporal.Instant {
@@ -65,6 +67,7 @@ export class SharedSample implements Household {
         return shared.name;
       },
       decidesRequests: true,
+      placesOrders: true,
       about: () => shared.about(),
       call: (tool, args) => shared.#callAs(speaker, tool, args),
       version: () => shared.version(),

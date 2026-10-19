@@ -3,7 +3,7 @@ import { McpServer, type CallToolResult } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
 import { APPROVALS_URI, approvalsView } from "./approvals.ts";
 import { UpstreamAuthError } from "./corral.ts";
-import { APPROVAL_TOOLS, ToolError, type Household, type HouseholdAbout, type HouseholdTool } from "./household.ts";
+import { APPROVAL_TOOLS, ORDER_TOOLS, ToolError, type Household, type HouseholdAbout, type HouseholdTool } from "./household.ts";
 import type { Ranch } from "./ranch/index.ts";
 import { ADD_AUTOMATION, AUTOMATIONS, RANCH_INSTRUCTIONS, RANCH_TOOLS, SET_AUTOMATION, SET_DEVICE } from "./ranch/tools.ts";
 import { BRIEFING_URI, RANCH_URI, briefingView, ranchSummary, ranchView, type RanchTab, type RanchView } from "./ranch/views.ts";
@@ -54,7 +54,13 @@ const TOOLS: ToolDef[] = [
   { name: "people", title: "People", description: "Everyone in the household.", input: z.object({}) },
   { name: "lists", title: "Lists", description: "Shopping and to-do lists. Without a list name, the lists there are; with one, what's on it.", input: z.object({ list: z.string().describe("A list name").optional() }) },
   { name: "points", title: "Points", description: "Points and allowance balances, and what points turn into.", input: z.object({}) },
-  { name: "supplies", title: "Supplies", description: "Tracked supplies (feed, medicine, pet food and so on): how much is left and when it runs out.", input: z.object({}) },
+  {
+    name: "supplies",
+    title: "Supplies",
+    description:
+      "Tracked supplies (feed, medicine, pet food and so on): how much is left and when it runs out. When the household orders from stores, each also says any order for it that hasn't come (onOrder, with the day it arrives) and how a store sells it (reorder: the usual amount, its price and the day it would arrive).",
+    input: z.object({}),
+  },
   {
     name: "add_event",
     title: "Add an event",
@@ -109,15 +115,41 @@ const TOOLS: ToolDef[] = [
     input: z.object({ request: z.string().describe("The request's id from approvals"), decision: z.enum(["approve", "decline"]) }),
     write: true,
   },
+  {
+    name: "orders",
+    title: "Orders",
+    description: "Orders from the household's stores: what's coming and from where, what it cost, the day it arrives, and any still waiting for someone's yes (and whose). For \"what's on order?\" or \"when's the propane coming?\".",
+    input: z.object({}),
+  },
 ];
 
-function instructions(about: HouseholdAbout, decides: boolean, ranch: boolean): string {
+/** Placing an order: a change that shows the Supplies screen, so what's on order is in front of whoever asked. */
+const PLACE_ORDER = {
+  name: "place_order",
+  title: "Order supplies",
+  description:
+    "Order supplies from one of the household's stores: each by its name from the supplies tool, with how many of the store's units (its usual amount, reorder in supplies, when none is said). It orders as soon as it's called, so first confirm in one sentence what, how much, from where, the price and the day it arrives. A kid's order, or one over the household's spending limit, goes to whoever approves instead, and the answer says who. Shows the Supplies screen.",
+  input: z.object({
+    items: z
+      .array(
+        z.object({
+          supply: z.string().describe("The supply's name or id from the supplies tool"),
+          quantity: z.number().describe("How many of the store's units, like 100 (gallons) or 2 (bags); default its usual amount").optional(),
+        }),
+      )
+      .describe("What to order, one entry per supply"),
+    supplier: z.string().describe("The store, when more than one sells it; default the one that does").optional(),
+  }),
+};
+
+function instructions(about: HouseholdAbout, decides: boolean, ranch: boolean, orders: boolean): string {
   return [
     `Corral runs ${about.name ? `the ${about.name} household` : "this household"}: its calendar, chores, lists, whereabouts, points and supplies.`,
     ...(about.timeZone ? [`The household's time zone is ${about.timeZone}.`] : []),
     "Look things up with the read tools before changing anything, and use the ids they return.",
     "Changes happen right away, so confirm with the person first. Some changes go to a parent to approve instead; the answer says so and who.",
     ...(decides ? ["What waits for someone to approve is in approvals; only the people who approve requests decide them, with decide_approval."] : []),
+    ...(orders ? ["Supplies can be ordered from the household's stores with place_order, only after the person says yes to what, the price and the day it arrives; orders says what's on order."] : []),
     `Speak briefly: the next thing or two, not a whole list. To show something on a screen, use show_today, show_week, show_list${decides ? ", show_supplies or show_approvals" : " or show_supplies"}.`,
     ...(ranch ? [RANCH_INSTRUCTIONS] : []),
   ].join(" ");
@@ -137,10 +169,12 @@ async function answer(run: () => Promise<unknown>): Promise<CallToolResult> {
 /** One MCP server for one request, answering from `household` (and its ranch, when it has one). */
 export async function buildServer(household: Household, ranch?: Ranch): Promise<McpServer> {
   const decides = Boolean(household.decidesRequests);
-  const server = new McpServer(SERVER_INFO, { instructions: instructions(await household.about(), decides, Boolean(ranch)) });
+  const orders = Boolean(household.placesOrders);
+  const server = new McpServer(SERVER_INFO, { instructions: instructions(await household.about(), decides, Boolean(ranch), orders) });
 
   for (const t of TOOLS) {
     if ((APPROVAL_TOOLS as readonly string[]).includes(t.name) && !decides) continue;
+    if ((ORDER_TOOLS as readonly string[]).includes(t.name) && !orders) continue;
     server.registerTool(
       t.name,
       {
@@ -243,6 +277,28 @@ export async function buildServer(household: Household, ranch?: Ranch): Promise<
     widgetHtml.supplies,
     () => suppliesView(household),
   );
+  if (orders) {
+    // Ordering shows the Supplies screen, so the order is there on order (or waiting for a yes) in front of whoever asked.
+    registerAppTool(
+      server,
+      PLACE_ORDER.name,
+      {
+        title: PLACE_ORDER.title,
+        description: PLACE_ORDER.description,
+        inputSchema: PLACE_ORDER.input,
+        annotations: { title: PLACE_ORDER.title, readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+        _meta: { ui: { resourceUri: SUPPLIES_URI } },
+      },
+      async (args: unknown) => {
+        try {
+          const change = await household.call("place_order", (args ?? {}) as Record<string, unknown>);
+          return { content: [{ type: "text", text: JSON.stringify(change) }], structuredContent: await suppliesView(household) };
+        } catch (err) {
+          return answer(() => Promise.reject(err));
+        }
+      },
+    );
+  }
   if (decides) {
     screen(
       "show_approvals",

@@ -33,6 +33,9 @@ export function speakerOf(header: string | null): string | null {
 export const PLAN_CHANGES = ["add_event", "add_task", "add_list_item", "skip_task"] as const;
 export type PlanChange = (typeof PLAN_CHANGES)[number];
 
+/** What a request can hold: a plan change, or an order that waits for a yes (from someone whose role doesn't order, or over the household's limit). */
+export type RequestChange = PlanChange | "place_order";
+
 export interface SampleRole {
   /** As people's roles name it, like "Parent". */
   name: string;
@@ -50,6 +53,8 @@ export interface SampleRole {
   approves: boolean;
   /** Switches the ranch's devices (heaters, valves, lamps), by voice or on the Ranch screen. */
   devices: boolean;
+  /** Orders supplies from the household's stores. Without it, an order waits for someone who approves. */
+  orders: boolean;
 }
 
 /** The role for a voice Alexa doesn't recognize. */
@@ -59,7 +64,7 @@ export const SCREEN_ROLE = "Shared screen";
 
 export function sampleRoles(): SampleRole[] {
   return [
-    { name: "Parent", calendars: "*", tasks: "everyone", whereabouts: "everyone", changes: true, approval: {}, approves: true, devices: true },
+    { name: "Parent", calendars: "*", tasks: "everyone", whereabouts: "everyone", changes: true, approval: {}, approves: true, devices: true, orders: true },
     {
       name: "Kid",
       calendars: "*",
@@ -71,13 +76,15 @@ export function sampleRoles(): SampleRole[] {
       approves: false,
       // The ranch's heaters and valves are a grown-up's to switch.
       devices: false,
+      // Kids ask, parents decide: a kid's order waits for a parent.
+      orders: false,
     },
-    // From outside the family: the ranch's calendar, their own chores and ones up for grabs, and where they are.
-    { name: "Farm hand", calendars: ["Ranch"], tasks: "own", whereabouts: "own", changes: true, approval: {}, approves: false, devices: true },
+    // From outside the family: the ranch's calendar, their own chores and ones up for grabs, and where they are. Spending the family's money waits for a parent.
+    { name: "Farm hand", calendars: ["Ranch"], tasks: "own", whereabouts: "own", changes: true, approval: {}, approves: false, devices: true, orders: false },
     // Someone Alexa doesn't recognize: they can hear what the day holds, and change nothing.
-    { name: GUEST_ROLE, calendars: "*", tasks: "everyone", whereabouts: "own", changes: false, approval: {}, approves: false, devices: false },
-    // The kitchen screen itself: what the sample always was before it knew voices.
-    { name: SCREEN_ROLE, calendars: "*", tasks: "everyone", whereabouts: "everyone", changes: true, approval: { add_event: "always" }, approves: false, devices: true },
+    { name: GUEST_ROLE, calendars: "*", tasks: "everyone", whereabouts: "own", changes: false, approval: {}, approves: false, devices: false, orders: false },
+    // The kitchen screen itself: what the sample always was before it knew voices. It's no one, so its orders wait for a parent.
+    { name: SCREEN_ROLE, calendars: "*", tasks: "everyone", whereabouts: "everyone", changes: true, approval: { add_event: "always" }, approves: false, devices: true, orders: false },
   ];
 }
 

@@ -111,7 +111,7 @@ describe("the shared sample household", () => {
     delete older.supplies;
     store.save({ ...kept, state: JSON.stringify(older) });
     const h = new SharedSample(store, { now: () => FRIDAY });
-    expect(await h.call("supplies", {})).toHaveLength(4);
+    expect(await h.call("supplies", {})).toHaveLength(5);
     expect(await h.version()).toBe(2);
   });
 
