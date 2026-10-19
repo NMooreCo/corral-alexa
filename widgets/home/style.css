@@ -312,6 +312,8 @@
 @media (max-width: 860px) {
   .home {
     flex-direction: column;
+    /* Stacked, the tabs and the pane fill the width rather than shrinking to their content. */
+    align-items: stretch;
   }
 
   .rail {
