@@ -6,6 +6,8 @@ On a ranch it also runs the place: **"Alexa, run the greenhouse misters for 30 s
 
 **Corral for Alexa+** puts that household inside Alexa+. It's a self-hosted MCP server (spec 2025-11-25, Streamable HTTP) on Cloudflare Workers that gives Alexa+ Corral's tools, draws interactive screens for the Echo Show with [MCP Apps](https://modelcontextprotocol.io/extensions/apps), and links each Alexa account to Corral with OAuth 2.1, so every family's rules come along: private events stay private, a kid's change waits for a parent, and the farm hand only hears about the ranch.
 
+![The simulated Echo Show 8 answering "What's going on tonight?" with the Today screen: the calendar with what's on now, late chores to tap off, and who's where, with tabs for the Ranch, the Animals and the Automations](docs/images/echo-show.jpg)
+
 **Try it**
 
 - **[The simulated Echo Show](https://alexa-demo.corral.narralogy.ai/echo)**: talk to it (or type), watch it call Corral's tools over MCP, tap the screens, and pick who's speaking to watch the family's rules follow the person. It runs on a made-up household, Juniper Hollow. The demo passcode is in the submission's testing instructions.
