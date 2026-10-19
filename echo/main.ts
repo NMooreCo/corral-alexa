@@ -230,6 +230,7 @@ let instructions = "";
 /** How far the household's clock is from this device's: a household can run at another hour (evening, for the demo). */
 let householdSkewMs = 0;
 let householdEvening = false;
+let householdMorning = false;
 
 /** Now, by the household's clock. */
 function householdNow(): Date {
@@ -239,15 +240,20 @@ function householdNow(): Date {
 /** Reads the household's clock from /household, and says on the button what it's set to. */
 async function readClock() {
   const res = await fetch(householdUrl("/household"), { cache: "no-store" }).catch(() => null);
-  const body = (await res?.json().catch(() => null)) as { clock?: { now?: string; evening?: boolean } } | null;
+  const body = (await res?.json().catch(() => null)) as { clock?: { now?: string; evening?: boolean; morning?: boolean } } | null;
   if (body?.clock?.now && !Number.isNaN(Date.parse(body.clock.now))) householdSkewMs = Date.parse(body.clock.now) - Date.now();
   householdEvening = Boolean(body?.clock?.evening);
+  householdMorning = Boolean(body?.clock?.morning);
   $("evening").textContent = householdEvening ? "Back to the real time" : "Make it evening";
   tick();
 }
 
-/** Sets the household's clock to evening or back to the real time; the household starts over at that hour. True when it worked. */
-async function setClock(mode: "evening" | "now"): Promise<boolean> {
+/**
+ * Sets the household's clock: evening or back to the real time start the
+ * household over at that hour; the next morning keeps the night before. True
+ * when it worked.
+ */
+async function setClock(mode: "evening" | "morning" | "now"): Promise<boolean> {
   const res = await fetch(householdUrl("/household/clock"), {
     method: "POST",
     headers: { "content-type": "application/json", ...(passcode() ? { "x-demo-passcode": passcode()! } : {}) },
@@ -266,11 +272,12 @@ async function setClock(mode: "evening" | "now"): Promise<boolean> {
   await readClock();
   newConversation();
   await loadSpeakers();
-  addLog(modelLog, "page", mode === "evening" ? "Set the household's clock to evening" : "Set the household's clock back to the real time");
+  addLog(modelLog, "page", mode === "evening" ? "Set the household's clock to evening" : mode === "morning" ? "Moved the household on to the next morning" : "Set the household's clock back to the real time");
   await home().catch(() => {});
   return true;
 }
 $("evening").addEventListener("click", () => void setClock(householdEvening ? "now" : "evening"));
+$("morning").addEventListener("click", () => void setClock("morning"));
 
 function householdTimeZone(): string {
   return /time zone is ([A-Za-z_]+\/[A-Za-z_/]+)/.exec(instructions)?.[1] ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -838,6 +845,8 @@ interface DemoBeat {
   taps?: number;
   /** Part of the short demo too (?demo=short), the headline beats only. */
   short?: boolean;
+  /** The next morning: the household moves on to it (keeping the night before) before this beat. */
+  morning?: boolean;
 }
 
 /**
@@ -858,11 +867,11 @@ const DEMO: DemoBeat[] = [
   { as: "Jak", say: "Yes please.", ifAsked: true },
   { as: "Nick", say: "It's going down to 12 tonight. Get the place ready.", linger: 3000, short: true },
   { as: "Nick", say: "Yes, do all of that.", ifAsked: true, linger: 4000, short: true },
-  // Alexa offers the low propane; Nick has it ordered, and the Supplies screen shows it on order with its day.
-  { as: "Nick", say: "Order the propane.", short: true },
-  { as: "Nick", say: "Yes.", ifAsked: true, linger: 4000, short: true },
   { as: "Nick", say: "Do all of that on its own whenever it's going to freeze.", linger: 3000, short: true },
   { as: "Nick", say: "Yes.", ifAsked: true, linger: 5000, short: true },
+  { as: "Holly", say: "I brought Hunter and Pepper in.", linger: 3000, short: true },
+  // The next morning: the briefing's cards say what happened overnight, and the day ahead.
+  { as: "Nick", say: "Good morning.", morning: true, linger: 6000, taps: 12000, short: true },
 ];
 
 /** A recording that taps through the screen's tabs itself asks for longer pauses where it does (?taps=1). */
@@ -881,7 +890,10 @@ async function untilQuiet() {
 }
 
 /** Plays the demo from a fresh household: each beat as its speaker, with the real model, at a pace a recording can follow. */
-async function playDemo(short = false) {
+/** Which part of the demo to play: all of it, the evening only, or the morning after only (?part=evening or morning). */
+type DemoPart = "all" | "evening" | "morning";
+
+async function playDemo(short = false, part: DemoPart = "all") {
   if (demo) {
     demo.stop = true;
     return;
@@ -893,12 +905,20 @@ async function playDemo(short = false) {
   recognition?.stop();
   try {
     // The demo is an evening at the ranch whatever the time, so the household's clock is set to evening (which starts it over).
-    if (householdEvening) await startOver();
-    else if (!(await setClock("evening"))) return;
-    if (!passcodeForm.hidden) return; // It needs the passcode first; the card is showing.
-    await pause(2500);
-    for (const beat of short ? DEMO.filter((b) => b.short) : DEMO) {
+    // The morning part on its own goes on from wherever the household is.
+    if (part !== "morning") {
+      if (householdEvening && !householdMorning) await startOver();
+      else if (!(await setClock("evening"))) return;
+      if (!passcodeForm.hidden) return; // It needs the passcode first; the card is showing.
+      await pause(2500);
+    }
+    const beats = (short ? DEMO.filter((b) => b.short) : DEMO).filter((b) => (part === "evening" ? !b.morning : part === "morning" ? b.morning : true));
+    for (const beat of beats) {
       if (run.stop) break;
+      if (beat.morning && !householdMorning) {
+        if (!(await setClock("morning"))) break;
+        await pause(2500);
+      }
       // A yes is only said to a question.
       if (beat.ifAsked && !saidEl.textContent?.trim().endsWith("?")) continue;
       const speaker = state.speakers.find((p) => p.said === beat.as);
@@ -941,7 +961,8 @@ try {
   if ((take === "1" || take === "short") && !embedded) {
     caption("", "Starting the demo...");
     await pause(3000);
-    void playDemo(take === "short");
+    const part = params.get("part");
+    void playDemo(take === "short", part === "evening" || part === "morning" ? part : "all");
   }
 } catch (err) {
   caption("", `Couldn't reach the server: ${err instanceof Error ? err.message : err}`);

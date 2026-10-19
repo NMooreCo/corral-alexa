@@ -44,6 +44,8 @@ export interface SampleTask {
   doneBy: string | null;
   asks?: CorralAsk[];
   captured?: Record<string, unknown>;
+  /** A chore that comes back every day: when a new day starts, today's is added and yesterday's, if still open, is closed. */
+  repeats?: "daily";
 }
 
 export interface SampleListItem {
@@ -77,6 +79,15 @@ export interface SampleStay {
   location: string;
   start: Temporal.Instant;
   end: Temporal.Instant;
+}
+
+/** Something that happened, in words, for "since last night" and the like. */
+export interface SampleHistoryEntry {
+  /** When, zoned. */
+  at: string;
+  /** Who did it, a person's id; null for the shared screen. */
+  who: string | null;
+  text: string;
 }
 
 export interface SampleBalance {
@@ -143,6 +154,8 @@ export interface SampleState {
   requests: SampleRequest[];
   /** Orders from the household's stores. */
   orders: SampleOrder[];
+  /** What's happened, oldest first: chores done, orders, requests decided. */
+  history: SampleHistoryEntry[];
   /** An order over this many cents waits for a yes from someone besides whoever placed it, so no one spends that much alone; null for no limit. */
   orderLimitCents: number | null;
 }
@@ -150,7 +163,6 @@ export interface SampleState {
 export function seed(now: Temporal.Instant, timeZone = "America/Denver"): SampleState {
   const id = () => crypto.randomUUID();
   const today = now.toZonedDateTimeISO(timeZone).toPlainDate();
-  const weekday = today.dayOfWeek <= 5;
   const date = (day: number) => today.add({ days: day }).toString();
   const at = (day: number, time: string) => today.add({ days: day }).toZonedDateTime({ timeZone, plainTime: Temporal.PlainTime.from(time) }).toString();
   const instant = (day: number, time: string) => Temporal.ZonedDateTime.from(at(day, time)).toInstant();
@@ -162,7 +174,9 @@ export function seed(now: Temporal.Instant, timeZone = "America/Denver"): Sample
   const jon = { id: id(), name: "Jon Blake", shortName: "Jon", roles: ["Farm hand"] };
 
   const events: SampleEvent[] = [
-    ...(weekday ? [{ id: id(), title: "School drop-off", start: at(0, "07:40"), end: at(0, "08:00"), people: [eli.id, jak.id], drivers: [holly.id], location: "Juniper Elementary", calendar: "School" }] : []),
+    ...[0, 1]
+      .filter((d) => today.add({ days: d }).dayOfWeek <= 5)
+      .map((d) => ({ id: id(), title: "School drop-off", start: at(d, "07:40"), end: at(d, "08:00"), people: [eli.id, jak.id], drivers: [holly.id], location: "Juniper Elementary", calendar: "School" })),
     { id: id(), title: "Farrier visit", start: at(0, "10:00"), end: at(0, "11:00"), people: [jon.id], drivers: [], location: "Barn", calendar: "Ranch" },
     { id: id(), title: "Birthday gift shopping", start: at(0, "12:00"), end: at(0, "13:00"), people: [nick.id], drivers: [], location: "Downtown", calendar: "Family", private: true, owner: nick.id },
     { id: id(), title: "Soccer practice", start: at(0, "15:30"), end: at(0, "16:45"), people: [eli.id], drivers: [nick.id], location: "Riverside Fields", calendar: "Family" },
@@ -174,13 +188,13 @@ export function seed(now: Temporal.Instant, timeZone = "America/Denver"): Sample
   ];
 
   const tasks: SampleTask[] = [
-    { id: id(), title: "Feed the horses (morning)", due: at(0, "07:00"), assignees: [jon.id], status: "done", doneBy: jon.id, asks: [{ key: "fed", label: "Amount fed", type: "quantity", unit: "lb" }] },
-    { id: id(), title: "Give Leia the allergy pill", due: at(0, "08:00"), assignees: [eli.id], status: "open", doneBy: null },
-    { id: id(), title: "Collect eggs", due: at(0, "09:00"), assignees: "anyone", status: "open", doneBy: null, asks: [{ key: "eggs", label: "Eggs", type: "number" }] },
-    { id: id(), title: "Water the garden", due: date(0), assignees: "anyone", status: "open", doneBy: null },
-    { id: id(), title: "Empty the dishwasher", due: at(0, "17:00"), assignees: [jak.id], status: "open", doneBy: null },
-    { id: id(), title: "Feed the horses (evening)", due: at(0, "17:30"), assignees: [jon.id], status: "open", doneBy: null, asks: [{ key: "fed", label: "Amount fed", type: "quantity", unit: "lb" }] },
-    { id: id(), title: "Take out the trash", due: at(0, "19:00"), assignees: [jak.id, eli.id], status: "open", doneBy: null },
+    { id: id(), title: "Feed the horses (morning)", due: at(0, "07:00"), assignees: [jon.id], status: "done", doneBy: jon.id, asks: [{ key: "fed", label: "Amount fed", type: "quantity", unit: "lb" }], repeats: "daily" },
+    { id: id(), title: "Give Leia the allergy pill", due: at(0, "08:00"), assignees: [eli.id], status: "open", doneBy: null, repeats: "daily" },
+    { id: id(), title: "Collect eggs", due: at(0, "09:00"), assignees: "anyone", status: "open", doneBy: null, asks: [{ key: "eggs", label: "Eggs", type: "number" }], repeats: "daily" },
+    { id: id(), title: "Water the garden", due: date(0), assignees: "anyone", status: "open", doneBy: null, repeats: "daily" },
+    { id: id(), title: "Empty the dishwasher", due: at(0, "17:00"), assignees: [jak.id], status: "open", doneBy: null, repeats: "daily" },
+    { id: id(), title: "Feed the horses (evening)", due: at(0, "17:30"), assignees: [jon.id], status: "open", doneBy: null, asks: [{ key: "fed", label: "Amount fed", type: "quantity", unit: "lb" }], repeats: "daily" },
+    { id: id(), title: "Take out the trash", due: at(0, "19:00"), assignees: [jak.id, eli.id], status: "open", doneBy: null, repeats: "daily" },
     { id: id(), title: "Clean the chicken coop", due: at(1, "10:00"), assignees: [jon.id], status: "open", doneBy: null },
   ];
 
@@ -257,6 +271,7 @@ export function seed(now: Temporal.Instant, timeZone = "America/Denver"): Sample
     // The ice cream on the grocery list is Jak's ask, waiting for a parent.
     requests: [{ id: id(), from: jak.id, summary: "Ice cream on Groceries", at: now.subtract({ minutes: 90 }).toZonedDateTimeISO(timeZone).toString(), change: { tool: "add_list_item", args: { list: "Groceries", text: "Ice cream" } }, status: "pending" }],
     orders: [],
+    history: [],
     orderLimitCents: 30_000,
   };
 }

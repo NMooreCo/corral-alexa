@@ -355,7 +355,7 @@ const COLLARS: CollarSpec[] = [
 ];
 
 /** Night, for the demo's runaways: from 6 PM to 7 AM in the household's time zone. */
-const NIGHT = { from: 18, to: 7 };
+const NIGHT = { from: 18, to: 6 };
 
 /** A repeatable number in [0, 1) for a name and a time slot. */
 function noise(seed: string): number {

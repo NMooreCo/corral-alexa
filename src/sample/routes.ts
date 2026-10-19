@@ -5,7 +5,7 @@ import { memoryStore } from "./store.ts";
 import { SampleRanchHolder } from "./ranch.ts";
 import { SPEAKER_HEADER, speakerOf } from "./roles.ts";
 import { HouseholdClock } from "../clock.ts";
-import { EVENING, clockStatus } from "./durable.ts";
+import { CLOCK_MODES, clockStatus, setSampleClock, type ClockMode } from "./durable.ts";
 
 /** The household everyone shares unless a request names another with ?household=. */
 export const DEFAULT_HOUSEHOLD = "demo";
@@ -66,21 +66,21 @@ export async function householdRoute(request: Request, env: Env): Promise<Respon
 
   if (url.pathname === "/household") {
     if (request.method !== "GET" && request.method !== "HEAD") return json(405, { error: { code: "method", message: "GET /household." } }, { allow: "GET, HEAD" });
-    const status = object ? await object.status() : { ...localHousehold(id).status(), clock: clockStatus(localSample(id).clock) };
+    const status = object ? await object.status() : { ...localHousehold(id).status(), clock: clockStatus(localSample(id).clock, (await localHousehold(id).about()).timeZone) };
     return json(200, { household: id, ...status }, { "cache-control": "no-store" });
   }
 
   if (url.pathname === "/household/clock") {
-    if (request.method !== "POST") return json(405, { error: { code: "method", message: 'POST /household/clock with {"mode": "evening"} or {"mode": "now"}.' } }, { allow: "POST" });
+    if (request.method !== "POST") return json(405, { error: { code: "method", message: 'POST /household/clock with {"mode": "evening"}, {"mode": "morning"} or {"mode": "now"}.' } }, { allow: "POST" });
     if (!passcodeOk(request, env)) return json(401, { error: { code: "passcode", message: "Enter the demo passcode to set the household's clock." } });
     const body = (await request.json().catch(() => null)) as { mode?: unknown } | null;
-    if (body?.mode !== "evening" && body?.mode !== "now") return json(400, { error: { code: "mode", message: 'The mode is "evening" or "now".' } });
-    if (object) return json(200, { household: id, ...(await object.setClock(body.mode)) });
+    if (!CLOCK_MODES.includes(body?.mode as ClockMode)) return json(400, { error: { code: "mode", message: 'The mode is "evening", "morning" or "now".' } });
+    const mode = body!.mode as ClockMode;
+    if (object) return json(200, { household: id, ...(await object.setClock(mode)) });
     const sample = localSample(id);
     const { timeZone } = await sample.household.about();
-    sample.clock.set(body.mode === "evening" ? HouseholdClock.offsetTo(EVENING, timeZone ?? "UTC") : 0);
-    sample.ranch.reset();
-    return json(200, { household: id, ...sample.household.reset(), clock: clockStatus(sample.clock) });
+    setSampleClock(mode, sample, timeZone ?? "UTC");
+    return json(200, { household: id, ...sample.household.status(), clock: clockStatus(sample.clock, timeZone) });
   }
 
   if (request.method !== "POST") return json(405, { error: { code: "method", message: "POST /household/reset to start the household over." } }, { allow: "POST" });

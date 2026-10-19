@@ -257,7 +257,7 @@ describe("the sample household's Durable Object", () => {
 
   it("says how the household stands, and starts it over after the demo passcode", async () => {
     const { env } = sampleEnv({ DEMO_PASSCODE: "hay bale" });
-    expect(await (await call(env, "/household")).json()).toEqual({ household: "demo", name: "Juniper Hollow", day: "2026-10-16", version: 1, clock: { now: FRIDAY.toString(), offsetMinutes: 0, evening: false } });
+    expect(await (await call(env, "/household")).json()).toEqual({ household: "demo", name: "Juniper Hollow", day: "2026-10-16", version: 1, clock: { now: FRIDAY.toString(), offsetMinutes: 0, evening: false, morning: false } });
     await tool(env, "complete_task", { task: await choreId(env, "Collect eggs") });
 
     expect((await call(env, "/household/reset", { method: "POST" })).status).toBe(401);
@@ -287,7 +287,62 @@ describe("the sample household's Durable Object", () => {
     expect(trackers.outsideFence).toEqual(["Hunter", "Pepper"]);
 
     const back = (await (await call(env, "/household/clock", { ...evening, headers: { ...evening.headers, "x-demo-passcode": "hay bale" }, body: JSON.stringify({ mode: "now" }) })).json()) as { clock: unknown };
-    expect(back.clock).toEqual({ now: FRIDAY.toString(), offsetMinutes: 0, evening: false });
+    expect(back.clock).toEqual({ now: FRIDAY.toString(), offsetMinutes: 0, evening: false, morning: false });
+  });
+
+  it("moves on to the next morning keeping the night before, and the morning briefing says what happened", async () => {
+    const { env } = sampleEnv();
+    const setClock = async (mode: string) =>
+      (await (await call(env, "/household/clock", { method: "POST", body: JSON.stringify({ mode }), headers: { "content-type": "application/json" } })).json()) as { day: string; version: number; clock: { now: string; morning: boolean; evening: boolean } };
+    const as = (person: string) => ({ "x-demo-person": person });
+    await setClock("evening");
+
+    // The evening: Nick turns the barn heater on, Jak takes out the trash, Jon asks for hay and Nick says yes.
+    await tool(env, "set_device", { device: "sample.barn-heater", state: "on" }, "/mcp", as("Nick"));
+    await tool(env, "complete_task", { task: await choreId(env, "Take out the trash") }, "/mcp", as("Jak"));
+    const asked = (await tool(env, "place_order", { items: [{ supply: "Hay" }] }, "/mcp", as("Jon"))) as { orders?: unknown };
+    expect(asked).toBeTruthy();
+    const waiting = (await tool(env, "approvals", {}, "/mcp", as("Nick"))) as { toDecide: { id: string; from: string; asks: string }[] };
+    const hay = waiting.toDecide.find((r) => r.from === "Jon")!;
+    expect(hay.asks).toContain("hay");
+    // The kitchen's Today screen shows it to a parent, to approve with a tap; a kid's doesn't.
+    expect(((await tool(env, "show_today", {}, "/mcp", as("Nick"))) as { toDecide?: { id: string }[] }).toDecide?.map((r) => r.id)).toContain(hay.id);
+    expect(((await tool(env, "show_today", {}, "/mcp", as("Eli"))) as { toDecide?: unknown }).toDecide).toBeUndefined();
+    await tool(env, "decide_approval", { request: hay.id, decision: "approve" }, "/mcp", as("Nick"));
+
+    const morning = await setClock("morning");
+    // Friday evening becomes Saturday at 6:45 AM, the same household, one change on.
+    expect(morning).toMatchObject({ day: "2026-10-17", clock: { morning: true, evening: true } });
+    expect(Temporal.Instant.from(morning.clock.now).toZonedDateTimeISO("America/Denver").toPlainTime().toString()).toBe("06:45:00");
+
+    // Last night stayed: the heater's still on and the hay's on order.
+    const devices = (await tool(env, "show_ranch", {}, "/mcp", as("Nick"))) as { places: { devices: { name: string; state: string }[] }[] };
+    expect(devices.places.flatMap((p) => p.devices).find((d) => d.name === "Barn heater")?.state).toBe("on");
+    const orders = (await tool(env, "orders", {}, "/mcp", as("Nick"))) as { status: string; lines: string[] }[];
+    expect(orders.some((o) => o.status === "placed")).toBe(true);
+    // Today's daily chores are there and nothing from yesterday is late.
+    const today = (await tool(env, "show_today", {}, "/mcp", as("Nick"))) as { tasks: { title: string; status: string; due: string }[] };
+    expect(today.tasks.find((t) => t.title === "Feed the horses (morning)")).toMatchObject({ status: "open" });
+    expect(today.tasks.some((t) => t.status === "overdue")).toBe(false);
+
+    // The briefing opens on what happened since last night.
+    const briefing = (await tool(env, "show_briefing", {}, "/mcp", as("Nick"))) as { greeting: string; cards: { id: string; lines: { text: string }[] }[] };
+    expect(briefing.greeting).toBe("Good morning");
+    const overnight = briefing.cards[0]!;
+    expect(overnight.id).toBe("overnight");
+    const said = overnight.lines.map((l) => l.text).join(" | ");
+    expect(said).toContain("Barn heater on");
+    expect(said).toContain("Take out the trash: done by Jak");
+    expect(said).toContain("Nick approved Jon's request");
+    // A kid hears about the ranch, not who ordered what.
+    const kids = (await tool(env, "show_briefing", {}, "/mcp", as("Eli"))) as { cards: { id: string; lines: { text: string }[] }[] };
+    const theirs = kids.cards.find((c) => c.id === "overnight")?.lines.map((l) => l.text).join(" | ") ?? "";
+    expect(theirs).toContain("Barn heater on");
+    expect(theirs).not.toContain("approved");
+
+    // Back to the real time starts it over.
+    const back = await setClock("now");
+    expect(back).toMatchObject({ day: "2026-10-16", clock: { morning: false, evening: false } });
   });
 
   it("starts over with no passcode when the server has none", async () => {

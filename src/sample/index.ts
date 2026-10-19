@@ -1,6 +1,6 @@
 import { Temporal } from "temporal-polyfill";
 import type { CorralApprovals } from "../approvals.ts";
-import { ToolError, type CorralChange, type CorralEvent, type CorralSupply, type CorralTask, type CorralWhere, type Household, type HouseholdTool } from "../household.ts";
+import { ToolError, type CorralChange, type CorralEvent, type CorralSupply, type CorralTask, type CorralWhere, type Household, type HouseholdHistoryEntry, type HouseholdTool } from "../household.ts";
 import { amountWords, and, lineWords, quote, type CorralOrder, type CorralReorder, type CorralSupplyOrder, type Supplier } from "../orders.ts";
 import { clock, dollars, isAllDay, unitAmount, whenLabel } from "./labels.ts";
 import { actorFor, actorOf, approversOf, either, personNamed, refusalFor, type PlanChange, type RequestChange, type SampleActor } from "./roles.ts";
@@ -15,6 +15,9 @@ const CHANGES = new Set<HouseholdTool>(["add_event", "add_task", "complete_task"
 
 /** The most supplies one order asks for. */
 const MAX_ORDER_ITEMS = 12;
+
+/** The most history a household keeps. */
+const MAX_HISTORY = 60;
 
 /**
  * The sample household, answering Corral's tools the way Corral does, so the
@@ -66,7 +69,60 @@ export class SampleHousehold implements Household {
       about: () => this.about(),
       call: (tool, args) => this.callAs(actorFor(this.state, speaker), tool, args),
       refusal: (action) => refusalFor(this.state, actorFor(this.state, speaker), action),
+      history: async (since) => this.historyFor(actorFor(this.state, speaker), since),
     };
+  }
+
+  /**
+   * What's happened since `since`, oldest first: chores done, orders placed,
+   * requests decided (what's only asked waits in approvals). The household's
+   * history is about everyone (who did which chore, who ordered what), so it's for the
+   * people who approve requests and for the shared screen; anyone else hears
+   * none of it.
+   */
+  async history(since: Temporal.Instant): Promise<HouseholdHistoryEntry[]> {
+    return this.historyFor(actorFor(this.state, null), since);
+  }
+
+  /** History as one actor may hear it (see history). */
+  historyFor(actor: SampleActor, since: Temporal.Instant): HouseholdHistoryEntry[] {
+    if (actor.person ? !actor.role.approves : !actor.role.changes) return [];
+    return this.state.history
+      .filter((h) => Temporal.Instant.compare(this.instantOf(h.at), since) >= 0)
+      .map((h) => ({ at: h.at, who: h.who ? this.shortNameOf(h.who) : null, text: h.text }));
+  }
+
+  /** Keeps something that happened, for history. */
+  private note(who: string | null, text: string): void {
+    this.state.history.push({ at: this.#now().toZonedDateTimeISO(this.state.timeZone).toString(), who, text });
+    if (this.state.history.length > MAX_HISTORY) this.state.history.splice(0, this.state.history.length - MAX_HISTORY);
+  }
+
+  /**
+   * Moves the household on to a new day, keeping what happened (orders,
+   * requests, history): each daily chore gets today's, yesterday's still-open
+   * one is closed the way a missed repeat is, and a one-off from before stays
+   * as it was. Call it once the household's clock reads the new day.
+   */
+  nextDay(): void {
+    const today = this.today();
+    const shift = (wire: string, days: number) => (isAllDay(wire) ? Temporal.PlainDate.from(wire).add({ days }).toString() : Temporal.ZonedDateTime.from(wire).add({ days }).toString());
+    const daily = this.state.tasks.filter((t) => t.repeats === "daily");
+    // The latest day each daily chore was set for; today's comes from it, once.
+    const latest = new Map<string, SampleTask>();
+    for (const t of daily) {
+      const seen = latest.get(t.title);
+      if (!seen || Temporal.PlainDate.compare(this.dayOf(t.due), this.dayOf(seen.due)) > 0) latest.set(t.title, t);
+    }
+    for (const t of latest.values()) {
+      const gap = today.since(this.dayOf(t.due)).days;
+      if (gap <= 0) continue;
+      const { captured: _done, ...chore } = structuredClone(t);
+      this.state.tasks.push({ ...chore, id: crypto.randomUUID(), due: shift(t.due, gap), status: "open", doneBy: null });
+    }
+    for (const t of daily) {
+      if (t.status === "open" && Temporal.PlainDate.compare(this.dayOf(t.due), today) < 0) t.status = "skipped";
+    }
   }
 
   async callAs(actor: SampleActor, tool: HouseholdTool, args: Args): Promise<unknown> {
@@ -391,6 +447,7 @@ export class SampleHousehold implements Household {
         // Credit goes to whoever's named, else the one person it's for, else whoever's speaking; a shared screen itself is nobody.
         t.doneBy = by?.id ?? (t.assignees !== "anyone" && t.assignees.length === 1 ? t.assignees[0]! : (actor.person?.id ?? null));
         if (args.values && typeof args.values === "object" && !Array.isArray(args.values)) t.captured = args.values as Record<string, unknown>;
+        this.note(t.doneBy, `${t.title}: done${t.doneBy ? ` by ${this.shortNameOf(t.doneBy)}` : ""}`);
         return { status: "done", summary: `${t.title}: done${t.doneBy ? ` by ${this.shortNameOf(t.doneBy)}` : ""}` };
       }
       case "undo_task":
@@ -507,6 +564,7 @@ export class SampleHousehold implements Household {
     await this.send(order);
     this.state.orders.push(order);
     const arrives = whenLabel(order.deliveryDate!);
+    this.note(actor.person?.id ?? null, `Ordered ${what}, ${dollars(order.totalCents)}, arriving ${arrives}`);
     return { status: "done", summary: `Ordered ${what}: ${dollars(order.totalCents)}, arriving ${arrives}`, order: order.id, total: dollars(order.totalCents), arrives };
   }
 
@@ -580,6 +638,7 @@ export class SampleHousehold implements Household {
     r.decidedBy = me.id;
     const asker = r.from ? `${this.shortNameOf(r.from)}'s` : `${this.state.actingAs}'s`;
     const summary = `${args.decision === "approve" ? "Approved" : "Declined"} ${asker} request: ${r.summary}`;
+    this.note(me.id, `${me.shortName} ${args.decision === "approve" ? "approved" : "declined"} ${asker} request: ${r.summary}${placed?.deliveryDate ? `, arriving ${whenLabel(placed.deliveryDate)}` : ""}`);
     if (!placed?.deliveryDate) return { status: "done", summary };
     const arrives = whenLabel(placed.deliveryDate);
     return { status: "done", summary: `${summary}. It arrives ${arrives}.`, order: placed.id, arrives };

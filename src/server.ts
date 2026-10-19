@@ -397,6 +397,7 @@ export async function buildServer(household: Household, ranch?: Ranch): Promise<
         if (refusal) return answer(() => Promise.reject(new ToolError(refusal)));
         try {
           const change = await ranch.devices.set((args ?? {}) as Record<string, unknown>);
+          ranch.note(change.summary);
           const view = await ranchNow();
           return { content: [{ type: "text", text: JSON.stringify(change) }], structuredContent: view };
         } catch (err) {
@@ -407,7 +408,7 @@ export async function buildServer(household: Household, ranch?: Ranch): Promise<
     screen(
       "show_briefing",
       "Show the briefing",
-      "Show the morning briefing as swipeable cards: today at a glance, the weather, late chores, low supplies, the animals (outside the fence, low collar batteries), the greenhouse and devices needing attention. Use it for good morning, or what do I need to know today.",
+      "Show the morning briefing as swipeable cards: in the morning, first what happened since last night (devices switched, automations run, orders, chores done, requests decided), then today at a glance, the weather, late chores, low supplies, the animals (outside the fence, low collar batteries), the greenhouse and devices needing attention. Use it for good morning, or what do I need to know today.",
       z.object({}),
       BRIEFING_URI,
       widgetHtml.briefing,

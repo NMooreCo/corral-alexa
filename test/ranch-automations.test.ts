@@ -101,4 +101,18 @@ describe("the ranch's automations", () => {
     await expect(ranch.automations.set("moose", true)).rejects.toThrow(/no automation called/);
     await expect(ranch.automations.set("g", true)).rejects.toThrow(/could be/);
   });
+
+  it("keeps what they do for the ranch's history: turned on or off, added, and each run", async () => {
+    const { ranch, move } = ranchAt("05:55");
+    await ranch.tick(); // the first look only starts the clock
+    await ranch.automations.set("freeze protection", true);
+    await ranch.automations.set("freeze protection", true); // already on: nothing new to say
+    move("06:01");
+    await ranch.tick();
+    const told = ranch.history(at("00:00")).map((h) => h.text);
+    expect(told[0]).toBe("Freeze protection turned on");
+    expect(told[1]).toMatch(/^Garden watering ran: Garden drip line on/);
+    expect(told).toHaveLength(2);
+    expect(ranch.history(at("06:30"))).toEqual([]);
+  });
 });

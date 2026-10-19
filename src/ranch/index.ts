@@ -7,6 +7,15 @@ import { forecast, type Forecast } from "./weather.ts";
 import { now as clockNow } from "../clock.ts";
 import { Automations } from "./automations.ts";
 
+/** The most ranch history kept. */
+const MAX_HISTORY = 60;
+
+/** Something that happened on the ranch, in words. */
+export interface RanchHistoryEntry {
+  at: Temporal.Instant;
+  text: string;
+}
+
 /**
  * A household's ranch: its configuration (where it is, its property map, its
  * thresholds), the sources its devices come from, its collar feed, and the
@@ -20,6 +29,8 @@ export class Ranch {
   readonly automations: Automations;
   readonly #now: () => Temporal.Instant;
   readonly #fetch?: typeof fetch;
+  /** What's happened on the ranch, oldest first: devices switched, automations run or changed. */
+  readonly #history: RanchHistoryEntry[] = [];
 
   /** With `history`, scheduled automations start as having run at their last time (a sample's past). */
   constructor(opts: { config: RanchConfig; sources: DeviceSource[]; trackers: TrackerFeed; now?: () => Temporal.Instant; fetch?: typeof fetch; history?: boolean }) {
@@ -36,6 +47,7 @@ export class Ranch {
         units: opts.config.units,
         now: this.#now,
         tonightLow: async () => (await this.weather().catch(() => null))?.tonight.lowValue ?? null,
+        note: (text) => this.note(text),
       },
       { history: opts.history },
     );
@@ -48,6 +60,17 @@ export class Ranch {
 
   now(): Temporal.Instant {
     return this.#now();
+  }
+
+  /** Keeps something that happened on the ranch, for "since last night". */
+  note(text: string): void {
+    this.#history.push({ at: this.#now(), text });
+    if (this.#history.length > MAX_HISTORY) this.#history.splice(0, this.#history.length - MAX_HISTORY);
+  }
+
+  /** What's happened on the ranch since `since`, oldest first. */
+  history(since: Temporal.Instant): RanchHistoryEntry[] {
+    return this.#history.filter((h) => Temporal.Instant.compare(h.at, since) >= 0);
   }
 
   weather(): Promise<Forecast> {

@@ -67,6 +67,17 @@ export interface Household {
   refusal?(action: HouseholdAction): string | null;
   /** Now, for this household, when it keeps its own clock (a simulator's sample can run at another hour). */
   now?(): Temporal.Instant;
+  /** What's happened since `since`, oldest first, as this speaker may hear it. A household that keeps no history leaves it out. */
+  history?(since: Temporal.Instant): Promise<HouseholdHistoryEntry[]>;
+}
+
+/** Something that happened in the household, in words: a chore done, an order, a request decided. */
+export interface HouseholdHistoryEntry {
+  /** When, zoned. */
+  at: string;
+  /** Who did it, by short name; null for a shared screen. */
+  who: string | null;
+  text: string;
 }
 
 /** What a household says yes or no to beyond its own tools, like switching one of its ranch's devices. */

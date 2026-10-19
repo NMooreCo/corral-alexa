@@ -59,6 +59,8 @@ export interface AutomationContext {
   now: () => Temporal.Instant;
   /** Tonight's forecast low in the household's units, or null when the forecast can't be read. */
   tonightLow: () => Promise<number | null>;
+  /** Keeps what happened (an automation run, turned on or off, added) for the ranch's history. */
+  note?: (text: string) => void;
 }
 
 interface Rule extends AutomationSpec {
@@ -99,6 +101,7 @@ export class Automations {
   async set(said: unknown, enabled: unknown): Promise<AutomationView> {
     if (typeof enabled !== "boolean") throw new ToolError("Say whether to turn it on (true) or off (false).");
     const rule = this.#match(said);
+    if (rule.enabled !== enabled) this.#ctx.note?.(`${rule.name} turned ${enabled ? "on" : "off"}`);
     rule.enabled = enabled;
     const devices = await this.#ctx.devices.all().catch(() => [] as Device[]);
     return this.#view(rule, devices);
@@ -116,6 +119,7 @@ export class Automations {
     for (let i = 2; this.#rules.some((r) => r.id === id); i++) id = `${base}-${i}`;
     const rule: Rule = { id, name, enabled: true, when, then, lastRun: null };
     this.#rules.push(rule);
+    this.#ctx.note?.(`${name} added, and on`);
     return this.#view(rule, await this.#ctx.devices.all());
   }
 
@@ -143,6 +147,7 @@ export class Automations {
         }
       }
       r.lastRun = { at: now, did, failed };
+      this.#ctx.note?.(`${r.name} ran: ${[...did, ...failed].join("; ") || "nothing to do"}`);
     }
   }
 

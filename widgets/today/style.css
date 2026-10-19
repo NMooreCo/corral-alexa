@@ -73,3 +73,90 @@
 .where .meta {
   grid-column: 1 / -1;
 }
+
+/* A request waiting for whoever's looking, above the day. */
+.waiting {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+  /* Not a card itself: the request inside it is. */
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.ask {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 2px solid var(--late);
+  border-radius: 14px;
+  background: var(--late-soft);
+}
+
+.ask.pending {
+  opacity: 0.6;
+}
+
+.ask .initial {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--forest);
+  color: var(--card);
+  font-weight: 700;
+}
+
+.ask .body {
+  min-width: 0;
+}
+
+.ask p {
+  margin: 0;
+}
+
+.ask .who {
+  font-weight: 700;
+}
+
+.ask .what {
+  font-size: 1.15rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.ask .actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ask .actions button {
+  font: inherit;
+  font-weight: 700;
+  min-height: 48px;
+  min-width: 108px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.ask .approve {
+  border: 2px solid var(--forest);
+  background: var(--forest);
+  color: var(--card);
+}
+
+.ask .decline {
+  border: 2px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+}
+
+.ask .actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

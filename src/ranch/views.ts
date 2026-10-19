@@ -66,6 +66,9 @@ async function optional<T>(p: Promise<T>): Promise<T | null> {
 
 /** A screen waits this long for a cold forecast, then goes up without it; the fetch still fills the cache for next time. */
 const WEATHER_WAIT_MS = 2500;
+/** The morning briefing's "since last night" starts at this hour the evening before. */
+const OVERNIGHT_FROM = "18:00";
+const MAX_OVERNIGHT_LINES = 6;
 function soon<T>(p: Promise<T>, ms = WEATHER_WAIT_MS): Promise<T> {
   return Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new ToolError("Not yet.")), ms))]);
 }
@@ -216,6 +219,33 @@ export async function briefingView(household: Household, ranch: Ranch): Promise<
   ]);
 
   const cards: BriefingCard[] = [];
+
+  // In the morning, what happened since 6 PM yesterday: devices switched, automations, orders, chores, requests decided.
+  if (local.hour < 12) {
+    const since = local.toPlainDate().subtract({ days: 1 }).toZonedDateTime({ timeZone: tz, plainTime: Temporal.PlainTime.from(OVERNIGHT_FROM) }).toInstant();
+    const told = (await optional(household.history?.(since) ?? Promise.resolve([]))) ?? [];
+    const happened = [
+      ...told.map((h) => ({ at: Temporal.ZonedDateTime.from(h.at).toInstant(), text: h.text, ranch: false })),
+      ...ranch.history(since).map((h) => ({ ...h, ranch: true })),
+    ].sort((a, b) => Temporal.Instant.compare(a.at, b.at));
+    // Ranch changes within a minute of each other (heaters switched on together, say) share a line.
+    const lines: { at: Temporal.Instant; text: string; ranch: boolean }[] = [];
+    for (const h of happened) {
+      const last = lines.at(-1);
+      if (last?.ranch && h.ranch && h.at.since(last.at).total("seconds") < 60) last.text += `; ${h.text}`;
+      else lines.push({ ...h });
+    }
+    if (lines.length) {
+      const clock = (at: Temporal.Instant) => at.toZonedDateTimeISO(tz).toLocaleString("en-US", { hour: "numeric", minute: "2-digit" });
+      cards.push({
+        id: "overnight",
+        title: "Since last night",
+        headline: `${happened.length} thing${happened.length === 1 ? "" : "s"} since ${clock(since)} yesterday`,
+        lines: lines.slice(-MAX_OVERNIGHT_LINES).map((l) => ({ text: `${clock(l.at)}: ${l.text}` })),
+        warn: false,
+      });
+    }
+  }
 
   // Today at a glance.
   const away = where.filter((w) => w.location !== "Home");

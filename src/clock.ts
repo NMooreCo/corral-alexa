@@ -46,6 +46,14 @@ export class HouseholdClock {
     const target = at.toZonedDateTimeISO(timeZone).toPlainDate().toZonedDateTime({ timeZone, plainTime: Temporal.PlainTime.from(time) }).toInstant();
     return Math.round(target.since(at).total("minutes"));
   }
+
+  /** The offset, in minutes, that makes it the next `time` ("06:45") after `from` (a household's now) in `timeZone`: the next morning, say. */
+  static offsetToNext(time: string, timeZone: string, from: Temporal.Instant, at: Temporal.Instant = now()): number {
+    const local = from.toZonedDateTimeISO(timeZone);
+    let target = local.toPlainDate().toZonedDateTime({ timeZone, plainTime: Temporal.PlainTime.from(time) });
+    if (Temporal.ZonedDateTime.compare(target, local) <= 0) target = target.add({ days: 1 });
+    return Math.round(target.toInstant().since(at).total("minutes"));
+  }
 }
 
 /** Today's date in a time zone, by the same clock. */

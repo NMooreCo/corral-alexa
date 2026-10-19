@@ -1,3 +1,4 @@
+import type { CorralApprovals, CorralRequest } from "./approvals.ts";
 import { ToolError, type CorralEvent, type CorralTask, type CorralWhere, type Household } from "./household.ts";
 import { now as clockNow } from "./clock.ts";
 
@@ -12,6 +13,8 @@ export type TodayView = {
   events: CorralEvent[];
   tasks: CorralTask[];
   whereabouts: CorralWhere[];
+  /** Requests waiting for whoever's looking to decide, for a household that decides its own; they can approve one with a tap. */
+  toDecide?: CorralRequest[];
 };
 
 /**
@@ -21,13 +24,15 @@ export type TodayView = {
  * whole screen.
  */
 export async function todayView(household: Household): Promise<TodayView> {
-  const [about, events, tasks, whereabouts] = await Promise.all([
+  const [about, events, tasks, whereabouts, approvals] = await Promise.all([
     household.about(),
     part<CorralEvent[]>(household.call("calendar", {})),
     part<CorralTask[]>(household.call("tasks", { include_done: true })),
     part<CorralWhere[]>(household.call("whereabouts", {})),
+    household.decidesRequests ? household.call("approvals", {}).catch((err) => (err instanceof ToolError ? null : Promise.reject(err))) : Promise.resolve(null),
   ]);
-  return { household: about.name ?? null, at: (household.now?.() ?? clockNow()).toString(), events, tasks, whereabouts };
+  const toDecide = (approvals as Partial<CorralApprovals> | null)?.toDecide;
+  return { household: about.name ?? null, at: (household.now?.() ?? clockNow()).toString(), events, tasks, whereabouts, ...(Array.isArray(toDecide) && toDecide.length ? { toDecide } : {}) };
 }
 
 async function part<T extends unknown[]>(answer: Promise<unknown>): Promise<T> {

@@ -1,5 +1,5 @@
 import { Temporal } from "temporal-polyfill";
-import type { Household, HouseholdAbout, HouseholdTool } from "../household.ts";
+import type { Household, HouseholdAbout, HouseholdHistoryEntry, HouseholdTool } from "../household.ts";
 import { SampleHousehold } from "./index.ts";
 import { seed, type SampleState } from "./seed.ts";
 import type { KeptSample, SampleStore } from "./store.ts";
@@ -73,7 +73,13 @@ export class SharedSample implements Household {
       version: () => shared.version(),
       refusal: (action) => shared.#current().as(speaker).refusal?.(action) ?? null,
       now: () => shared.now(),
+      history: (since) => shared.#current().as(speaker).history!(since),
     };
+  }
+
+  /** What's happened since `since`, as the shared screen hears it. */
+  async history(since: Temporal.Instant): Promise<HouseholdHistoryEntry[]> {
+    return this.#current().as(null).history!(since);
   }
 
   async #callAs(speaker: string | null | undefined, tool: HouseholdTool, args: Record<string, unknown>): Promise<unknown> {
@@ -92,6 +98,20 @@ export class SharedSample implements Household {
   status(): SampleStatus {
     const household = this.#current();
     return { name: household.name, day: this.#kept!.day, version: this.#kept!.version };
+  }
+
+  /**
+   * Moves the household on to the day its clock now reads, keeping what
+   * happened, instead of starting over (see SampleHousehold.nextDay). For a
+   * simulator that jumps to the next morning.
+   */
+  advanceDay(): SampleStatus {
+    if (!this.#household) this.#load();
+    const household = this.#household!;
+    household.nextDay();
+    this.#kept = { day: this.#dayOf(household), version: this.#kept!.version + 1, state: freeze(household.state) };
+    this.#store.save(this.#kept);
+    return this.status();
   }
 
   /** Starts the household over, as if it were a new day. */

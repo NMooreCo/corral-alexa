@@ -1,3 +1,4 @@
+import type { CorralRequest } from "../../src/approvals.ts";
 import type { CorralEvent, CorralTask, CorralWhere } from "../../src/household.ts";
 import type { TodayView } from "../../src/today.ts";
 import { escape, firstName, householdNow, sizeButton, withoutToday } from "../shared/screen.ts";
@@ -7,10 +8,33 @@ import type { Home } from "./main.ts";
  * The Today tab: today's calendar, chores and who's where, sized to read
  * from across a kitchen. It marks what's on now and next, and checks chores
  * off through the same Corral tools the assistant uses, so Corral's rules
- * still apply and the assistant hears what happened.
+ * still apply and the assistant hears what happened. A request waiting for
+ * whoever's looking (a kid's sleepover, the farm hand's order) shows at the
+ * top with Approve and Decline, so a parent in the kitchen can say yes with a
+ * tap to something asked in the barn.
  */
 
 const pending = new Set<string>();
+/** Requests being decided right now, so a second tap does nothing. */
+const deciding = new Set<string>();
+
+/** The newest request waiting for whoever's looking, to decide with a tap, and how many more wait (the approvals screen has them all). */
+function waitingHtml(requests: CorralRequest[], zone: string | undefined): string {
+  const r = requests.at(-1);
+  if (!r) return "";
+  const busy = deciding.has(r.id) ? "disabled" : "";
+  const more = requests.length - 1;
+  return `<section class="waiting" aria-label="Waiting for you">
+    <div class="ask${busy ? " pending" : ""}">
+      <span class="initial" aria-hidden="true">${escape(r.from.charAt(0))}</span>
+      <div class="body"><p class="who">${escape(firstName(r.from))} asks <span class="meta">· ${escape(withoutToday(r.since, zone))}${more ? ` · and ${more} more waiting` : ""}</span></p><p class="what">${escape(r.asks)}</p></div>
+      <div class="actions">
+        <button type="button" class="approve" data-request="${escape(r.id)}" data-decision="approve" ${busy}>Approve</button>
+        <button type="button" class="decline" data-request="${escape(r.id)}" data-decision="decline" ${busy}>Decline</button>
+      </div>
+    </div>
+  </section>`;
+}
 
 /** Minutes after midnight for "3:30 PM", or null. */
 function minutesOf(clock: string | undefined): number | null {
@@ -69,6 +93,7 @@ export function todayHtml(view: TodayView, home: Home): string {
         ${sizeButton(home.screen)}
       </div>
     </header>
+    ${waitingHtml(view.toDecide ?? [], zone)}
     <div class="columns">
       <section aria-labelledby="h-cal">
         <h2 id="h-cal">Calendar</h2>
@@ -121,10 +146,32 @@ export function todayHtml(view: TodayView, home: Home): string {
 
 /** A tap on the Today tab; true when it was one of its own. */
 export function todayClick(target: HTMLElement, home: Home): boolean {
+  const ask = target.closest<HTMLButtonElement>("button[data-request]");
+  const decision = ask?.dataset.decision;
+  if (ask?.dataset.request && (decision === "approve" || decision === "decline")) {
+    void decide(ask.dataset.request, decision, home);
+    return true;
+  }
   const button = target.closest<HTMLButtonElement>("button[data-task]");
   if (!button?.dataset.task) return false;
   void toggle(button.dataset.task, home);
   return true;
+}
+
+async function decide(id: string, decision: "approve" | "decline", home: Home) {
+  const request = home.today()?.toDecide?.find((r) => r.id === id);
+  if (!request || deciding.has(id)) return;
+  deciding.add(id);
+  home.screen.rerender();
+  const text = await home.screen.act("decide_approval", { request: id, decision });
+  deciding.delete(id);
+  if (text !== null) {
+    const summary = (JSON.parse(text) as { summary?: string }).summary ?? `${decision === "approve" ? "Approved" : "Declined"} ${request.from}'s request`;
+    home.screen.toast(summary);
+    // Tell the assistant, so "when does it come?" right after has the answer.
+    home.screen.tell(decision === "approve" ? "approved" : "declined", { from: request.from, request: request.asks }, `On the screen: ${summary}.`);
+  }
+  await home.screen.refreshNow();
 }
 
 async function toggle(id: string, home: Home) {
