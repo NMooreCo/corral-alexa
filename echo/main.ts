@@ -659,7 +659,8 @@ function speak(text: string) {
   if (v) u.voice = v;
   u.rate = 1.04;
   u.onstart = () => {
-    setLight("speaking");
+    // Something said on its own keeps the notification's amber light while it's said.
+    setLight(alerting ? "notify" : "speaking");
     pauseListening();
   };
   u.onend = u.onerror = () => {
@@ -991,6 +992,8 @@ const ALERT_EVERY_MS = 3_000;
 const speaksUp = !embedded || place.toLowerCase() === "barn";
 const heldAlerts: string[] = [];
 let alertCursor: string | undefined;
+/** True while the device says something on its own. */
+let alerting = false;
 
 async function watchAlerts() {
   if (!speaksUp) return;
@@ -1055,9 +1058,11 @@ async function speakUp(text: string) {
   addLog(modelLog, "page", `Said on its own: ${text}`);
   state.alertNotes.push(text);
   await pause(700);
+  alerting = true;
   // Measures said the way people say them.
   speak(`Heads up: ${text.replace(/\b(\d+) ft\b/g, "$1 feet").replace(/\b(\d+) m\b/g, "$1 meters")}`);
   await untilQuiet();
+  alerting = false;
   await pause(1800);
   alertEl.hidden = true;
 }
