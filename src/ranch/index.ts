@@ -10,10 +10,11 @@ import { Automations } from "./automations.ts";
 /** The most ranch history kept. */
 const MAX_HISTORY = 60;
 
-/** Something that happened on the ranch, in words. */
+/** Something that happened on the ranch, in words: a device switched, or an automation run or changed. */
 export interface RanchHistoryEntry {
   at: Temporal.Instant;
   text: string;
+  kind: "device" | "automation";
 }
 
 /**
@@ -47,7 +48,7 @@ export class Ranch {
         units: opts.config.units,
         now: this.#now,
         tonightLow: async () => (await this.weather().catch(() => null))?.tonight.lowValue ?? null,
-        note: (text) => this.note(text),
+        note: (text) => this.note(text, "automation"),
       },
       { history: opts.history },
     );
@@ -63,8 +64,8 @@ export class Ranch {
   }
 
   /** Keeps something that happened on the ranch, for "since last night". */
-  note(text: string): void {
-    this.#history.push({ at: this.#now(), text });
+  note(text: string, kind: RanchHistoryEntry["kind"] = "device"): void {
+    this.#history.push({ at: this.#now(), text, kind });
     if (this.#history.length > MAX_HISTORY) this.#history.splice(0, this.#history.length - MAX_HISTORY);
   }
 

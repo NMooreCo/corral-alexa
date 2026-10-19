@@ -66,6 +66,18 @@ async function optional<T>(p: Promise<T>): Promise<T | null> {
 
 /** A screen waits this long for a cold forecast, then goes up without it; the fetch still fills the cache for next time. */
 const WEATHER_WAIT_MS = 2500;
+/** Devices switched together, said once: "Horse tank heater, goat tank heater and barn heater on; coop heat lamp on for 12 hours, until 8:17 AM". */
+function switchedTogether(texts: string[]): string {
+  const plain = (state: string) => texts.filter((t) => t.endsWith(` ${state}`)).map((t) => t.slice(0, -state.length - 1));
+  const names = (list: string[]) => list.map((n, i) => (i ? n.charAt(0).toLowerCase() + n.slice(1) : n));
+  const together = (list: string[]) => (list.length > 1 ? `${names(list).slice(0, -1).join(", ")} and ${names(list).at(-1)}` : list[0]!);
+  const on = plain("on");
+  const off = plain("off");
+  const rest = texts.filter((t) => !t.endsWith(" on") && !t.endsWith(" off"));
+  const parts = [...(on.length ? [`${together(on)} on`] : []), ...(off.length ? [`${together(off)} off`] : []), ...rest.map((t, i) => (on.length || off.length || i ? t.charAt(0).toLowerCase() + t.slice(1) : t))];
+  return parts.join("; ");
+}
+
 /** The morning briefing's "since last night" starts at this hour the evening before. */
 const OVERNIGHT_FROM = "18:00";
 const MAX_OVERNIGHT_LINES = 6;
@@ -225,16 +237,17 @@ export async function briefingView(household: Household, ranch: Ranch): Promise<
     const since = local.toPlainDate().subtract({ days: 1 }).toZonedDateTime({ timeZone: tz, plainTime: Temporal.PlainTime.from(OVERNIGHT_FROM) }).toInstant();
     const told = (await optional(household.history?.(since) ?? Promise.resolve([]))) ?? [];
     const happened = [
-      ...told.map((h) => ({ at: Temporal.ZonedDateTime.from(h.at).toInstant(), text: h.text, ranch: false })),
-      ...ranch.history(since).map((h) => ({ ...h, ranch: true })),
+      ...told.map((h) => ({ at: Temporal.ZonedDateTime.from(h.at).toInstant(), texts: [h.text], device: false })),
+      ...ranch.history(since).map((h) => ({ at: h.at, texts: [h.text], device: h.kind === "device" })),
     ].sort((a, b) => Temporal.Instant.compare(a.at, b.at));
-    // Ranch changes within a minute of each other (heaters switched on together, say) share a line.
-    const lines: { at: Temporal.Instant; text: string; ranch: boolean }[] = [];
+    // Devices switched within a minute of each other (heaters turned on together, say) share a line.
+    const groups: typeof happened = [];
     for (const h of happened) {
-      const last = lines.at(-1);
-      if (last?.ranch && h.ranch && h.at.since(last.at).total("seconds") < 60) last.text += `; ${h.text}`;
-      else lines.push({ ...h });
+      const last = groups.at(-1);
+      if (last?.device && h.device && h.at.since(last.at).total("seconds") < 60) last.texts.push(...h.texts);
+      else groups.push({ ...h, texts: [...h.texts] });
     }
+    const lines = groups.map((g) => ({ at: g.at, text: g.device ? switchedTogether(g.texts) : g.texts.join("; ") }));
     if (lines.length) {
       const clock = (at: Temporal.Instant) => at.toZonedDateTimeISO(tz).toLocaleString("en-US", { hour: "numeric", minute: "2-digit" });
       cards.push({

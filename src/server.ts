@@ -397,7 +397,8 @@ export async function buildServer(household: Household, ranch?: Ranch): Promise<
         if (refusal) return answer(() => Promise.reject(new ToolError(refusal)));
         try {
           const change = await ranch.devices.set((args ?? {}) as Record<string, unknown>);
-          ranch.note(change.summary);
+          // History says what was switched, not the screen's "with no set end".
+          ranch.note(change.summary.replace(/, with no set end$/, ""), "device");
           const view = await ranchNow();
           return { content: [{ type: "text", text: JSON.stringify(change) }], structuredContent: view };
         } catch (err) {

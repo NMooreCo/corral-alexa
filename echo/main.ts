@@ -224,6 +224,9 @@ const client = new Client({ name: "corral-echo-show-simulator", version: "0.1.0"
 const mcpHeaders: Record<string, string> = {};
 let modelTools: ModelTool[] = [];
 const uiByTool = new Map<string, string>();
+/** Tools that only read, and for each screen a tool that shows it without changing anything, to show it again as someone else sees it. */
+const readOnlyTools = new Set<string>();
+const readerByUri = new Map<string, { name: string; takesView: boolean }>();
 const uiHtml = new Map<string, string>();
 let instructions = "";
 
@@ -296,11 +299,15 @@ async function connect() {
   instructions = client.getInstructions() ?? "";
   const { tools } = await client.listTools();
   for (const t of tools) {
+    if (t.annotations?.readOnlyHint) readOnlyTools.add(t.name);
     const ui = (t._meta as { ui?: { visibility?: string[] } } | undefined)?.ui;
     // A tool only screens may call is the screen's business, not the assistant's.
     if (ui?.visibility && !ui.visibility.includes("model")) continue;
     const uri = getToolUiResourceUri(t);
     if (uri) uiByTool.set(t.name, uri);
+    if (uri && t.annotations?.readOnlyHint && !readerByUri.has(uri)) {
+      readerByUri.set(uri, { name: t.name, takesView: Boolean((t.inputSchema as { properties?: Record<string, unknown> }).properties?.view) });
+    }
     const { $schema: _drop, ...schema } = t.inputSchema as Record<string, unknown>;
     modelTools.push({ name: t.name, description: t.description ?? t.title ?? t.name, input_schema: schema as ModelTool["input_schema"] });
   }
@@ -394,7 +401,7 @@ function speakerNote(): string | null {
 // ---------- Screens (MCP Apps) ----------
 
 /** The screen on the device, and the tool call that showed it, to show again as someone else would see it. */
-let mounted: { uri: string; bridge: AppBridge; ready: Promise<void>; tool: string; args: Record<string, unknown> } | null = null;
+let mounted: { uri: string; bridge: AppBridge; ready: Promise<void>; tool: string; args: Record<string, unknown>; view?: string } | null = null;
 
 function hostContext() {
   return {
@@ -444,6 +451,9 @@ async function showScreen(tool: string, uri: string, args: Record<string, unknow
   }
   mounted.tool = tool;
   mounted.args = args;
+  // Which tab it opened on, to open it on again.
+  const tab = (result.structuredContent as { tab?: unknown } | undefined)?.tab;
+  mounted.view = typeof tab === "string" ? tab : undefined;
   await mounted.ready;
   await mounted.bridge.sendToolInput({ arguments: args });
   await mounted.bridge.sendToolResult(result as Parameters<AppBridge["sendToolResult"]>[0]);
@@ -454,7 +464,16 @@ themeEl.addEventListener("change", () => void mounted?.bridge.sendHostContextCha
 /** The screen that's up, called again as whoever's speaking now: a private event opens up for its owner, the farm hand's day is the ranch's. */
 async function refreshScreen() {
   if (!mounted) return;
-  const { tool, uri, args } = mounted;
+  const { uri } = mounted;
+  let { tool, args } = mounted;
+  // A change that opened this screen (switching a device, turning on an automation, an order) isn't made again
+  // for the new speaker: the screen is shown again by a tool that only reads.
+  if (!readOnlyTools.has(tool)) {
+    const reader = readerByUri.get(uri);
+    if (!reader) return;
+    tool = reader.name;
+    args = reader.takesView && mounted.view ? { view: mounted.view } : {};
+  }
   const was = state.actor;
   state.actor = "page";
   try {

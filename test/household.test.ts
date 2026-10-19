@@ -299,6 +299,8 @@ describe("the sample household's Durable Object", () => {
 
     // The evening: Nick turns the barn heater on, Jak takes out the trash, Jon asks for hay and Nick says yes.
     await tool(env, "set_device", { device: "sample.barn-heater", state: "on" }, "/mcp", as("Nick"));
+    await tool(env, "set_device", { device: "sample.tank-heater-horses", state: "on" }, "/mcp", as("Nick"));
+    await tool(env, "set_automation", { automation: "freeze-protection", enabled: true }, "/mcp", as("Nick"));
     await tool(env, "complete_task", { task: await choreId(env, "Take out the trash") }, "/mcp", as("Jak"));
     const asked = (await tool(env, "place_order", { items: [{ supply: "Hay" }] }, "/mcp", as("Jon"))) as { orders?: unknown };
     expect(asked).toBeTruthy();
@@ -331,13 +333,15 @@ describe("the sample household's Durable Object", () => {
     const overnight = briefing.cards[0]!;
     expect(overnight.id).toBe("overnight");
     const said = overnight.lines.map((l) => l.text).join(" | ");
-    expect(said).toContain("Barn heater on");
+    // Devices switched together share a line; turning on an automation has its own.
+    expect(said).toContain("Barn heater and horse tank heater on");
+    expect(said).toMatch(/\d:\d\d PM: Freeze protection turned on/);
     expect(said).toContain("Take out the trash: done by Jak");
     expect(said).toContain("Nick approved Jon's request");
     // A kid hears about the ranch, not who ordered what.
     const kids = (await tool(env, "show_briefing", {}, "/mcp", as("Eli"))) as { cards: { id: string; lines: { text: string }[] }[] };
     const theirs = kids.cards.find((c) => c.id === "overnight")?.lines.map((l) => l.text).join(" | ") ?? "";
-    expect(theirs).toContain("Barn heater on");
+    expect(theirs).toContain("Barn heater and horse tank heater on");
     expect(theirs).not.toContain("approved");
 
     // Back to the real time starts it over.
