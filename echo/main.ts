@@ -2,6 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { AppBridge, getToolUiResourceUri, PostMessageTransport } from "@modelcontextprotocol/ext-apps/app-bridge";
 import "./style.css";
+import { visitorHousehold } from "./household.ts";
 
 /**
  * A simulated Alexa+ on an Echo Show. This page is the MCP client: it
@@ -29,7 +30,8 @@ const SHOWS: Record<string, { name: string; width: number; height: number }> = {
 const show = SHOWS[params.get("show") ?? "8"] ?? SHOWS["8"]!;
 const place = (params.get("place") ?? "").trim().slice(0, 40);
 const embedded = params.get("embed") === "1";
-const householdParam = params.get("household");
+// This visitor's own household unless the link names one (see household.ts).
+const householdParam = visitorHousehold();
 
 const SCREEN_W = show.width;
 const SCREEN_H = show.height;

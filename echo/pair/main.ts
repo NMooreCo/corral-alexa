@@ -1,4 +1,5 @@
 import "./style.css";
+import { visitorHousehold } from "../household.ts";
 
 /**
  * Two simulated Echo Shows on one shared household: an Echo Show 8 in the
@@ -16,7 +17,8 @@ const DEVICES = [
   { id: "barn", place: "Barn", show: "5" },
 ];
 
-const household = new URLSearchParams(location.search).get("household");
+// This visitor's own household unless the link names one; both Echo Shows use it (see ../household.ts).
+const household = visitorHousehold();
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const syncEl = $("sync");
 const nameEl = $("household-name");
