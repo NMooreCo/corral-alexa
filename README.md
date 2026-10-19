@@ -11,6 +11,7 @@ On a ranch it also runs the place: **"Alexa, run the greenhouse misters for 30 s
 - **[The simulated Echo Show](https://alexa-demo.corral.narralogy.ai/echo)**: talk to it (or type), watch it call Corral's tools over MCP, tap the screens, and pick who's speaking to watch the family's rules follow the person. It runs on a made-up household, Juniper Hollow. The demo passcode is in the submission's testing instructions.
 - **[Two Echo Shows, one household](https://alexa-demo.corral.narralogy.ai/echo?devices=2)**: a kitchen Echo Show 8 and a barn Echo Show 5 side by side. Check a chore off on one and watch the other catch up.
 - **The MCP server**: `https://alexa-demo.corral.narralogy.ai/mcp` (the sample household, open) and `https://alexa.corral.narralogy.ai/mcp` (linked to a real Corral, behind account linking).
+- **In Claude**: add `https://alexa-demo.corral.narralogy.ai/mcp` as a custom connector (no sign-in) and ask "What's going on tonight at Juniper Hollow? Show me the day." Claude calls the same tools and draws the same screens in the chat, tabs and all.
 - **The Agent Skill**: [`skills/corral-household`](skills/corral-household/SKILL.md), also served as the MCP prompt `household-assistant`.
 
 ## What it does
@@ -36,6 +37,8 @@ On a ranch it also runs the place: **"Alexa, run the greenhouse misters for 30 s
 | "Do all of that on its own whenever it's going to freeze." | It confirms, then turns on the **freeze protection** automation: at 5 PM, when tonight's low is 25°F or colder, the tank heaters, barn heater and coop lamp come on by themselves. Misting and watering run on schedules the same way. |
 
 ## How it works
+
+![How Corral for Alexa+ fits together: Alexa+, the simulated Echo Show, Claude and any MCP client call one MCP server on Cloudflare Workers, which reaches Corral, the greenhouse controller, the forecast, the collars and the feed store](docs/images/architecture.png)
 
 ```mermaid
 flowchart LR
@@ -119,7 +122,7 @@ The headline demo runs our **real** greenhouse misters from the simulated Echo S
 1. Put the controller's address and API key in `.dev.vars` (git-ignored), next to the model key:
 
    ```
-   GREENHOUSE_URL=http://192.0.2.72
+   GREENHOUSE_URL=http://192.168.1.50
    GREENHOUSE_KEY=the controller's X-Api-Key
    ```
 

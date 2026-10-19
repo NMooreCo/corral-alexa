@@ -28,6 +28,7 @@ Written while building, so each entry is what actually happened. For the Devpost
 
 - **Used for:** the Today screen (an interactive calendar, chores and whereabouts view), a screen-only refresh tool, full screen, host fonts and model-context updates, and a stand-in host for previewing on Echo Show sizes.
 - **Worked well:** `App` and `AppBridge` are small and clear; the Patterns page (app-only tools, polling with teardown, display modes, CSP) answered every design question.
+- **Portability, tried for real (October 18):** the same server added to Claude as a custom connector rendered our screens in the chat with no changes: the tabbed home screen, taps between tabs, the property map and the polling refresh all worked. Our one layout bug showed up only there (a stacked layout that didn't stretch to a narrower frame), which is a good argument for previewing at more than one host width.
 - **Needs work:** see F7; and the patterns live in a separate page from the API reference, so they're easy to miss.
 
 ## Feature requests
