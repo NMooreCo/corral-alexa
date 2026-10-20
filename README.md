@@ -61,7 +61,8 @@ flowchart LR
     L["Account linking<br/>OAuth 2.1 + PKCE"]
     P["Sample household<br/>Durable Object, SQLite"]
   end
-  B["Claude<br/>Amazon Bedrock or the Claude API"]
+  B["Claude<br/>the Claude API, or a model on Amazon Bedrock"]
+  V["Amazon Polly<br/>the device's voice"]
   G["Greenhouse controller<br/>ESP32 on the LAN (local)"]
   W["Open-Meteo forecast"]
   C["Corral's own MCP server<br/>the household's data and rules"]
@@ -69,6 +70,7 @@ flowchart LR
   S -- "MCP, Streamable HTTP" --> M
   O --> M
   S -- "/echo/model" --> B
+  S -- "/echo/voice" --> V
   M --> U
   M -- "linked: the person's Corral token" --> C
   M -- "demo" --> P
@@ -158,7 +160,7 @@ Kids ask and parents decide, with money too. When something runs low, Alexa+ can
 [`/echo`](https://alexa-demo.corral.narralogy.ai/echo) stands in for Alexa+ on an Echo Show 8, as the FAQ invites: **the page is a real MCP client** of this server. It sends `initialize`, `tools/list`, `resources/read` and `tools/call` over Streamable HTTP, and shows every call in a live traffic log beside the device.
 
 - **Who's speaking:** pick anyone in the household, or someone Alexa doesn't recognize, the way Alexa+ knows voices. The device greets them by name, every MCP call from then on (the assistant's and the screens' taps alike) carries who it is, and the screen redraws as they'd see it: Nick's private appointment opens up for Nick, the farm hand's day is the ranch's, a guest can look but not change anything. It starts as the household's first member, a parent, so every suggestion works; the suggestions marked Eli and Nick switch to them first, which plays the approval demo in two taps.
-- **Listening and speaking:** push-to-talk, or hands-free after "Alexa", with the browser's speech recognition and voices. Typing works everywhere.
+- **Listening and speaking:** push-to-talk, or hands-free after "Alexa", with the browser's speech recognition. Amazon Polly says the answers ([below](#the-simulators-voice)), with the browser's own voices as the fallback. Typing works everywhere.
 - **Deciding:** Claude ([below](#the-simulators-model)) picks the tools and says the answer. The page runs the loop: it calls the tools Claude asks for, sends the results back together, and stops at an answer.
 - **Screens:** when a tool has an MCP Apps screen, the page renders it on the device as a host would, passes taps back through MCP, and tells Claude what was tapped.
 - **The light bar** shows listening, thinking and speaking; captions show what it heard and what it said.
@@ -168,10 +170,10 @@ Kids ask and parents decide, with money too. When something runs low, Alexa+ can
 
 ## The simulator's model
 
-The simulator's brain is **Claude Opus 5.5**, called from the Worker at `POST /echo/model` through the official Anthropic TypeScript SDK, from either of two places that speak the same Messages API:
+The simulator's brain is **Claude Opus 5.5**, called from the Worker at `POST /echo/model`, from either of two places:
 
-- **Amazon Bedrock** (`anthropic.claude-opus-5-5`): Bedrock's Messages API endpoint, `https://bedrock-mantle.{region}.api.aws/anthropic`, with a Bedrock API key (`BEDROCK_API_KEY`). No AWS request signing is needed, which keeps it Workers-friendly.
-- **The Claude API** (`claude-opus-5-5`) with `ANTHROPIC_API_KEY`, or any gateway that speaks its wire format at `ANTHROPIC_BASE_URL`.
+- **The Claude API** (`claude-opus-5-5`) with `ANTHROPIC_API_KEY`, or any gateway that speaks its wire format at `ANTHROPIC_BASE_URL`, through the official Anthropic TypeScript SDK. The demo runs here.
+- **Amazon Bedrock**, through its bedrock-mantle endpoint with a Bedrock API key (`BEDROCK_API_KEY`), so no AWS request signing is needed, which keeps it Workers-friendly. `BEDROCK_MODEL` picks the model: Claude (`anthropic.claude-opus-5-5`) through the Messages API at `/anthropic`, or any other model, like `openai.gpt-5.6-terra`, through OpenAI's Responses API at `/openai/v1` (`src/echo/responses.ts` turns the conversation into Responses input and the answer back into a Messages reply, so the page doesn't change). Both are built and tested, but our new AWS account can't run a Bedrock model yet: its quota requests were declined and every model's daily quota is 0 (friction F8, F9 and F19 in [docs/feedback.md](docs/feedback.md)).
 
 `MODEL_PROVIDER` (`bedrock` or `anthropic`) picks one; unset, it's whichever has a key, Bedrock first. The page names the one answering, and each reply in its log shows the model id. Keys are Worker secrets and never reach the browser.
 
@@ -180,6 +182,16 @@ The simulator's brain is **Claude Opus 5.5**, called from the Worker at `POST /e
 - **Resilience:** if the main model declines a request, the SDK's refusal-fallback middleware runs it again on Claude Opus 4.8 at the same place.
 - **Cost control:** a per-visitor rate limit (a Workers rate-limit binding), an optional demo passcode, and caps on conversation and tool-list size, so it can't be used as a free general chatbot.
 - `src/echo/model.ts` is the whole integration; `test/echo.test.ts` checks the request it sends.
+
+## The simulator's voice
+
+An Echo Show should sound the same in every browser, so **Amazon Polly** says the answers. When the model has answered, the page posts the words to `POST /echo/voice`; the Worker asks Polly's `SynthesizeSpeech` for an MP3 and the page plays it, with the light bar on speaking (or amber, when the device speaks up on its own).
+
+- **Voice:** Joanna on Polly's neural engine, about half a second before Alexa starts talking. The generative engine sounds more natural but took one to two seconds for the same lines, too long for a voice assistant; `POLLY_ENGINE`, `POLLY_VOICE` and `POLLY_REGION` change it.
+- **Signing:** AWS Signature Version 4 with [`aws4fetch`](https://github.com/mhart/aws4fetch), which runs on Workers. The key belongs to an IAM user whose only permission is `polly:SynthesizeSpeech` (`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, Worker secrets).
+- **Cost control:** the demo passcode, a per-visitor limit of its own (`VOICE_LIMIT`), and at most 1,000 characters a line.
+- **Fallback:** without the key, or when Polly doesn't answer, the page speaks with the browser's own voice; the autoplay waits for whichever is talking.
+- `src/echo/voice.ts` is the whole integration; `test/echo.test.ts` checks the signed request and the fallback.
 
 ## The Agent Skill
 
@@ -255,7 +267,7 @@ Builds every page, typechecks (Worker and screens), and runs the tests. GitHub A
 - every screen's resource;
 - the current protocol for up-to-date clients;
 - account linking end to end against a stand-in Corral (discovery, the hand-off to Corral's sign-in, code and token exchange, calls with the person's token, refresh, revoked access, a declined sign-in, a callback in another browser, an unknown redirect address, the admin route);
-- the simulator's model route (what it sends to Bedrock and to the Claude API, which one it picks, the rate limit, the passcode, size caps);
+- the simulator's model route (what it sends to Bedrock, in the Messages and Responses APIs, and to the Claude API, which one it picks, the rate limit, the passcode, size caps) and its voice (the signed Polly request, the passcode and limits, the fallback);
 - ordering: a parent's order with its total in cents and delivery day, a kid's going to a parent and a parent's yes placing it, the spending limit sending a big order to the other parent, what can't be ordered, choosing a store, a store that won't take an order, delivery, and orders kept through a restart;
 - the ranch: every tool and both screens over MCP, each device's limits, the greenhouse connector against a fake controller (switching, the run timer, a refused key, a controller that stops answering, what answers at the wrong address) and the rule that keeps it local, the forecast from a stubbed Open-Meteo (tonight's low, freeze flags, caching, an outage), the collars, and the fence geometry (with randomized property checks).
 
@@ -272,7 +284,7 @@ Builds every page, typechecks (Worker and screens), and runs the tests. GitHub A
 | `src/sample/ranch.ts` | The sample ranch as data: the property map, the greenhouse's names and limits, simulated devices, a simulated controller, simulated collars |
 | `scripts/fake-greenhouse.mjs` | A stand-in greenhouse controller for trying `pnpm dev:lan` without the hardware |
 | `src/link/` | Account linking: the OAuth provider, Corral as the sign-in, `/admin/clients` |
-| `src/echo/` | The simulator's model route (Claude on Bedrock or the Claude API) and the practice model |
+| `src/echo/` | The simulator's model route (the Claude API, or a model on Bedrock), its voice (Amazon Polly) and the practice model |
 | `widgets/` | The screens (MCP Apps), each built into one HTML file, on `widgets/shared` |
 | `echo/`, `preview/` | The simulated Echo Show (`echo/pair` is the two-device view) and the screen preview |
 | `skills/corral-household/` | The Agent Skill |
