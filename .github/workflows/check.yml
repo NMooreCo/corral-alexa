@@ -1,6 +1,7 @@
 name: Check
 
-# Builds every page, typechecks the Worker and the screens, and runs every test, as `pnpm check` does locally.
+# Builds every page, typechecks the Worker and the screens, and runs every test, as `pnpm check` does locally,
+# then runs the tests again on a machine clock at UTC+14, so nothing leans on the server's own time zone.
 on:
   push:
     branches: [main]
@@ -23,3 +24,11 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+      # The runner's clock is UTC and the sample household's Denver; Kiritimati's date is a day ahead of both most hours.
+      # The first line fails the step if Node didn't take the zone, rather than quietly testing in UTC again.
+      - name: Tests on Pacific/Kiritimati time
+        env:
+          TZ: Pacific/Kiritimati
+        run: |
+          node -e "process.exit(new Date().getTimezoneOffset() === -840 ? 0 : 1)"
+          pnpm exec vitest run

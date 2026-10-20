@@ -78,6 +78,14 @@ describe("set_device and each device's limits", () => {
     await expect(ranch.devices.set({ device: "misters", state: "on", seconds: 0 })).rejects.toThrow("A run needs to be at least a second.");
   });
 
+  it("times a run on a device with no cap for a year at most, and leaves the device as it was when it won't", async () => {
+    const { ranch } = ranchAt();
+    const before = await ranch.devices.list({ device: "horse tank heater" });
+    await expect(ranch.devices.set({ device: "horse tank heater", state: "on", minutes: 1e306 })).rejects.toThrow("A timed run can be a year at most. Switch the Horse tank heater on with no set end instead.");
+    expect(await ranch.devices.list({ device: "horse tank heater" })).toEqual(before);
+    expect((await ranch.devices.set({ device: "horse tank heater", state: "on", seconds: 366 * 86_400 })).device.run).toBe("8784 hours left, until 7:30 PM");
+  });
+
   it("won't switch a sensor, or take a state it doesn't know", async () => {
     const { ranch } = ranchAt();
     await expect(ranch.devices.set({ device: "propane tank", state: "on" })).rejects.toThrow("The Propane tank only reports readings; there's nothing to switch.");
