@@ -10,6 +10,15 @@ On a ranch it also runs the place: **"Alexa, run the greenhouse misters for 30 s
 
 ![The simulated Echo Show 8 answering "What's going on tonight?" with the Today screen: the calendar with what's on now, late chores to tap off, and who's where, with tabs for the Ranch, the Animals and the Automations](docs/images/echo-show.jpg)
 
+**In 60 seconds**
+
+1. Open **[the simulated Echo Show](https://alexa-demo.corral.narralogy.ai/echo)**, enter the demo passcode (it's in the submission's testing instructions), and press **Make it evening**: it's 8:15 PM at the ranch.
+2. Ask **"What's going on tonight?"** (press Talk, or type it). The Today screen comes up; tap **Animals** on its rail for the nine dogs on the property map.
+3. Wait a moment. A couple of minutes into the evening, the Echo **speaks up on its own**: "Heads up: Hunter just left the fence."
+4. Tap the suggestion marked **Eli** (a sleepover on Friday) and say yes when Alexa offers to ask, then the one marked **Nick** ("Anything waiting for me?") and tap **Approve**. Kids ask; parents decide.
+
+Or press **Play the demo** and watch the evening and the next morning play out with the real model.
+
 **Try it**
 
 - **[The simulated Echo Show](https://alexa-demo.corral.narralogy.ai/echo)**: talk to it (or type), watch it call Corral's tools over MCP, tap the screens, and pick who's speaking to watch the family's rules follow the person. It runs on a made-up household, Juniper Hollow. The demo passcode is in the submission's testing instructions.
