@@ -1,0 +1,27 @@
+name: Demo health
+
+# Checks the live demo twice a day through judging (November 9 to 20, 2026): the simulator's page, the MCP server,
+# one real model turn and one Polly line. A failed run is GitHub's email to the repository's owner.
+# Needs the repository secret DEMO_PASSCODE.
+on:
+  schedule:
+    # 8 AM and 8 PM Mountain Time (UTC-7 through November 1, UTC-6 after).
+    - cron: "0 14 * * *"
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/demo-health.mjs
+        env:
+          DEMO_PASSCODE: ${{ secrets.DEMO_PASSCODE }}
