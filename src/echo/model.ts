@@ -130,7 +130,7 @@ interface TurnRequest {
   messages: Anthropic.Beta.BetaMessageParam[];
   tools: Anthropic.Beta.BetaTool[];
   /** About this turn: the server's instructions, the time, and where the display is ("barn", say). */
-  context?: { instructions?: string; now?: string; timeZone?: string; place?: string };
+  context?: { instructions?: string; now?: string; timeZone?: string; place?: string; screen?: boolean };
 }
 
 function clip(v: unknown, max: number): string {
@@ -169,6 +169,10 @@ export async function modelTurn(request: Request, env: Env): Promise<Response> {
     `The household's time zone is ${clip(ctx.timeZone, 64) || "unknown"}. It's now ${clip(ctx.now, 64) || "unknown"}.`,
     // The simulator can show two displays on one household, a kitchen's and a barn's.
     clip(ctx.place, 40).trim() ? `This display is in the ${clip(ctx.place, 40).trim().toLowerCase()}.` : "",
+    // An Echo Dot: the same tools, but nothing they show is seen.
+    ctx.screen === false
+      ? "This device is an Echo Dot, with no screen: nothing a tool shows appears here. Say what matters in words (two or three short sentences when a screen would have carried the detail), and never mention a screen, a tab or a tap."
+      : "",
     clip(ctx.instructions, 2000),
   ]
     .filter(Boolean)

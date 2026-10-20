@@ -220,6 +220,21 @@ describe("the simulated Echo Show", () => {
     expect(await page({})).not.toContain("{{voice");
   });
 
+  it("tells the model when the device is an Echo Dot, with no screen", async () => {
+    let system = "";
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      const body = (await new Request(input, init).json()) as { system: { text: string }[] };
+      system = body.system.map((b) => b.text).join("\n");
+      return Response.json({ id: "msg_1", type: "message", role: "assistant", model: "m", content: [{ type: "text", text: "Hi." }], stop_reason: "end_turn", stop_sequence: null, usage: { input_tokens: 1, output_tokens: 1 } });
+    });
+    const ask = (context: Record<string, unknown>) =>
+      call({ BACKEND: "sample", ANTHROPIC_API_KEY: "key" }, "/echo/model", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ messages: [{ role: "user", content: "hi" }], tools: [], context: { timeZone: "America/Denver", ...context } }) });
+    await ask({ screen: false });
+    expect(system).toContain("This device is an Echo Dot, with no screen");
+    await ask({});
+    expect(system).not.toContain("Echo Dot");
+  });
+
   it("names a Bedrock model for people", () => {
     expect(modelLabel("openai.gpt-5.6-terra")).toBe("GPT-5.6 Terra");
     expect(modelLabel("openai.gpt-5.6-luna")).toBe("GPT-5.6 Luna");

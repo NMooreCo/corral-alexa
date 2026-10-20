@@ -22,12 +22,15 @@ type ToolResult = Awaited<ReturnType<Client["callTool"]>>;
 
 // /echo is an Echo Show 8 in the kitchen. /echo?devices=2 puts two of these pages side by side on one household,
 // each with ?embed=1, a place and a model (?place=Barn&show=5). ?household= names a sample household other than the shared one.
+// ?show=dot is an Echo Dot: no screen, only its light ring, so everything has to work by voice.
 const params = new URLSearchParams(location.search);
 const SHOWS: Record<string, { name: string; width: number; height: number }> = {
   "5": { name: "Echo Show 5", width: 960, height: 480 },
   "8": { name: "Echo Show 8", width: 1280, height: 800 },
+  dot: { name: "Echo Dot", width: 1280, height: 800 },
 };
 const show = SHOWS[params.get("show") ?? "8"] ?? SHOWS["8"]!;
+const dot = params.get("show") === "dot";
 const place = (params.get("place") ?? "").trim().slice(0, 40);
 const embedded = params.get("embed") === "1";
 // This visitor's own household unless the link names one (see household.ts).
@@ -133,7 +136,16 @@ function roomForDevice(): number {
   return Math.max(90, innerHeight - stageChrome - panel - 10 - 12);
 }
 
+// A Dot has no screen: its light ring is the device's edge, and what was heard and said shows under it, for whoever's watching the demo.
+if (dot) {
+  document.body.classList.add("dot");
+  document.title = "Corral for Alexa+: simulated Echo Dot";
+  deviceEl.append(lightbar);
+  deviceEl.after(captionEl);
+}
+
 function fit() {
+  if (dot) return;
   const room = embedded ? roomForDevice() : Infinity;
   // The bezel is drawn outside the device, inside the stage's padding.
   const width = embedded ? stageEl.clientWidth - 30 : deviceEl.clientWidth;
@@ -427,7 +439,7 @@ function hostContext() {
 /** Shows a tool's screen with its result, reusing the one already up when it's the same screen. */
 async function showScreen(tool: string, uri: string, args: Record<string, unknown>, result: ToolResult) {
   const html = uiHtml.get(uri);
-  if (!html) return;
+  if (!html || dot) return;
   if (!mounted || mounted.uri !== uri) {
     await mounted?.bridge.close().catch(() => {});
     appHost.replaceChildren();
@@ -540,7 +552,7 @@ async function callModel(): Promise<Reply> {
     body: JSON.stringify({
       messages: state.messages,
       tools: modelTools,
-      context: { instructions, timeZone, now: householdNow().toLocaleString("en-US", { timeZone, dateStyle: "full", timeStyle: "short" }), ...(place ? { place } : {}) },
+      context: { instructions, timeZone, now: householdNow().toLocaleString("en-US", { timeZone, dateStyle: "full", timeStyle: "short" }), ...(place ? { place } : {}), ...(dot ? { screen: false } : {}) },
     }),
   });
   const body = (await res.json().catch(() => ({}))) as Reply & { error?: { code?: string; message?: string } };
@@ -873,6 +885,10 @@ async function startOver() {
 }
 $("start-over").addEventListener("click", () => void startOver());
 $<HTMLAnchorElement>("two-devices").href = `/echo?devices=2${householdParam ? `&household=${encodeURIComponent(householdParam)}` : ""}`;
+// The same household on the other kind of device: a Dot from a Show, a Show from a Dot.
+const other = $<HTMLAnchorElement>("other-device");
+other.href = `/echo?${dot ? "" : "show=dot&"}household=${encodeURIComponent(householdParam)}`;
+other.textContent = dot ? "Echo Show" : "Echo Dot";
 
 // In the two-device view, the page around both devices starts their conversations over and shows the passcode box.
 addEventListener("message", (e) => {
@@ -1137,7 +1153,7 @@ if (embedded) playButton.hidden = true;
 /** The add-on's screen is the kitchen board until someone asks for something else. */
 async function home() {
   const today = [...uiByTool.keys()].find((n) => n === "show_today");
-  if (!today) return;
+  if (!today || dot) return;
   state.actor = "page";
   const result = await client.callTool({ name: today, arguments: {} });
   state.actor = "screen";

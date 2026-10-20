@@ -245,6 +245,92 @@ body {
   color: var(--muted);
 }
 
+/* ---------- An Echo Dot (?show=dot): no screen, only the light ring, with what was heard and said beside it ---------- */
+
+.dot .device {
+  width: min(380px, 70%);
+  height: auto !important;
+  aspect-ratio: 1;
+  margin: 40px auto 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 38%, #3a3f3f, #1a1d1d 62%, #0f1111);
+  box-shadow:
+    0 0 0 10px #151717,
+    0 34px 80px rgb(0 0 0 / 0.6);
+}
+
+.dot .screen {
+  display: none;
+}
+
+/* Its four buttons: volume down and up, the action button and the microphone. */
+.dot .device::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 24%, #4d5353 0 4.2%, transparent 4.6%),
+    radial-gradient(circle at 50% 76%, #4d5353 0 4.2%, transparent 4.6%),
+    radial-gradient(circle at 24% 50%, #4d5353 0 4.2%, transparent 4.6%),
+    radial-gradient(circle at 76% 50%, #4d5353 0 4.2%, transparent 4.6%);
+}
+
+/* The ring: the light bar, as the edge of the Dot. */
+.dot .lightbar,
+.dot .lightbar[data-state] {
+  inset: 0;
+  height: auto;
+  border-radius: 50%;
+  background: none;
+  border: 16px solid var(--alexa);
+}
+
+.dot .lightbar[data-state="thinking"] {
+  border-color: var(--alexa) #0a3b4a #0a3b4a #0a3b4a;
+  animation: spin 0.9s linear infinite;
+}
+
+.dot .lightbar[data-state="speaking"] {
+  box-shadow: 0 0 36px var(--alexa);
+}
+
+.dot .lightbar[data-state="notify"] {
+  border-color: #f2b65a;
+  box-shadow: 0 0 36px #f2b65a;
+}
+
+.dot .caption {
+  position: static;
+  max-width: 760px;
+  margin: 28px auto 0;
+  padding: 0 4px;
+  background: none;
+  text-align: center;
+}
+
+.dot .heard {
+  font-size: 20px;
+}
+
+.dot .said {
+  font-size: 28px;
+}
+
+.dot .device-note {
+  text-align: center;
+}
+
+/* The tour taps the Echo Show's screen. */
+.dot #tour {
+  display: none;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* ---------- The panel ---------- */
 
 .panel {
