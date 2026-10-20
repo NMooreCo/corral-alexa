@@ -282,6 +282,8 @@ Builds every page, typechecks (Worker and screens), and runs the tests. GitHub A
 - the ranch: every tool and both screens over MCP, each device's limits, the greenhouse connector against a fake controller (switching, the run timer, a refused key, a controller that stops answering, what answers at the wrong address) and the rule that keeps it local, the forecast from a stubbed Open-Meteo (tonight's low, freeze flags, caching, an outage), the collars, and the fence geometry;
 - properties with [fast-check](https://fast-check.dev), rules checked against generated inputs from a fixed seed so a failure reproduces (`test/properties.test.ts`, with the fence geometry's and order totals' in their own files): the conversation to the Responses API and back, model names, the household's clock in zones with and without daylight saving, each device's run limits, money in whole cents, and who approves an order.
 
+The workflow then runs the tests again with the machine's clock on `Pacific/Kiritimati` (UTC+14), a day ahead of both UTC and the household's Denver most hours, so nothing leans on the server's own time zone; they pass there, in UTC and in Denver. To try one locally, set `TZ` for vitest (`TZ=Pacific/Kiritimati pnpm exec vitest run`, or `$env:TZ` in PowerShell on Windows, where Git Bash doesn't pass `TZ` on to Node).
+
 ## Layout
 
 | Path | What |
