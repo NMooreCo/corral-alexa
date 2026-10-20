@@ -10,6 +10,9 @@ import { clockAt, duration } from "./words.ts";
  * it's looking at.
  */
 
+/** The longest timed run on a device with no cap of its own. */
+const LONGEST_RUN_S = 366 * 86_400;
+
 /** A timed run that ends `secondsLeft` from now. */
 export function runOf(secondsLeft: number, now: Temporal.Instant, timeZone: string): DeviceRun | null {
   if (!(secondsLeft > 0)) return null;
@@ -155,6 +158,9 @@ export class DeviceHub {
         run = defaultRunS;
       }
       if (run > maxRunS) throw new ToolError(`The ${d.name} runs at most ${duration(maxRunS)} at a time. Offer ${duration(maxRunS)} or less.`);
+    } else if (run !== null && run > LONGEST_RUN_S) {
+      // No cap of its own, but a run still needs an end the clock can say: a longer one is on with no set end.
+      throw new ToolError(`A timed run can be a year at most. Switch the ${d.name} on with no set end instead.`);
     }
     return { state: "on", seconds: run };
   }

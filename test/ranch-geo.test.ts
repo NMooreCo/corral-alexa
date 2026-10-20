@@ -1,3 +1,4 @@
+import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { area, direction, distanceToEdge, inside, localPlane, mapFrame, pathOf, propertyPlane, type Point } from "../src/ranch/geo.ts";
 import type { PropertyMap } from "../src/ranch/types.ts";
@@ -13,13 +14,15 @@ const L: Point[] = [
   { x: 0, y: 100 },
 ];
 
-/** A small repeatable random source, so the property checks below are the same every run. */
-function random(seed: number) {
-  return () => {
-    seed = (seed * 1664525 + 1013904223) % 4294967296;
-    return seed / 4294967296;
-  };
-}
+// The property checks below try the same generated cases every run, so a failure reproduces.
+fc.configureGlobal({ seed: 20261016 });
+
+const between = (min: number, max: number) => fc.double({ min, max, noNaN: true });
+const pointIn = (min: number, max: number) => fc.record({ x: between(min, max), y: between(min, max) });
+/** A fence of 3 to 12 posts around a middle, each in its own direction, so its sides never cross. */
+const fence = fc
+  .array(fc.record({ angle: between(0, 2 * Math.PI), meters: between(1, 500) }), { minLength: 3, maxLength: 12 })
+  .map((posts) => posts.sort((a, b) => a.angle - b.angle).map(({ angle, meters }) => ({ x: meters * Math.cos(angle), y: meters * Math.sin(angle) })));
 
 describe("fence geometry", () => {
   it("tells inside from outside on a concave fence", () => {
@@ -40,15 +43,15 @@ describe("fence geometry", () => {
   });
 
   it("agrees with a plain box test on random points (property)", () => {
-    const next = random(7);
-    for (let i = 0; i < 2000; i++) {
-      const p = { x: next() * 140 - 20, y: next() * 140 - 20 };
-      const inBox = (x0: number, y0: number, x1: number, y1: number) => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1;
-      const expected = inBox(0, 0, 100, 50) || inBox(0, 0, 50, 100);
-      // Within a few centimeters of the line counts as on it, which a box test can't say.
-      if (distanceToEdge(p, L) < 0.1) continue;
-      expect(inside(p, L), `(${p.x.toFixed(2)}, ${p.y.toFixed(2)})`).toBe(expected);
-    }
+    fc.assert(
+      fc.property(pointIn(-20, 120), (p) => {
+        // Within a few centimeters of the line counts as on it, which a box test can't say.
+        fc.pre(distanceToEdge(p, L) >= 0.1);
+        const inBox = (x0: number, y0: number, x1: number, y1: number) => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1;
+        expect(inside(p, L)).toBe(inBox(0, 0, 100, 50) || inBox(0, 0, 50, 100));
+      }),
+      { numRuns: 2000 },
+    );
   });
 
   it("measures the distance to the fence, from either side (property: zero only on the line)", () => {
@@ -57,15 +60,29 @@ describe("fence geometry", () => {
     expect(distanceToEdge({ x: 80, y: 80 }, L)).toBeCloseTo(30);
     expect(distanceToEdge({ x: 130, y: 90 }, L)).toBeCloseTo(Math.hypot(30, 40));
     expect(distanceToEdge({ x: 25, y: 25 }, L)).toBeCloseTo(25);
-    const next = random(11);
-    for (let i = 0; i < 500; i++) {
-      const p = { x: next() * 200 - 50, y: next() * 200 - 50 };
-      const d = distanceToEdge(p, L);
-      expect(d).toBeGreaterThanOrEqual(0);
-      // Moving a point by some distance changes its distance to the fence by at most that much.
-      const q = { x: p.x + 3, y: p.y - 4 };
-      expect(Math.abs(distanceToEdge(q, L) - d)).toBeLessThanOrEqual(5 + 1e-9);
-    }
+    fc.assert(
+      fc.property(pointIn(-50, 150), pointIn(-50, 50), (p, move) => {
+        const d = distanceToEdge(p, L);
+        expect(d).toBeGreaterThanOrEqual(0);
+        // Moving a point by some distance changes its distance to the fence by at most that much.
+        const q = { x: p.x + move.x, y: p.y + move.y };
+        expect(Math.abs(distanceToEdge(q, L) - d)).toBeLessThanOrEqual(Math.hypot(move.x, move.y) + 1e-9);
+      }),
+      { numRuns: 500 },
+    );
+  });
+
+  it("measures a fence's area the same from any post, in either direction, wherever it stands (property)", () => {
+    fc.assert(
+      fc.property(fence, fc.nat(), fc.boolean(), pointIn(-1000, 1000), (posts, start, backwards, shift) => {
+        const first = start % posts.length;
+        const walked = [...posts.slice(first), ...posts.slice(0, first)].map((p) => ({ x: p.x + shift.x, y: p.y + shift.y }));
+        if (backwards) walked.reverse();
+        const a = area(posts);
+        expect(a).toBeGreaterThanOrEqual(0);
+        expect(Math.abs(area(walked) - a)).toBeLessThanOrEqual(1e-9 * Math.max(1, a) + 1e-6);
+      }),
+    );
   });
 
   it("works out areas and compass directions", () => {
@@ -85,6 +102,18 @@ describe("fence geometry", () => {
     const back = plane.toLatLon(p);
     expect(back.latitude).toBeCloseTo(43.441, 9);
     expect(back.longitude).toBeCloseTo(-105.209, 9);
+  });
+
+  it("projects a point to lat/lon and back to where it was, for a property anywhere short of the poles (property)", () => {
+    const origin = fc.record({ latitude: between(-75, 75), longitude: between(-180, 180) });
+    fc.assert(
+      fc.property(origin, pointIn(-5000, 5000), (o, p) => {
+        const plane = localPlane(o);
+        const back = plane.toPoint(plane.toLatLon(p));
+        expect(Math.abs(back.x - p.x)).toBeLessThan(1e-6);
+        expect(Math.abs(back.y - p.y)).toBeLessThan(1e-6);
+      }),
+    );
   });
 });
 

@@ -1,3 +1,4 @@
+import fc from "fast-check";
 import { Temporal } from "temporal-polyfill";
 import { describe, expect, it } from "vitest";
 import type { CorralApprovals } from "../src/approvals.ts";
@@ -12,6 +13,9 @@ import { SampleSupplier } from "../src/sample/supplier.ts";
 const FRIDAY = Temporal.Instant.from("2026-10-16T16:30:00Z");
 // Saturday, October 17, 2026, 10:30 AM in Denver.
 const SATURDAY = Temporal.Instant.from("2026-10-17T16:30:00Z");
+
+// The property check below tries the same generated orders every run, so a failure reproduces.
+fc.configureGlobal({ seed: 20261016 });
 
 function household(opts: { now?: () => Temporal.Instant; suppliers?: Supplier[] } = {}) {
   return new SampleHousehold({ now: opts.now ?? (() => FRIDAY), ...(opts.suppliers ? { suppliers: opts.suppliers } : {}) });
@@ -268,22 +272,32 @@ describe("choosing a store", () => {
     await expect(household({ suppliers: [] }).as("Nick").call("place_order", { items: [{ supply: "hay" }] })).rejects.toThrow("There's no store to order from here. Put it on a list instead.");
   });
 
-  it("always totals whole cents: each line's quantity times its price", async () => {
-    const store = new SampleSupplier({ now: () => FRIDAY, timeZone: "America/Denver" });
-    const catalog = await store.catalog();
+  it("always totals whole cents: each line's quantity times its price (property)", async () => {
+    // Any store's catalog, and any order from it from one bag to a truckload, the same supply asked for twice included.
+    const order = fc
+      .uniqueArray(
+        fc.record({ supply: fc.stringMatching(/^[A-Z][a-z]{2,9}$/), unitPriceCents: fc.integer({ min: 1, max: 500_000 }), usualQuantity: fc.integer({ min: 1, max: 200 }), deliveryDays: fc.integer({ min: 0, max: 14 }) }),
+        { minLength: 1, maxLength: 6, selector: (p) => p.supply.toLowerCase() },
+      )
+      .chain((sold) =>
+        fc.record({
+          sold: fc.constant(sold.map((p) => product(p.supply, p))),
+          items: fc.array(fc.record({ supply: fc.constantFrom(...sold.map((p) => p.supply)), quantity: fc.option(fc.integer({ min: 1, max: 500 }), { nil: undefined }) }), { minLength: 1, maxLength: 8 }),
+        }),
+      );
     const today = Temporal.PlainDate.from("2026-10-16");
-    // A repeatable spread of orders, from one bag to a truckload.
-    let seed = 7;
-    const next = () => (seed = (seed * 48271) % 2147483647);
-    for (let i = 0; i < 200; i++) {
-      const picked = catalog.filter(() => next() % 2 === 0);
-      if (!picked.length) continue;
-      const items = picked.map((p) => ({ supply: p.supply, quantity: 1 + (next() % 500) }));
-      const q = await quote([store], items, { today });
-      expect(Number.isInteger(q.totalCents)).toBe(true);
-      expect(q.totalCents).toBe(items.reduce((sum, it) => sum + it.quantity * catalog.find((p) => p.supply === it.supply)!.unitPriceCents, 0));
-      expect(q.deliveryDate).toBe(today.add({ days: Math.max(...picked.map((p) => p.deliveryDays)) }).toString());
-    }
+    await fc.assert(
+      fc.asyncProperty(order, async ({ sold, items }) => {
+        const q = await quote([new TestStore("feed", "Valley Feed & Propane", sold)], items, { today });
+        const sells = (supply: string) => sold.find((p) => p.supply === supply)!;
+        expect(Number.isSafeInteger(q.totalCents)).toBe(true);
+        expect(q.totalCents).toBe(items.reduce((sum, it) => sum + (it.quantity ?? sells(it.supply).usualQuantity) * sells(it.supply).unitPriceCents, 0));
+        expect(q.totalCents).toBe(q.lines.reduce((sum, l) => sum + l.quantity * l.unitPriceCents, 0));
+        // The same supply twice is one line.
+        expect(new Set(q.lines.map((l) => l.product)).size).toBe(q.lines.length);
+        expect(q.deliveryDate).toBe(today.add({ days: Math.max(...items.map((it) => sells(it.supply).deliveryDays)) }).toString());
+      }),
+    );
   });
 });
 

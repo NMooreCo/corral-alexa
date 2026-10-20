@@ -34,6 +34,7 @@
     "@cloudflare/workers-types": "^5.20261016.1",
     "@modelcontextprotocol/client": "2.3.1",
     "@types/node": "22",
+    "fast-check": "4.10.2",
     "typescript": "7.0.2",
     "vite": "8.3.4",
     "vite-plugin-singlefile": "2.3.3",
