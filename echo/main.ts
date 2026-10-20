@@ -784,14 +784,16 @@ const RecognitionCtor = ((window as unknown as { SpeechRecognition?: new () => R
 let recognition: Recognition | null = null;
 let listening = false;
 let pausedForSpeech = false;
-const WAKE = /\b(?:hey\s+)?alexa\b[\s,.!?]*(.*)$/i;
+// Phones sometimes hear the wake word as "Alexis" or "Alexia".
+const WAKE = /\b(?:hey\s+)?(?:alexa|alexis|alexia)\b[\s,.!?]*(.*)$/i;
 
 function startListening(handsFree: boolean) {
   if (!RecognitionCtor) return;
   recognition?.stop();
   const r = new RecognitionCtor();
   r.lang = "en-US";
-  r.continuous = handsFree;
+  // One phrase per session, and hands-free starts the next when it ends: Chrome on Android doesn't keep a continuous session going.
+  r.continuous = false;
   r.interimResults = true;
   r.onresult = (e) => {
     for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -802,22 +804,37 @@ function startListening(handsFree: boolean) {
         continue;
       }
       if (!handsFree) return void ask(words, "voice");
-      // Right after Alexa asked something, the answer needs no "Alexa" first.
-      const command = WAKE.exec(words)?.[1]?.trim() || (Date.now() < followUpUntil ? words.trim() : "");
+      // Right after Alexa asked something, or after "Alexa" on its own, what's said next needs no "Alexa" first.
+      const woke = WAKE.exec(words);
+      const command = woke?.[1]?.trim() || (Date.now() < followUpUntil ? words.trim() : "");
       if (command) {
         followUpUntil = 0;
+        voiceNote.textContent = "";
         void ask(command, "voice");
+      } else if (woke) {
+        followUpUntil = Date.now() + 8000;
+        setLight("listening");
+      } else if (words.trim()) {
+        // Show what it heard, so a missed "Alexa" isn't a mystery.
+        voiceNote.textContent = `Heard "${words.trim()}" without "Alexa" first.`;
       }
     }
   };
   r.onerror = (e) => {
-    if (e.error === "not-allowed") voiceNote.textContent = "The microphone is blocked for this page. Type instead, or allow it in the browser.";
+    if (e.error === "not-allowed") {
+      voiceNote.textContent = "The microphone is blocked for this page. Type instead, or allow it in the browser.";
+      handsFreeEl.checked = false;
+      return;
+    }
+    if (e.error !== "no-speech" && e.error !== "aborted") voiceNote.textContent = `Listening stopped (${e.error}).`;
   };
   r.onend = () => {
+    // A session that's already been replaced mustn't start another.
+    if (recognition !== r) return;
     listening = false;
     micBtn.setAttribute("aria-pressed", "false");
     micLabel.textContent = "Talk";
-    if (lightbar.dataset.state === "listening") setLight("idle");
+    if (lightbar.dataset.state === "listening" && Date.now() >= followUpUntil) setLight("idle");
     if (handsFreeEl.checked && !pausedForSpeech) setTimeout(() => startListening(true), 300);
   };
   recognition = r;
