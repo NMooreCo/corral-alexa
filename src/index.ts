@@ -6,6 +6,7 @@ import { householdRoute } from "./sample/routes.ts";
 import { echoHtml, echoPairHtml, previewHtml } from "./widgets.generated.ts";
 import { mockTurn } from "./echo/mock.ts";
 import { echoPage, modelTurn } from "./echo/model.ts";
+import { voiceTurn } from "./echo/voice.ts";
 import { shiftClock } from "./clock.ts";
 
 export type { Env };
@@ -52,6 +53,8 @@ export default {
     // /echo?devices=2 is two Echo Shows, a kitchen's and a barn's, on one shared household.
     if (url.pathname === "/echo" && request.method === "GET") return page(echoPage(url.searchParams.get("devices") === "2" ? echoPairHtml : echoHtml, env));
     if (url.pathname === "/echo/model" && request.method === "POST") return env.MODEL_MOCK === "true" ? mockTurn(request) : modelTurn(request, env);
+    // The simulator's voice: Amazon Polly says each answer when it's set up.
+    if (url.pathname === "/echo/voice" && request.method === "POST") return voiceTurn(request, env);
     // /mcp and the household's own routes, through the household's Durable Object. There's no sign-in here,
     // so the simulator says who Alexa recognized in a header the household reads per request.
     const household = await householdRoute(request, env);

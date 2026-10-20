@@ -29,6 +29,17 @@ export interface Env {
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_BASE_URL?: string;
   ANTHROPIC_MODEL?: string;
+  /**
+   * The simulator's voice, Amazon Polly: an IAM key allowed only polly:SynthesizeSpeech (secrets), and optionally
+   * the region, voice and engine (us-west-2, Joanna, generative). Unset, the page speaks with the browser's voice.
+   */
+  AWS_ACCESS_KEY_ID?: string;
+  AWS_SECRET_ACCESS_KEY?: string;
+  POLLY_REGION?: string;
+  POLLY_VOICE?: string;
+  POLLY_ENGINE?: string;
+  /** Per-visitor limit on the simulator's voice calls. */
+  VOICE_LIMIT?: RateLimit;
   /** When set, the simulator asks for this before it talks to the model. */
   DEMO_PASSCODE?: string;
   /** Per-visitor limit on the simulator's model calls. */

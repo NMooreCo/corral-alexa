@@ -2,7 +2,9 @@ import Anthropic, { betaRefusalFallbackMiddleware } from "@anthropic-ai/sdk";
 import type { Env } from "../env.ts";
 import { json } from "../http.ts";
 import { skillPrompt } from "../server.ts";
+import { demoGate } from "./gate.ts";
 import { ResponsesError, responsesTurn } from "./responses.ts";
+import { voiceReady } from "./voice.ts";
 
 /**
  * The simulated Echo Show's brain: one Claude turn. The page is the MCP
@@ -98,9 +100,14 @@ export function modelPlace(env: Env): string {
   return provider.id === "bedrock" ? `${provider.label} on Amazon Bedrock` : "Claude through the Claude API";
 }
 
-/** The simulator's page, saying what answers it and whether it asks for the passcode first. */
+/** The simulator's page, saying what answers it, what speaks, and whether it asks for the passcode first. */
 export function echoPage(html: string, env: Env): string {
-  return html.replaceAll("{{model}}", modelPlace(env)).replaceAll("{{passcode}}", env.DEMO_PASSCODE ? "required" : "none");
+  const polly = voiceReady(env);
+  return html
+    .replaceAll("{{model}}", modelPlace(env))
+    .replaceAll("{{voiced}}", polly ? ", and Amazon Polly says the answers" : "")
+    .replaceAll("{{voice}}", polly ? "polly" : "browser")
+    .replaceAll("{{passcode}}", env.DEMO_PASSCODE ? "required" : "none");
 }
 
 const MAX_BODY = 300_000;
@@ -150,14 +157,8 @@ function readTurn(raw: string): TurnRequest | string {
 export async function modelTurn(request: Request, env: Env): Promise<Response> {
   const provider = modelProvider(env);
   if (!provider) return json(503, { error: { code: "not_configured", message: "The simulator's model isn't set up on this server." } });
-  if (env.DEMO_PASSCODE && request.headers.get("x-demo-passcode")?.trim() !== env.DEMO_PASSCODE.trim()) {
-    return json(401, { error: { code: "passcode", message: "Enter the demo passcode to talk to the simulator." } });
-  }
-  if (env.MODEL_LIMIT) {
-    const who = request.headers.get("cf-connecting-ip") ?? "local";
-    const { success } = await env.MODEL_LIMIT.limit({ key: who });
-    if (!success) return json(429, { error: { code: "rate_limited", message: "That's a lot of questions at once. Give it a minute." } });
-  }
+  const stopped = await demoGate(request, env, env.MODEL_LIMIT);
+  if (stopped) return stopped;
   const turn = readTurn(await request.text());
   if (typeof turn === "string") return json(400, { error: { code: "bad_request", message: turn } });
 

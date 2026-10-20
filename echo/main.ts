@@ -654,25 +654,86 @@ function voice(): SpeechSynthesisVoice | undefined {
   return voices.find((v) => /Aria|Jenny|Samantha|Google US English/.test(v.name)) ?? voices.find((v) => v.lang === "en-US") ?? voices[0];
 }
 
+function startedSpeaking() {
+  // Something said on its own keeps the notification's amber light while it's said.
+  setLight(alerting ? "notify" : "speaking");
+  pauseListening();
+}
+
+function doneSpeaking() {
+  setLight("idle");
+  resumeListening();
+}
+
+/** The server says Amazon Polly speaks here; without it, or when it doesn't answer, the browser's own voice does. */
+const polly = document.body.dataset.voice === "polly";
+// What Polly is saying, how many answers are still on their way, and a count that stopping bumps so a late one isn't played.
+let pollyAudio: HTMLAudioElement | null = null;
+let voicesComing = 0;
+let voiceTurn = 0;
+
 function speak(text: string) {
-  if (!("speechSynthesis" in window) || !text) return setLight("idle");
+  if (!text) return setLight("idle");
+  if (polly) void speakWithPolly(text);
+  else speakInBrowser(text);
+}
+
+async function speakWithPolly(text: string) {
+  const turn = ++voiceTurn;
+  voicesComing++;
+  let a: HTMLAudioElement | null = null;
+  try {
+    const res = await fetch("/echo/voice", {
+      method: "POST",
+      headers: { "content-type": "application/json", ...(passcode() ? { "x-demo-passcode": passcode()! } : {}) },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) throw new Error(`The voice answered ${res.status}.`);
+    const url = URL.createObjectURL(await res.blob());
+    if (turn !== voiceTurn) return URL.revokeObjectURL(url);
+    a = pollyAudio = new Audio(url);
+    a.onplay = startedSpeaking;
+    a.onended = a.onerror = () => {
+      URL.revokeObjectURL(url);
+      if (pollyAudio === a) pollyAudio = null;
+      doneSpeaking();
+    };
+    await a.play();
+  } catch {
+    if (a && pollyAudio === a) pollyAudio = null;
+    if (turn === voiceTurn) speakInBrowser(text);
+  } finally {
+    voicesComing--;
+  }
+}
+
+function speakInBrowser(text: string) {
+  if (!("speechSynthesis" in window)) return setLight("idle");
   const u = new SpeechSynthesisUtterance(text);
   const v = voice();
   if (v) u.voice = v;
   u.rate = 1.04;
-  u.onstart = () => {
-    // Something said on its own keeps the notification's amber light while it's said.
-    setLight(alerting ? "notify" : "speaking");
-    pauseListening();
-  };
-  u.onend = u.onerror = () => {
-    setLight("idle");
-    resumeListening();
-  };
+  u.onstart = startedSpeaking;
+  u.onend = u.onerror = doneSpeaking;
   speechSynthesis.speak(u);
 }
 
+/** Whether Alexa is saying something, or about to. */
+function speaking(): boolean {
+  if (voicesComing > 0 || (pollyAudio && !pollyAudio.ended)) return true;
+  return "speechSynthesis" in window && (speechSynthesis.speaking || speechSynthesis.pending);
+}
+
 function stopSpeaking() {
+  voiceTurn++;
+  if (pollyAudio) {
+    const a = pollyAudio;
+    pollyAudio = null;
+    a.pause();
+    a.onended = a.onerror = null;
+    URL.revokeObjectURL(a.src);
+    doneSpeaking();
+  }
   if ("speechSynthesis" in window) speechSynthesis.cancel();
 }
 
@@ -918,9 +979,8 @@ const pause = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /** Waits until Alexa has finished saying her answer (or 45 seconds, whichever is first). */
 async function untilQuiet() {
-  if (!("speechSynthesis" in window)) return;
   const until = Date.now() + 45_000;
-  while ((speechSynthesis.speaking || speechSynthesis.pending) && Date.now() < until) await pause(250);
+  while (speaking() && Date.now() < until) await pause(250);
 }
 
 /** Plays the demo from a fresh household: each beat as its speaker, with the real model, at a pace a recording can follow. */

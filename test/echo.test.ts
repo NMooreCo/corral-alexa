@@ -186,6 +186,40 @@ describe("the simulated Echo Show", () => {
     expect(await (await call(env, "/echo/model", turn([{ role: "user", content: "hi" }]))).json()).toMatchObject({ content: [], stop_reason: "refusal" });
   });
 
+  it("says each answer with Amazon Polly, signed with the IAM key, behind the passcode", async () => {
+    let sent: Request | undefined;
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      sent = new Request(input, init);
+      return new Response(new Uint8Array([0xff, 0xfb, 0x90]), { headers: { "content-type": "audio/mpeg" } });
+    });
+    const env: Env = { BACKEND: "sample", AWS_ACCESS_KEY_ID: "AKIDEXAMPLE", AWS_SECRET_ACCESS_KEY: "secret", DEMO_PASSCODE: "ranch" };
+    const say = (text: unknown, passcode = "ranch") => call(env, "/echo/voice", { method: "POST", headers: { "content-type": "application/json", "x-demo-passcode": passcode }, body: JSON.stringify({ text }) });
+    expect((await say("Hi.", "wrong")).status).toBe(401);
+    expect((await say("")).status).toBe(400);
+    expect((await say("x".repeat(1001))).status).toBe(400);
+    const res = await say("Soccer is at four.");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("audio/mpeg");
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(new Uint8Array([0xff, 0xfb, 0x90]));
+    expect(sent!.url).toBe("https://polly.us-west-2.amazonaws.com/v1/speech");
+    expect(sent!.headers.get("authorization")).toMatch(/^AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE\/\d{8}\/us-west-2\/polly\/aws4_request/);
+    expect(await sent!.json()).toEqual({ Engine: "generative", OutputFormat: "mp3", Text: "Soccer is at four.", TextType: "text", VoiceId: "Joanna" });
+  });
+
+  it("tells the page when Polly can't speak, so it uses the browser's voice", async () => {
+    const say = (env: Env) => call({ BACKEND: "sample", ...env }, "/echo/voice", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: "Hi." }) });
+    expect((await say({})).status).toBe(503);
+    vi.stubGlobal("fetch", async () => new Response('{"message":"The security token included in the request is invalid."}', { status: 403 }));
+    const res = await say({ AWS_ACCESS_KEY_ID: "AKIDEXAMPLE", AWS_SECRET_ACCESS_KEY: "secret" });
+    expect(res.status).toBe(502);
+    expect(await res.json()).toMatchObject({ error: { code: "voice_error" } });
+    const page = async (env: Env) => (await call({ BACKEND: "sample", ...env }, "/echo")).text();
+    expect(await page({ AWS_ACCESS_KEY_ID: "AKIDEXAMPLE", AWS_SECRET_ACCESS_KEY: "secret" })).toContain('data-voice="polly"');
+    expect(await page({ AWS_ACCESS_KEY_ID: "AKIDEXAMPLE", AWS_SECRET_ACCESS_KEY: "secret" })).toContain("and Amazon Polly says the answers.");
+    expect(await page({})).toContain('data-voice="browser"');
+    expect(await page({})).not.toContain("{{voice");
+  });
+
   it("names a Bedrock model for people", () => {
     expect(modelLabel("openai.gpt-5.6-terra")).toBe("GPT-5.6 Terra");
     expect(modelLabel("openai.gpt-5.6-luna")).toBe("GPT-5.6 Luna");
