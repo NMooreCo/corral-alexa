@@ -193,6 +193,14 @@ describe("keeping the real greenhouse local", () => {
     expect(localGreenhouse({ ...env, GREENHOUSE_MAX_RUN_S: "45" }, "http://localhost/mcp")).toMatchObject({ maxRunS: 45 });
   });
 
+  it("from a tunnel to this machine only when that host is named, and still only under dev:lan", () => {
+    const tunnel = "https://example-tunnel.trycloudflare.com/mcp";
+    expect(localGreenhouse(env, tunnel)).toBeNull();
+    expect(localGreenhouse({ ...env, GREENHOUSE_HOSTS: "Example-Tunnel.trycloudflare.com, other.example" }, tunnel)).not.toBeNull();
+    expect(localGreenhouse({ ...env, GREENHOUSE_HOSTS: "other.example" }, tunnel)).toBeNull();
+    expect(localGreenhouse({ ...env, GREENHOUSE_LAN: undefined, GREENHOUSE_HOSTS: "example-tunnel.trycloudflare.com" }, tunnel)).toBeNull();
+  });
+
   it("never from a deployed address, without dev:lan, or with a value missing", () => {
     expect(localGreenhouse(env, "https://alexa-demo.corral.narralogy.ai/mcp")).toBeNull();
     expect(localGreenhouse({ ...env, GREENHOUSE_LAN: undefined }, "http://localhost:8795/mcp")).toBeNull();

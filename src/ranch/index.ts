@@ -119,17 +119,22 @@ export interface GreenhouseEnv {
   GREENHOUSE_KEY?: string;
   GREENHOUSE_LAN?: string;
   GREENHOUSE_MAX_RUN_S?: string;
+  /** Other hostnames that reach this machine, like a tunnel opened to film on a phone, comma separated. Given on the command line for that session only. */
+  GREENHOUSE_HOSTS?: string;
 }
 
 /**
  * The real greenhouse controller, when it's allowed: only under `pnpm dev:lan`
  * (which sets GREENHOUSE_LAN), only with both GREENHOUSE_URL and
  * GREENHOUSE_KEY, and only while this Worker is being served from this
- * machine or the local network. A deployed Worker never reaches it.
+ * machine, the local network, or a host named in GREENHOUSE_HOSTS. A deployed
+ * Worker never reaches it.
  */
 export function localGreenhouse(env: GreenhouseEnv, requestUrl: string): { url: string; key: string; maxRunS?: number } | null {
   if (env.GREENHOUSE_LAN !== "true" || !env.GREENHOUSE_URL?.trim() || !env.GREENHOUSE_KEY?.trim()) return null;
-  if (!isLocalHost(new URL(requestUrl).hostname)) return null;
+  const host = new URL(requestUrl).hostname.toLowerCase();
+  const named = (env.GREENHOUSE_HOSTS ?? "").split(",").map((h) => h.trim().toLowerCase()).filter(Boolean);
+  if (!isLocalHost(host) && !named.includes(host)) return null;
   const max = Number(env.GREENHOUSE_MAX_RUN_S);
   return { url: env.GREENHOUSE_URL.trim(), key: env.GREENHOUSE_KEY.trim(), ...(Number.isFinite(max) && max > 0 ? { maxRunS: Math.floor(max) } : {}) };
 }

@@ -60,4 +60,6 @@ export interface Env {
   GREENHOUSE_LAN?: string;
   /** The longest run the bridge allows on the real valve, in seconds (default 600; never past the firmware's 1800). */
   GREENHOUSE_MAX_RUN_S?: string;
+  /** Other hostnames that reach this machine (a tunnel opened to film on a phone), comma separated; given on the command line for one session, never configured. */
+  GREENHOUSE_HOSTS?: string;
 }
