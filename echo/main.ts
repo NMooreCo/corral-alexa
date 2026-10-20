@@ -601,7 +601,9 @@ async function runTool(use: Anthropic.Beta.BetaToolUseBlock): Promise<Anthropic.
   }
 }
 
-async function ask(text: string) {
+/** What someone said or typed; `voice` when it came through the microphone, so a question back can listen for the answer. */
+async function ask(text: string, via: "voice" | "typed" = "typed") {
+  askedByVoice = via === "voice";
   text = text.trim();
   if (!text || state.busy) return;
   state.busy = true;
@@ -656,6 +658,8 @@ async function ask(text: string) {
 
 function respond(heard: string, said: string) {
   caption(heard, said);
+  // Asked by voice and answered with a question (wherever in the answer she asked it): listen for the answer once it's said, as an Echo's follow-up mode does.
+  followUp = askedByVoice && !demo && said.includes("?");
   speak(said);
 }
 
@@ -672,9 +676,20 @@ function startedSpeaking() {
   pauseListening();
 }
 
+/** Whether the last thing asked came through the microphone. */
+let askedByVoice = false;
+/** Alexa just asked a question of someone who spoke: listen for the answer once she's said it. */
+let followUp = false;
+/** Hands-free, until when an answer needs no "Alexa" first. */
+let followUpUntil = 0;
+
 function doneSpeaking() {
   setLight("idle");
   resumeListening();
+  if (!followUp) return;
+  followUp = false;
+  if (handsFreeEl.checked) followUpUntil = Date.now() + 8000;
+  else if (RecognitionCtor && !listening) startListening(false);
 }
 
 /** The server says Amazon Polly speaks here; without it, or when it doesn't answer, the browser's own voice does. */
@@ -737,6 +752,8 @@ function speaking(): boolean {
 }
 
 function stopSpeaking() {
+  // Cut off, she isn't waiting for an answer.
+  followUp = false;
   voiceTurn++;
   if (pollyAudio) {
     const a = pollyAudio;
@@ -784,9 +801,13 @@ function startListening(handsFree: boolean) {
         if (!handsFree || WAKE.test(words)) caption(handsFree ? (WAKE.exec(words)?.[1] ?? "") : words, "");
         continue;
       }
-      if (!handsFree) return void ask(words);
-      const command = WAKE.exec(words)?.[1]?.trim();
-      if (command) void ask(command);
+      if (!handsFree) return void ask(words, "voice");
+      // Right after Alexa asked something, the answer needs no "Alexa" first.
+      const command = WAKE.exec(words)?.[1]?.trim() || (Date.now() < followUpUntil ? words.trim() : "");
+      if (command) {
+        followUpUntil = 0;
+        void ask(command, "voice");
+      }
     }
   };
   r.onerror = (e) => {
