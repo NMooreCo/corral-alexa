@@ -26,7 +26,7 @@ export async function voiceTurn(request: Request, env: Env): Promise<Response> {
 
   const region = env.POLLY_REGION ?? "us-west-2";
   const voice = env.POLLY_VOICE ?? "Joanna";
-  const engine = env.POLLY_ENGINE ?? "generative";
+  const engine = env.POLLY_ENGINE ?? "neural";
   const aws = new AwsClient({ accessKeyId: env.AWS_ACCESS_KEY_ID!, secretAccessKey: env.AWS_SECRET_ACCESS_KEY!, service: "polly", region });
   const res = await aws.fetch(`https://polly.${region}.amazonaws.com/v1/speech`, {
     method: "POST",

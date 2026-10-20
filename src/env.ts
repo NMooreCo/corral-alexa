@@ -31,7 +31,7 @@ export interface Env {
   ANTHROPIC_MODEL?: string;
   /**
    * The simulator's voice, Amazon Polly: an IAM key allowed only polly:SynthesizeSpeech (secrets), and optionally
-   * the region, voice and engine (us-west-2, Joanna, generative). Unset, the page speaks with the browser's voice.
+   * the region, voice and engine (us-west-2, Joanna, neural: about half a second to start, where generative takes one to two). Unset, the page speaks with the browser's voice.
    */
   AWS_ACCESS_KEY_ID?: string;
   AWS_SECRET_ACCESS_KEY?: string;

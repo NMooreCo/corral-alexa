@@ -203,7 +203,7 @@ describe("the simulated Echo Show", () => {
     expect(new Uint8Array(await res.arrayBuffer())).toEqual(new Uint8Array([0xff, 0xfb, 0x90]));
     expect(sent!.url).toBe("https://polly.us-west-2.amazonaws.com/v1/speech");
     expect(sent!.headers.get("authorization")).toMatch(/^AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE\/\d{8}\/us-west-2\/polly\/aws4_request/);
-    expect(await sent!.json()).toEqual({ Engine: "generative", OutputFormat: "mp3", Text: "Soccer is at four.", TextType: "text", VoiceId: "Joanna" });
+    expect(await sent!.json()).toEqual({ Engine: "neural", OutputFormat: "mp3", Text: "Soccer is at four.", TextType: "text", VoiceId: "Joanna" });
   });
 
   it("tells the page when Polly can't speak, so it uses the browser's voice", async () => {
