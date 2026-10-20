@@ -4,7 +4,9 @@
 
 Alexa can set a timer. It can't tell you whose turn it is to cook, who has the 4:00 pickup, whether the dog got her pill, or that you're down to two bags of horse feed. [Corral](https://corral.narralogy.ai) can. It's the household platform one family and ranch run on every day: the shared calendar, chores and who did them, shopping lists, where everyone is, kids' points, and supplies.
 
-On a ranch it also runs the place: **"Alexa, run the greenhouse misters for 30 seconds"** turns on real misters through a real greenhouse controller, and **"It's going down to 12 tonight. Get the place ready."** has Alexa+ read the forecast, every heater, the animals' GPS collars and who's home, then get the night ready in one confirmation.
+**This isn't a mockup.** Corral has run the builder's own family and small ranch since September 28, 2026, at [corral.narralogy.ai](https://corral.narralogy.ai): a hub in the kitchen, everyone's phones and a board in the barn. This server is deployed beside it and linked to it with real account linking, so the requests here are the ones a real family, kids and a farm hand make every day. The demo runs on a made-up household shaped like ours, so judges can try everything without our family's data. [What's real and what's simulated](#whats-real-and-whats-simulated) lists each part.
+
+On a ranch it also runs the place: **"Alexa, run the greenhouse misters for 30 seconds"** is built to open the misters' valve through our ESP32 greenhouse controller, and **"It's going down to 12 tonight. Get the place ready."** has Alexa+ read the forecast, every heater, the animals' GPS collars and who's home, then get the night ready in one confirmation.
 
 **Corral for Alexa+** puts that household inside Alexa+. It's a self-hosted MCP server (spec 2025-11-25, Streamable HTTP) on Cloudflare Workers that gives Alexa+ Corral's tools, draws interactive screens for the Echo Show with [MCP Apps](https://modelcontextprotocol.io/extensions/apps), and links each Alexa account to Corral with OAuth 2.1, so every family's rules come along: private events stay private, a kid's change waits for a parent, and the farm hand only hears about the ranch.
 
@@ -23,6 +25,7 @@ Or press **Play the demo** and watch the evening and the next morning play out w
 
 - **[The simulated Echo Show](https://alexa-demo.corral.narralogy.ai/echo)**: talk to it (or type), watch it call Corral's tools over MCP, tap the screens, and pick who's speaking to watch the family's rules follow the person. It runs on a made-up household, Juniper Hollow. The demo passcode is in the submission's testing instructions.
 - **[Two Echo Shows, one household](https://alexa-demo.corral.narralogy.ai/echo?devices=2)**: a kitchen Echo Show 8 and a barn Echo Show 5 side by side. Check a chore off on one and watch the other catch up.
+- **[An Echo Dot](https://alexa-demo.corral.narralogy.ai/echo?show=dot)**: no screen, only the light ring. The same tools answer in words, and the Dot still speaks up when a dog gets out.
 - **Your own household:** each visitor to the simulator gets a sample household of their own, kept in their browser, so nobody else's "Make it evening" or "Next morning" moves your clock. Its id is in the address, so the link shares it with another device or a teammate; `?household=demo` joins the shared one the MCP endpoint uses.
 - **The MCP server**: `https://alexa-demo.corral.narralogy.ai/mcp` (the sample household, open) and `https://alexa.corral.narralogy.ai/mcp` (linked to a real Corral, behind account linking).
 - **In Claude**: add `https://alexa-demo.corral.narralogy.ai/mcp` as a custom connector (no sign-in) and ask "What's going on tonight at Juniper Hollow? Show me the day." Claude calls the same tools and draws the same screens in the chat, tabs and all.
@@ -51,6 +54,25 @@ Or press **Play the demo** and watch the evening and the next morning play out w
 | (the barn Echo Show, on its own) | It **speaks up**: a chime, an amber light and "Heads up: Hunter just left the fence, about 120 feet to the north-east, near the Woods." The ranch notices a collar crossing the fence each time it's looked at; the simulator asks a screen-only `alerts` tool every few seconds, since stateless MCP can't push. An automation that runs is said the same way, and the assistant is told, so "have Jon bring him in" right after knows who. |
 | (tapping the rail on the Today screen) | Today, the Ranch, the **Animals** (the map large, every collar's place and battery) and the **Automations** are tabs on one screen, so a tap moves between them without asking the assistant. |
 | "Do all of that on its own whenever it's going to freeze." | It confirms, then turns on the **freeze protection** automation: at 5 PM, when tonight's low is 25°F or colder, the tank heaters, barn heater and coop lamp come on by themselves. Misting and watering run on schedules the same way. |
+| "What's going on tonight?" on an **Echo Dot** | No screen, so the same tools answer in words: "Family movie night runs until 8:30. Five chores are late, including Leia's allergy pill, the evening horse feeding and the trash. Want to hear the other two?" The page tells the model the device has none. |
+
+## What's real and what's simulated
+
+| Part | Real | Simulated, and why |
+|---|---|---|
+| **Corral** | The household platform the builder's family and small ranch have run on every day since September 28, 2026, at [corral.narralogy.ai](https://corral.narralogy.ai): a kitchen hub, everyone's phones, a board in the barn. | |
+| **This MCP server and account linking** | Deployed at `alexa.corral.narralogy.ai` and linked end to end to that live Corral: Corral's own consent page, the code exchange, refresh and revocation, 120 to 350 ms a call, measured from our home. | |
+| **Alexa+** | Built to the published MCP Toolkit contract (protocol, account linking, latency, MCP Apps). | The Toolkit, its CLI and simulator are partner-only, so a simulated Echo Show and Echo Dot stand in: real MCP clients of the same server, as the hackathon FAQ invites. |
+| **Who's speaking** | Each person's rules, applied by Corral itself (and by the sample household, as data). | Alexa+ voice profiles aren't open to add-ons we can build, so a picker says who's talking. |
+| **The assistant** | Claude Opus 5.5 through the Claude API, live in every answer on the demo. | |
+| **Voice** | Amazon Polly says every answer; the browser's speech recognition listens. | |
+| **The demo household** | The same tools and the same JSON as the linked server. | Juniper Hollow is a made-up household shaped like ours, so anyone can use it without our family's data. |
+| **The greenhouse** | A connector to our ESP32 greenhouse controller (misters, drip, heaters), run on the ranch's network with `pnpm dev:lan`, tested against a stand-in for the controller's API. | The hosted demo can't reach our network, so it uses a simulated controller with the same limits. |
+| **The forecast** | The live Open-Meteo forecast. | |
+| **The dogs' GPS collars** | The fence geometry, where each dog is and the alerts. | Simulated collars; a collar maker's API would plug into the same connector. |
+| **Ordering** | The rules: prices in cents, the spending limit, who has to approve. | A sample feed store; no money moves. |
+| **Speaking up** | The ranch notices a collar leaving the fence and an automation that runs. | MCP can't push to a device, so the simulator asks a screen-only tool every few seconds; the Alexa team says real add-ons get proactive notifications. |
+| **Amazon Bedrock** | Built and tested, for Claude and for other models. | Our new AWS account can't run a Bedrock model yet (friction F8, F9, F19), so the demo runs on the Claude API. |
 
 ## How it works
 
