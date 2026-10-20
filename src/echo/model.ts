@@ -2,6 +2,7 @@ import Anthropic, { betaRefusalFallbackMiddleware } from "@anthropic-ai/sdk";
 import type { Env } from "../env.ts";
 import { json } from "../http.ts";
 import { skillPrompt } from "../server.ts";
+import { ResponsesError, responsesTurn } from "./responses.ts";
 
 /**
  * The simulated Echo Show's brain: one Claude turn. The page is the MCP
@@ -9,37 +10,63 @@ import { skillPrompt } from "../server.ts";
  * only asks Claude what to say or which tool to call next, so the model key
  * never leaves the server.
  *
- * Two places can answer, both speaking the Messages API through the plain
- * Anthropic SDK:
+ * Two places can answer:
  *
- * - Amazon Bedrock serves it at bedrock-mantle.{region}.api.aws/anthropic,
- *   which takes a Bedrock API key as the key, so there's no request signing.
+ * - Amazon Bedrock's bedrock-mantle endpoint, which takes a Bedrock API key
+ *   as the key, so there's no request signing. Claude there speaks the
+ *   Messages API (at /anthropic, through the plain Anthropic SDK); any other
+ *   model, like GPT-5.6 Terra, speaks OpenAI's Responses API (at /openai/v1).
+ *   BEDROCK_MODEL's id says which.
  * - The Claude API itself, or anything that speaks its wire format (a model
  *   gateway, say) at ANTHROPIC_BASE_URL.
  *
  * MODEL_PROVIDER picks one; unset, it's whichever has a key, Bedrock first.
+ * Whichever answers, the page sees a Messages reply.
  */
 
 interface Provider {
   id: "bedrock" | "anthropic";
   /** For people: "Bedrock didn't accept the simulator's key". */
   name: string;
+  /** The model, for people: "Claude", "GPT-5.6 Terra". */
+  label: string;
+  /** Which wire format the model speaks. */
+  api: "messages" | "responses";
   apiKey: string;
   baseURL: string;
   model: string;
-  // If the main model ever declines, the same request runs again on this one.
-  fallback: string;
+  // If Claude ever declines, the same request runs again on this one.
+  fallback?: string;
+}
+
+/** A Bedrock model id for people: "openai.gpt-5.6-terra" is "GPT-5.6 Terra". */
+export function modelLabel(id: string): string {
+  const name = id.replace(/^[a-z]+\./, "");
+  if (name.startsWith("claude")) return "Claude";
+  const gpt = /^gpt-([\d.]+)(?:-(.+))?$/.exec(name);
+  if (!gpt) return name;
+  const variant = (gpt[2] ?? "")
+    .split("-")
+    .filter(Boolean)
+    .map((w) => w[0]!.toUpperCase() + w.slice(1))
+    .join(" ");
+  return `GPT-${gpt[1]}${variant ? ` ${variant}` : ""}`;
 }
 
 function bedrock(env: Env): Provider | undefined {
   if (!env.BEDROCK_API_KEY) return undefined;
+  const model = env.BEDROCK_MODEL ?? "anthropic.claude-opus-5-5";
+  const host = `https://bedrock-mantle.${env.BEDROCK_REGION ?? "us-west-2"}.api.aws`;
+  const claude = model.startsWith("anthropic.");
   return {
     id: "bedrock",
     name: "Bedrock",
+    label: modelLabel(model),
+    api: claude ? "messages" : "responses",
     apiKey: env.BEDROCK_API_KEY,
-    baseURL: `https://bedrock-mantle.${env.BEDROCK_REGION ?? "us-west-2"}.api.aws/anthropic`,
-    model: env.BEDROCK_MODEL ?? "anthropic.claude-opus-5-5",
-    fallback: "anthropic.claude-opus-4-8",
+    baseURL: claude ? `${host}/anthropic` : `${host}/openai/v1`,
+    model,
+    fallback: claude ? "anthropic.claude-opus-4-8" : undefined,
   };
 }
 
@@ -48,6 +75,8 @@ function anthropic(env: Env): Provider | undefined {
   return {
     id: "anthropic",
     name: "The Claude API",
+    label: "Claude",
+    api: "messages",
     apiKey: env.ANTHROPIC_API_KEY,
     baseURL: env.ANTHROPIC_BASE_URL ?? "https://api.anthropic.com",
     model: env.ANTHROPIC_MODEL ?? "claude-opus-5-5",
@@ -66,7 +95,7 @@ export function modelPlace(env: Env): string {
   if (env.MODEL_MOCK === "true") return "a practice model standing in for Claude";
   const provider = modelProvider(env);
   if (!provider) return "Claude (not set up on this server)";
-  return provider.id === "bedrock" ? "Claude on Amazon Bedrock" : "Claude through the Claude API";
+  return provider.id === "bedrock" ? `${provider.label} on Amazon Bedrock` : "Claude through the Claude API";
 }
 
 /** The simulator's page, saying what answers it and whether it asks for the passcode first. */
@@ -132,13 +161,39 @@ export async function modelTurn(request: Request, env: Env): Promise<Response> {
   const turn = readTurn(await request.text());
   if (typeof turn === "string") return json(400, { error: { code: "bad_request", message: turn } });
 
+  const ctx = turn.context ?? {};
+  // The same every turn, so it's cached.
+  const standing = `${VOICE}\n\n${skillPrompt()}`;
+  const now = [
+    `The household's time zone is ${clip(ctx.timeZone, 64) || "unknown"}. It's now ${clip(ctx.now, 64) || "unknown"}.`,
+    // The simulator can show two displays on one household, a kitchen's and a barn's.
+    clip(ctx.place, 40).trim() ? `This display is in the ${clip(ctx.place, 40).trim().toLowerCase()}.` : "",
+    clip(ctx.instructions, 2000),
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  if (provider.api === "responses") {
+    try {
+      const message = await responsesTurn({ baseURL: provider.baseURL, apiKey: provider.apiKey, model: provider.model, instructions: `${standing}\n\n${now}`, messages: turn.messages, tools: turn.tools });
+      return json(200, message, { "x-model-provider": provider.id });
+    } catch (err) {
+      if (!(err instanceof ResponsesError)) throw err;
+      // The host's own words stay in the Worker's log; the page gets a plain sentence.
+      console.error(`${provider.name} answered ${err.status}: ${err.message}`);
+      if (err.status === 401 || err.status === 403) return json(502, { error: { code: "model_key", message: `${provider.name} didn't accept the simulator's key or model access.` } });
+      if (err.status === 429) return json(429, { error: { code: "rate_limited", message: `${provider.name} is busy. Try again in a moment.` } });
+      if (err.status === 400) return json(400, { error: { code: "bad_request", message: err.message } });
+      return json(502, { error: { code: "model_error", message: `${provider.name} answered ${err.status}.` } });
+    }
+  }
+
   const client = new Anthropic({
     apiKey: provider.apiKey,
     baseURL: provider.baseURL,
-    middleware: [betaRefusalFallbackMiddleware([{ model: provider.fallback }])],
+    middleware: provider.fallback ? [betaRefusalFallbackMiddleware([{ model: provider.fallback }])] : [],
     maxRetries: 1,
   });
-  const ctx = turn.context ?? {};
   try {
     const message = await client.beta.messages.create({
       model: provider.model,
@@ -146,19 +201,9 @@ export async function modelTurn(request: Request, env: Env): Promise<Response> {
       // Spoken replies: low effort keeps the answer quick.
       output_config: { effort: "low" },
       system: [
-        // The same every turn, so tools and this block are cached.
-        { type: "text", text: `${VOICE}\n\n${skillPrompt()}`, cache_control: { type: "ephemeral" } },
-        {
-          type: "text",
-          text: [
-            `The household's time zone is ${clip(ctx.timeZone, 64) || "unknown"}. It's now ${clip(ctx.now, 64) || "unknown"}.`,
-            // The simulator can show two displays on one household, a kitchen's and a barn's.
-            clip(ctx.place, 40).trim() ? `This display is in the ${clip(ctx.place, 40).trim().toLowerCase()}.` : "",
-            clip(ctx.instructions, 2000),
-          ]
-            .filter(Boolean)
-            .join("\n"),
-        },
+        // Tools and this block are cached.
+        { type: "text", text: standing, cache_control: { type: "ephemeral" } },
+        { type: "text", text: now },
       ],
       tools: turn.tools,
       messages: turn.messages,

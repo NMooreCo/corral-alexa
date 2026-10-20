@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { modelLabel } from "../src/echo/model.ts";
 import worker, { type Env } from "../src/index.ts";
 
 const CTX = { waitUntil() {}, passThroughOnException() {}, props: {} } as unknown as ExecutionContext;
@@ -106,10 +107,98 @@ describe("the simulated Echo Show", () => {
     expect(sent!.body.system[0].text).toContain("Busy means private");
   });
 
+  it("asks GPT-5.6 on Bedrock through the Responses API, and answers the page in the Messages shape", async () => {
+    let sent: { url: string; headers: Headers; body: Record<string, any> } | undefined;
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      const req = new Request(input, init);
+      sent = { url: req.url, headers: req.headers, body: await req.json() };
+      return Response.json({
+        id: "resp_1",
+        model: "openai.gpt-5.6-terra",
+        status: "completed",
+        output: [
+          { type: "reasoning", summary: [] },
+          { type: "message", role: "assistant", content: [{ type: "output_text", text: "Checking the misters." }] },
+          { type: "function_call", call_id: "call_2", name: "set_device", arguments: '{"device":"greenhouse misters","state":"on","seconds":30}' },
+        ],
+        usage: { input_tokens: 7000, output_tokens: 40, input_tokens_details: { cached_tokens: 6000 } },
+      });
+    });
+    const env: Env = { BACKEND: "sample", BEDROCK_API_KEY: "bedrock-key", BEDROCK_REGION: "us-west-2", BEDROCK_MODEL: "openai.gpt-5.6-terra" };
+    const conversation = [
+      { role: "user", content: [{ type: "text", text: "(Alexa recognized the voice: Nick Rivera, Parent.)" }, { type: "text", text: "What's going on today?" }] },
+      { role: "assistant", content: [{ type: "thinking", thinking: "x", signature: "s" }, { type: "tool_use", id: "call_1", name: "show_today", input: {} }] },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "call_1", content: "Soccer at 4." }] },
+      { role: "assistant", content: [{ type: "text", text: "Soccer at 4." }] },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "call_9", content: "No such device.", is_error: true }, { type: "text", text: "Run the misters for 30 seconds." }] },
+    ];
+    const res = await call(env, "/echo/model", turn(conversation, [{ name: "show_today", description: "Show today", input_schema: { type: "object" } }, { name: "set_device", input_schema: { type: "object", properties: { device: { type: "string" } } } }]));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-model-provider")).toBe("bedrock");
+    expect(await res.json()).toEqual({
+      id: "resp_1",
+      type: "message",
+      role: "assistant",
+      model: "openai.gpt-5.6-terra",
+      content: [
+        { type: "text", text: "Checking the misters.", citations: null },
+        { type: "tool_use", id: "call_2", name: "set_device", input: { device: "greenhouse misters", state: "on", seconds: 30 } },
+      ],
+      stop_reason: "tool_use",
+      stop_sequence: null,
+      usage: { input_tokens: 1000, cache_read_input_tokens: 6000, cache_creation_input_tokens: 0, output_tokens: 40 },
+    });
+    expect(sent!.url).toBe("https://bedrock-mantle.us-west-2.api.aws/openai/v1/responses");
+    expect(sent!.headers.get("authorization")).toBe("Bearer bedrock-key");
+    expect(sent!.body).toMatchObject({ model: "openai.gpt-5.6-terra", reasoning: { effort: "low" }, store: false });
+    expect(sent!.body.instructions).toContain("Busy means private");
+    expect(sent!.body.instructions).toContain("America/Denver");
+    expect(sent!.body.tools).toEqual([
+      { type: "function", name: "show_today", description: "Show today", parameters: { type: "object" }, strict: false },
+      { type: "function", name: "set_device", description: "", parameters: { type: "object", properties: { device: { type: "string" } } }, strict: false },
+    ]);
+    // Each call and its result are items of their own, matched by call id; Claude's thinking is left out.
+    expect(sent!.body.input).toEqual([
+      { role: "user", content: "(Alexa recognized the voice: Nick Rivera, Parent.)\nWhat's going on today?" },
+      { type: "function_call", call_id: "call_1", name: "show_today", arguments: "{}" },
+      { type: "function_call_output", call_id: "call_1", output: "Soccer at 4." },
+      { role: "assistant", content: "Soccer at 4." },
+      { type: "function_call_output", call_id: "call_9", output: "Error: No such device." },
+      { role: "user", content: "Run the misters for 30 seconds." },
+    ]);
+  });
+
+  it("says plainly when Bedrock turns the Responses call down, and tries a busy one once more", async () => {
+    const env: Env = { BACKEND: "sample", BEDROCK_API_KEY: "bedrock-key", BEDROCK_MODEL: "openai.gpt-5.6-terra" };
+    let calls = 0;
+    vi.stubGlobal("fetch", async () => {
+      calls++;
+      return Response.json({ error: { message: "slow down" } }, { status: 429 });
+    });
+    const busy = await call(env, "/echo/model", turn([{ role: "user", content: "hi" }]));
+    expect(busy.status).toBe(429);
+    expect(calls).toBe(2);
+    vi.stubGlobal("fetch", async () => Response.json({ message: "no access" }, { status: 403 }));
+    const denied = await call(env, "/echo/model", turn([{ role: "user", content: "hi" }]));
+    expect(denied.status).toBe(502);
+    expect(await denied.json()).toMatchObject({ error: { code: "model_key" } });
+    vi.stubGlobal("fetch", async () => Response.json({ output: [{ type: "message", content: [{ type: "refusal", refusal: "No." }] }] }));
+    expect(await (await call(env, "/echo/model", turn([{ role: "user", content: "hi" }]))).json()).toMatchObject({ content: [], stop_reason: "refusal" });
+  });
+
+  it("names a Bedrock model for people", () => {
+    expect(modelLabel("openai.gpt-5.6-terra")).toBe("GPT-5.6 Terra");
+    expect(modelLabel("openai.gpt-5.6-luna")).toBe("GPT-5.6 Luna");
+    expect(modelLabel("openai.gpt-6")).toBe("GPT-6");
+    expect(modelLabel("anthropic.claude-opus-5-5")).toBe("Claude");
+    expect(modelLabel("mistral.mistral-large-3")).toBe("mistral-large-3");
+  });
+
   it("uses whichever provider has a key, Bedrock first, and names it on the page", async () => {
     const page = async (env: Env) => (await call({ BACKEND: "sample", ...env }, "/echo")).text();
     expect(await page({ BEDROCK_API_KEY: "b", ANTHROPIC_API_KEY: "a" })).toContain("Claude on Amazon Bedrock decides what to do");
     expect(await page({ ANTHROPIC_API_KEY: "a" })).toContain("Claude through the Claude API decides what to do");
+    expect(await page({ BEDROCK_API_KEY: "b", BEDROCK_MODEL: "openai.gpt-5.6-terra" })).toContain("GPT-5.6 Terra on Amazon Bedrock decides what to do");
     expect(await page({ MODEL_PROVIDER: "anthropic", BEDROCK_API_KEY: "b" })).toContain("not set up on this server");
     expect(await page({ MODEL_MOCK: "true" })).toContain("a practice model standing in for Claude");
     expect(await page({})).not.toContain("{{model}}");

@@ -7,9 +7,9 @@ import { visitorHousehold } from "./household.ts";
 /**
  * A simulated Alexa+ on an Echo Show. This page is the MCP client: it
  * connects to the server's /mcp over Streamable HTTP, lists Corral's tools,
- * calls them, and renders their MCP Apps screens. Claude (on Amazon Bedrock or
- * the Claude API, through /echo/model) only decides what to say or which tool
- * to call next.
+ * calls them, and renders their MCP Apps screens. The model (Claude through
+ * the Claude API, or a model on Amazon Bedrock, through /echo/model) only
+ * decides what to say or which tool to call next.
  */
 
 type Msg = Anthropic.Beta.BetaMessageParam;
@@ -559,7 +559,9 @@ async function callModel(): Promise<Reply> {
   const tokens = u ? `${u.input_tokens + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0)} in (${u.cache_read_input_tokens ?? 0} cached), ${u.output_tokens} out` : "";
   const uses = body.content.filter((b) => b.type === "tool_use").map((b) => (b.type === "tool_use" ? `${b.name} ${JSON.stringify(b.input)}` : ""));
   const words = body.content.filter((b) => b.type === "text").map((b) => (b.type === "text" ? b.text : "")).join(" ").trim();
-  addLog(modelLog, "claude", uses.length ? `calls ${uses.join(", ")}` : `says "${words}"`, `${body.model} · ${ms} ms · ${tokens}`);
+  // The log names the model's family: "claude", "gpt".
+  const family = /claude|gpt/.exec(body.model.toLowerCase())?.[0] ?? "model";
+  addLog(modelLog, family, uses.length ? `calls ${uses.join(", ")}` : `says "${words}"`, `${body.model} · ${ms} ms · ${tokens}`);
   return body;
 }
 

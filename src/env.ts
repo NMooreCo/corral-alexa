@@ -21,7 +21,7 @@ export interface Env {
   ACCEPT_CORRAL_TOKENS?: string;
   /** Where the simulated Echo Show's model runs (sample mode): "bedrock" or "anthropic". Unset, whichever has a key, Bedrock first. */
   MODEL_PROVIDER?: string;
-  /** Claude on Amazon Bedrock: a Bedrock API key, its region, and the model id. */
+  /** A model on Amazon Bedrock: a Bedrock API key, its region, and the model id ("anthropic.claude-opus-5-5" speaks the Messages API, "openai.gpt-5.6-terra" the Responses API). */
   BEDROCK_API_KEY?: string;
   BEDROCK_REGION?: string;
   BEDROCK_MODEL?: string;

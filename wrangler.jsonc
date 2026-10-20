@@ -13,7 +13,8 @@
     // "sample" answers from the built-in sample household; "corral" answers from a real Corral after account linking.
     "BACKEND": "sample",
     "CORRAL_URL": "https://corral.narralogy.ai",
-    // The simulated Echo Show's model: Claude on Bedrock (the BEDROCK_API_KEY secret) or the Claude API
+    // The simulated Echo Show's model: a model on Bedrock (the BEDROCK_API_KEY secret; an "anthropic." id speaks
+    // the Messages API, any other, like "openai.gpt-5.6-terra", the Responses API) or the Claude API
     // (ANTHROPIC_API_KEY, and ANTHROPIC_BASE_URL for a gateway that speaks it). MODEL_PROVIDER picks one;
     // unset, whichever has a key, Bedrock first. Locally, MODEL_MOCK=true answers with a practice model.
     "BEDROCK_REGION": "us-west-2",

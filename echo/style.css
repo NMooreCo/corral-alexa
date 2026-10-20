@@ -470,7 +470,9 @@ summary {
 }
 
 .who[data-who="assistant"],
-.who[data-who="claude"] {
+.who[data-who="claude"],
+.who[data-who="gpt"],
+.who[data-who="model"] {
   color: var(--alexa);
 }
 
