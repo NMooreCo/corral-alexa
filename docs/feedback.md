@@ -123,7 +123,7 @@ Written while building, so each entry is what actually happened. For the Devpost
 - **Task:** call Claude Opus 5.5 on Amazon Bedrock from the simulator, through Bedrock's Messages API endpoint with a Bedrock API key.
 - **Steps:** a new AWS account; created a Bedrock API key; called `anthropic.claude-opus-5-5`; then tried Opus 4.8 and Haiku 4.5; upgraded the account from the Free plan to Paid.
 - **Expected:** a first call that works, or an error that names the fix.
-- **Actual:** Opus 5.5 and 4.8 answered "not available for this account"; Haiku 4.5 first needed a use-case form, then answered ThrottlingException. After the upgrade, every Claude model's tokens-per-minute and requests-per-minute quota still showed 0. Nothing on the model catalog page, in the API key flow or in the error said a quota request was the next step.
+- **Actual:** Opus 5.5 and 4.8 answered "not available for this account"; Haiku 4.5 first needed a use-case form, then answered ThrottlingException. After the upgrade, every Claude model's tokens-per-minute and requests-per-minute quota still showed 0. Nothing on the model catalog page, in the API key flow or in the error said a quota request was the next step. The quota requests (F9) were declined on October 19: the account was too new, and AWS asked us to build usage and billing history first and ask again after the next billing cycle.
 - **Severity:** High (the AWS integration was built and tested but couldn't go live in time to know).
 - **Workaround:** made the provider a setting; the demo runs on the Claude API until the quota arrives.
 - **Suggestion:** give new accounts a small default Claude quota, or say "your quota for this model is 0; request an increase" in the error and on the model's page.
@@ -133,7 +133,7 @@ Written while building, so each entry is what actually happened. For the Devpost
 - **Task:** ask for a small Opus 5.5 quota for a demo.
 - **Steps:** opened Service Quotas for Amazon Bedrock, searched for Opus 5.5, and filled in the increase form for a few thousand tokens a minute.
 - **Expected:** a request sized to a demo, against the one quota the Messages API endpoint uses.
-- **Actual:** the form won't accept less than the AWS default (30,000,000 tokens a minute), so a modest ask isn't possible; there are two Opus 5.5 token quotas (global and regional cross-region) and it isn't clear which one the Messages API endpoint draws on; no requests-per-minute quota is listed for Opus 5.5 even though older models have one. Both requests went to Pending with no estimate.
+- **Actual:** the form won't accept less than the AWS default (30,000,000 tokens a minute), so a modest ask isn't possible; there are two Opus 5.5 token quotas (global and regional cross-region) and it isn't clear which one the Messages API endpoint draws on; no requests-per-minute quota is listed for Opus 5.5 even though older models have one. Both requests went to Pending with no estimate, and both were declined two days later (F8).
 - **Severity:** Medium.
 - **Workaround:** requested both token quotas at the minimum the form allows.
 - **Suggestion:** let the form take any value up to the default, and say which quota each endpoint uses.
@@ -227,3 +227,13 @@ Written while building, so each entry is what actually happened. For the Devpost
 - **Severity:** Medium.
 - **Workaround:** merged the Today and Ranch screens into one bundle with a rail of tabs (Today, Ranch, Animals, Automations), each tab fetching its data through the screens' own refresh tools.
 - **Suggestion:** an app-to-host request to open another tool's screen, so screens can link to each other without the model.
+
+### F19. Bedrock quotas that show capacity the account can't use
+
+- **Task:** after the Opus 5.5 quota requests were declined (F8), run the simulator on any Bedrock model the account's quotas allow.
+- **Steps:** sorted Amazon Bedrock's quotas in Service Quotas by applied value. Only GPT-5.6 Terra (20,000,000 input tokens a minute) and GPT-5.6 Luna (2,000,000) on the bedrock-mantle endpoint were above 0. Added an OpenAI Responses API path for models other than Claude, called `openai.gpt-5.6-terra` and `openai.gpt-5.6-luna` with the Bedrock API key, then tried GPT-5.6 Terra and Amazon Nova 2 Lite in the console's playground as the account's root user.
+- **Expected:** a model with a quota answers, or the quota page shows that it won't.
+- **Actual:** both GPT-5.6 models answered 401 (AccessDeniedException in the playground): "not available for this account." Nova 2 Lite answered ThrottlingException, "Too many tokens per day." Every model's tokens-per-day quota is 0 (only the account-wide cross-model daily cap isn't), which the per-minute quotas don't reflect, and each model's page offers "Open in playground" with no sign the account can't use it.
+- **Severity:** High (no Bedrock model could run for the demo).
+- **Workaround:** kept the Bedrock path behind a setting (Claude through the Messages API, any other model through the Responses API, the page unchanged either way), and the demo runs on the Claude API.
+- **Suggestion:** say on each model's page and in Service Quotas when the account can't use a model yet, and why (account age, billing history); put the reason in the error ("this account's daily token quota for this model is 0"); and let new accounts run a small daily amount, at least on Amazon's own models.
