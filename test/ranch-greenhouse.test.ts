@@ -149,6 +149,35 @@ describe("the greenhouse controller connector (against a fake controller)", () =
     expect((err as Error).message).toMatch(/can't tell whether the Greenhouse misters started.*closes on its own/);
   });
 
+  it("after one read times out, says it isn't answering at once for 30 seconds, then asks again; a switch still tries", async () => {
+    const c = clock();
+    const fake = fakeController(c.now);
+    let down = true;
+    let asked = 0;
+    const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      asked++;
+      if (!down) return fake.fetch(input, init);
+      return new Promise<Response>((_, reject) => init?.signal?.addEventListener("abort", () => reject(new DOMException("timed out", "TimeoutError"))));
+    }) as typeof globalThis.fetch;
+    const gh = controller({ fetch, now: c.now, timeoutMs: 30 });
+    expect((await gh.list())[0]).toMatchObject({ reachable: false });
+    expect(asked).toBe(1);
+    // The next reads don't wait on the timeout again.
+    c.advance(10);
+    const started = performance.now();
+    expect((await gh.list())[0]).toMatchObject({ reachable: false });
+    expect(performance.now() - started).toBeLessThan(25);
+    expect(asked).toBe(1);
+    // A switch always tries the controller.
+    await gh.set("greenhouse.valve1", { state: "on", seconds: 30 }).catch(() => {});
+    expect(asked).toBe(2);
+    // Thirty seconds on, a read asks again, and finds it back.
+    down = false;
+    c.advance(25);
+    expect((await gh.list())[0]).toMatchObject({ reachable: true });
+    expect(asked).toBe(3);
+  });
+
   it("shares one /status request among reads that come while it's out, and asks again after", async () => {
     const c = clock();
     const fake = fakeController(c.now);

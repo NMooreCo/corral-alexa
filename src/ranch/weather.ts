@@ -134,7 +134,13 @@ export async function forecast(o: WeatherOptions): Promise<Forecast> {
   const kept = cache.get(url);
   if (kept && Date.now() - kept.at < FRESH_MS) return summarize(kept.data, o, now, kept.at, false);
   try {
-    const res = await (o.fetch ?? ((i, init) => fetch(i, init)))(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    const init: RequestInit & { cf: { cacheTtl: number; cacheEverything: boolean } } = {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      // Cloudflare's edge keeps the answer for as long as it's fresh, so a cold isolate needn't wait on Open-Meteo (Alexa+ wants answers in under 500 ms).
+      cf: { cacheTtl: FRESH_MS / 1000, cacheEverything: true },
+    };
+    const res = await (o.fetch ?? ((i, init) => fetch(i, init)))(url, init);
     const data = (await res.json()) as OpenMeteo;
     if (!res.ok || data.error || !data.daily?.time?.length) throw new Error(data.reason ?? `HTTP ${res.status}`);
     cache.set(url, { at: Date.now(), data });

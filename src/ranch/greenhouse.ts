@@ -59,6 +59,12 @@ export interface GreenhouseOptions {
   timeoutMs?: number;
   /** How long one /status answer serves every read (the screen's refresh and several tool calls in a turn). */
   cacheMs?: number;
+  /**
+   * After a /status read times out, how long reads say the controller isn't
+   * answering straight away instead of each waiting out the timeout again
+   * (Alexa+ wants an answer in under 500 ms). Switching still always tries.
+   */
+  quietMs?: number;
 }
 
 interface V0Status {
@@ -94,12 +100,15 @@ export class GreenhouseController implements DeviceSource {
   #asking: Promise<V0Status> | null = null;
   /** The last good answer, to say what it last read when it stops answering. */
   #lastGood: { at: Temporal.Instant; status: V0Status } | null = null;
+  /** Until when reads take the controller's silence as given (see quietMs). */
+  #quietUntil = 0;
 
   constructor(opts: GreenhouseOptions) {
     this.id = opts.config.id;
     this.#o = {
       timeoutMs: 4000,
       cacheMs: 2000,
+      quietMs: 30_000,
       ...opts,
       fetch: opts.fetch ?? ((input, init) => fetch(input, init)),
       now: opts.now ?? clockNow,
@@ -144,13 +153,23 @@ export class GreenhouseController implements DeviceSource {
     if (!body || typeof body.valve !== "string") throw new ToolError("Something answered at the greenhouse controller's address, but not the way the controller does.");
     this.#lastGood = { at: this.#o.now(), status: body };
     this.#cached = { at: this.#o.now().epochMilliseconds, status: body };
+    this.#quietUntil = 0;
     return body;
   }
 
   async #status(): Promise<V0Status> {
-    if (this.#cached && this.#o.now().epochMilliseconds - this.#cached.at < this.#o.cacheMs) return this.#cached.status;
+    const now = this.#o.now().epochMilliseconds;
+    if (this.#cached && now - this.#cached.at < this.#o.cacheMs) return this.#cached.status;
+    if (now < this.#quietUntil) throw new Unreachable();
     // Reads that come together (a screen's devices and its automations, an automation's check) wait on one answer, and on one timeout.
-    if (!this.#asking) this.#asking = this.#request("GET", "/status").finally(() => (this.#asking = null));
+    if (!this.#asking) {
+      this.#asking = this.#request("GET", "/status")
+        .catch((err: unknown) => {
+          if (err instanceof Unreachable) this.#quietUntil = this.#o.now().epochMilliseconds + this.#o.quietMs;
+          throw err;
+        })
+        .finally(() => (this.#asking = null));
+    }
     return this.#asking;
   }
 
