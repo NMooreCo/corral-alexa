@@ -2,13 +2,13 @@ import { fileURLToPath } from "node:url";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { Temporal } from "temporal-polyfill";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { CorralTask } from "../src/household.ts";
+import { ToolError, type CorralTask } from "../src/household.ts";
 import { serveMcp } from "../src/http.ts";
 import * as entry from "../src/index.ts";
 import worker, { type Env } from "../src/index.ts";
 import { SampleHouseholdObject } from "../src/sample/durable.ts";
 import { SampleHousehold } from "../src/sample/index.ts";
-import { SharedSample, freeze, thaw } from "../src/sample/shared.ts";
+import { MAX_KEPT_BYTES, SharedSample, freeze, thaw } from "../src/sample/shared.ts";
 import { memoryStore } from "../src/sample/store.ts";
 import { fakeHouseholds, forbiddenHouseholds } from "./fake-households.ts";
 import { MemoryKV } from "./memory-kv.ts";
@@ -45,6 +45,26 @@ describe("the shared sample household", () => {
     await h.call("add_list_item", { list: "Groceries", text: "salsa" });
     expect(await h.version()).toBe(3);
     expect(store.load()).toMatchObject({ day: "2026-10-16", version: 3 });
+  });
+
+  it("takes back a change too big to keep and says so, so every later save still works", async () => {
+    const store = memoryStore();
+    const fresh = new SampleHousehold({ now: () => FRIDAY });
+    fresh.state.history.push({ at: FRIDAY.toZonedDateTimeISO("America/Denver").toString(), who: null, text: "" });
+    // A household within a few bytes of what it keeps.
+    const room = MAX_KEPT_BYTES - new TextEncoder().encode(freeze(fresh.state)).length;
+    fresh.state.history.at(-1)!.text = "h".repeat(room - 20);
+    store.save({ day: "2026-10-16", version: 7, state: freeze(fresh.state) });
+    const h = new SharedSample(store, { now: () => FRIDAY });
+    await expect(h.call("add_list_item", { list: "Groceries", text: "salsa" })).rejects.toThrow(new ToolError("Juniper Hollow can't keep any more, so that change wasn't made. Starting the household over makes room."));
+    // Taken back everywhere: in the household, in its storage and in its change counter.
+    expect(((await h.call("lists", { list: "Groceries" })) as { items: { text: string }[] }).items.map((i) => i.text)).not.toContain("Salsa");
+    expect(store.load()).toMatchObject({ version: 7 });
+    expect(await h.version()).toBe(7);
+    // Starting over makes room.
+    h.reset();
+    expect(await h.call("add_list_item", { list: "Groceries", text: "salsa" })).toMatchObject({ status: "done" });
+    expect(store.load()).toMatchObject({ version: 9 });
   });
 
   it("comes back exactly as it was kept, after a restart", async () => {
@@ -140,6 +160,14 @@ const call = (env: Env, path: string, init?: RequestInit) => worker.fetch(new Re
 
 /** One MCP tool call the way Alexa+ makes it (2025-11-25, one POST), with the tool's JSON answer. */
 async function tool(env: Env, name: string, args: Record<string, unknown> = {}, path = "/mcp", headers: Record<string, string> = {}) {
+  const result = await toolResult(env, name, args, path, headers);
+  // A screen tool's structuredContent is what its screen shows; any other tool's is its JSON answer, with a list wrapped as its items.
+  const said = JSON.parse(result.content[0]!.text) as unknown;
+  return Array.isArray(said) ? said : (result.structuredContent ?? said);
+}
+
+/** One MCP tool call's result as it comes, an error included. */
+async function toolResult(env: Env, name: string, args: Record<string, unknown> = {}, path = "/mcp", headers: Record<string, string> = {}) {
   const res = await call(env, path, {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2025-11-25", ...headers },
@@ -149,10 +177,7 @@ async function tool(env: Env, name: string, args: Record<string, unknown> = {}, 
   const data = (res.headers.get("content-type") ?? "").includes("text/event-stream")
     ? text.split("\n").filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trim()).filter(Boolean).at(-1)!
     : text;
-  const result = (JSON.parse(data) as { result: { content: { text: string }[]; structuredContent?: { items?: unknown }; isError?: boolean } }).result;
-  // A screen tool's structuredContent is what its screen shows; any other tool's is its JSON answer, with a list wrapped as its items.
-  const said = JSON.parse(result.content[0]!.text) as unknown;
-  return Array.isArray(said) ? said : (result.structuredContent ?? said);
+  return (JSON.parse(data) as { result: { content: { text: string }[]; structuredContent?: { items?: unknown }; isError?: boolean } }).result;
 }
 
 /** The id of a chore by its title, through MCP. */
@@ -385,6 +410,19 @@ describe("the sample household's Durable Object", () => {
     vi.setSystemTime(FRIDAY.add({ hours: 12, minutes: 33 }).epochMilliseconds);
     const next = (await tool(env, "alerts", { since: caughtUp.cursor })) as { alerts: { text: string }[] };
     expect(next.alerts.map((a) => a.text)).toEqual([expect.stringMatching(/^Hunter just left the fence/)]);
+  });
+
+  it("answers an oversized change in words, and the shared household goes on saving for everyone", async () => {
+    const { env } = sampleEnv();
+    const eggs = await choreId(env, "Collect eggs");
+    // More than one value in a Durable Object's SQLite storage holds.
+    const result = await toolResult(env, "complete_task", { task: eggs, values: { note: "x".repeat(2_500_000) } });
+    expect(result).toMatchObject({ isError: true, content: [{ text: expect.stringContaining('What a task asks for goes in values by key, like {"eggs": 9}') }] });
+    expect(await chore(env, "Collect eggs")).toMatchObject({ status: "overdue" });
+    expect(await tool(env, "household_version")).toEqual({ version: 1 });
+    await tool(env, "complete_task", { task: eggs, values: { eggs: 9 } });
+    expect(await chore(env, "Collect eggs")).toMatchObject({ status: "done" });
+    expect(await tool(env, "household_version")).toEqual({ version: 2 });
   });
 
   it("starts over with no passcode when the server has none", async () => {

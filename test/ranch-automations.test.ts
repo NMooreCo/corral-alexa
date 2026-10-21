@@ -117,6 +117,15 @@ describe("the ranch's automations", () => {
     expect(added).toMatchObject({ id: "warm-the-barn", enabled: true, when: "Whenever the barn heater's barn temperature is below 35°F", then: ["Turn on the barn heater"] });
   });
 
+  it("takes a short name, and keeps as many automations as it holds", async () => {
+    const { ranch } = ranchAt("12:00");
+    const misting = (name: string) => ranch.automations.add({ name, when: { kind: "schedule", times: ["12:30"] }, then: [{ device: "greenhouse misters", state: "on", seconds: 30 }] });
+    await expect(misting("m".repeat(61))).rejects.toThrow('Give the automation a shorter name, 60 characters at most, like "Freeze protection".');
+    for (let i = (await ranch.automations.list()).length; i < 20; i++) await misting(`Mist ${i}`);
+    await expect(misting("Mist again")).rejects.toThrow("The ranch already has 20 automations, as many as it keeps, so this one wasn't added. Turn one that's there on or off instead.");
+    expect(await ranch.automations.list()).toHaveLength(20);
+  });
+
   it("finds one by name, and says which when a name could be several", async () => {
     const { ranch } = ranchAt("12:00");
     expect((await ranch.automations.set("garden", false)).enabled).toBe(false);

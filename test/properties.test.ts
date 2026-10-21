@@ -401,15 +401,22 @@ describe("money and who approves an order (properties)", () => {
     );
   });
 
-  it("orders a whole number of 1 or more, or the usual order when none is said, and refuses any other amount", async () => {
-    const amount = fc.oneof(fc.constantFrom(undefined, null, ""), fc.integer({ min: -5, max: 500 }), fc.double(), fc.integer({ min: -5, max: 500 }).map(String), fc.string({ maxLength: 4 }));
+  it("orders a whole number from 1 to 10,000, or the usual order when none is said, and refuses any other amount", async () => {
+    const amount = fc.oneof(
+      fc.constantFrom(undefined, null, ""),
+      fc.integer({ min: -5, max: 500 }),
+      fc.integer({ min: 9_990, max: 10_010 }),
+      fc.double(),
+      fc.integer({ min: -5, max: 500 }).map(String),
+      fc.string({ maxLength: 4 }),
+    );
     await fc.assert(
       fc.asyncProperty(fc.constantFrom(...CATALOG), amount, async (product, said) => {
         const store = new SampleSupplier({ now: () => FRIDAY, timeZone: "America/Denver" });
         const unsaid = said === undefined || said === null || said === "";
         const n = Number(said);
         const ask = quote([store], [{ supply: product.supply, quantity: said }], { today: Temporal.PlainDate.from("2026-10-16") });
-        if (!unsaid && !(Number.isInteger(n) && n >= 1)) {
+        if (!unsaid && !(Number.isInteger(n) && n >= 1 && n <= 10_000)) {
           await expect(ask).rejects.toThrow(ToolError);
           return;
         }

@@ -1,6 +1,6 @@
 import { Temporal } from "temporal-polyfill";
 import { describe, expect, it } from "vitest";
-import { ToolError, type CorralEvent, type CorralTask, type CorralWhere } from "../src/household.ts";
+import { ToolError, type CorralEvent, type CorralTask, type CorralWhere, type HouseholdTool } from "../src/household.ts";
 import { SampleHousehold } from "../src/sample/index.ts";
 
 // Friday, October 16, 2026, 10:30 AM in Denver.
@@ -161,6 +161,90 @@ describe("the sample household's lists and supplies", () => {
       ],
       turnsInto: ["100 points make $5.00 of allowance"],
     });
+  });
+});
+
+describe("what the sample household takes and keeps", () => {
+  it("refuses text longer than it keeps, too many names and oversized answers, in words, and changes nothing", async () => {
+    const h = household();
+    const nick = h.as("Nick");
+    const eggs = await taskId(h, "Collect eggs");
+    const before = JSON.stringify(h.state);
+    const long = "x".repeat(201);
+    const refusals: [string, Record<string, unknown>, string][] = [
+      ["add_event", { title: long, start: "2026-10-17" }, "That title is too long: say it in 200 characters or fewer."],
+      ["add_event", { title: "Picnic", start: "2026-10-17", location: long }, "That place is too long: say it in 200 characters or fewer."],
+      ["add_event", { title: "Picnic", start: "2026-10-17", people: Array.from({ length: 11 }, (_, i) => `Guest ${i}`) }, "Name at most 10 people for one event."],
+      ["add_event", { title: "Picnic", start: "2026-10-17", people: ["y".repeat(61)] }, "A name is at most 60 characters."],
+      ["add_task", { title: long }, "That title is too long: say it in 200 characters or fewer."],
+      ["add_list_item", { list: "Groceries", text: long }, "That item is too long: say it in 200 characters or fewer."],
+      ["add_list_item", { list: "Groceries", text: "Salsa", quantity: "z".repeat(41) }, 'Say how much in 40 characters or fewer, like "2 gallons".'],
+      ["complete_task", { task: eggs, values: { note: "e".repeat(1000) } }, 'What a task asks for goes in values by key, like {"eggs": 9}: at most 12 answers, in under 1,000 characters.'],
+      ["complete_task", { task: eggs, values: Object.fromEntries(Array.from({ length: 13 }, (_, i) => [`k${i}`, i])) }, "at most 12 answers"],
+      ["update_supply", { supply: "hay", change: "added", amount: 1e308 }, "Give an amount from 0 to 100,000."],
+    ];
+    for (const [tool, args, said] of refusals) await expect(nick.call(tool as HouseholdTool, args), tool).rejects.toThrow(said);
+    expect(JSON.stringify(h.state)).toBe(before);
+    // Within the limits, it all goes in, and someone named three ways is named once.
+    await nick.call("complete_task", { task: eggs, values: { eggs: 9 } });
+    expect(await nick.call("add_task", { title: "y".repeat(200), assignees: ["Jak", "jak", "Jak Rivera"] })).toMatchObject({ status: "done" });
+    expect(h.state.tasks.at(-1)!.assignees).toEqual([h.state.people.find((p) => p.shortName === "Jak")!.id]);
+  });
+
+  it("holds as many events, tasks and list items as it keeps, and only the latest checked-off ones", async () => {
+    const h = household();
+    const nick = h.as("Nick");
+    h.state.events.push(...Array.from({ length: 200 - h.state.events.length }, (_, i) => ({ ...h.state.events[0]!, id: `filler-${i}` })));
+    await expect(nick.call("add_event", { title: "Picnic", start: "2026-10-17" })).rejects.toThrow("The calendar here holds at most 200 events, so nothing was added.");
+    h.state.tasks.push(...Array.from({ length: 200 - h.state.tasks.length }, (_, i) => ({ ...h.state.tasks[7]!, id: `filler-${i}` })));
+    await expect(nick.call("add_task", { title: "Fix the gate" })).rejects.toThrow("The task list here holds at most 200 tasks, so nothing was added.");
+
+    const groceries = h.state.lists[0]!;
+    for (let i = groceries.items.filter((it) => !it.done).length; i < 50; i++) await nick.call("add_list_item", { list: "Groceries", text: `Thing ${i}` });
+    await expect(nick.call("add_list_item", { list: "Groceries", text: "One more thing" })).rejects.toThrow("Groceries already has 50 things on it. Check some off before adding more.");
+    // Saying something that's already there still works, and checking things off makes room.
+    expect(await nick.call("add_list_item", { list: "Groceries", text: "milk" })).toMatchObject({ summary: "Milk is already on Groceries" });
+    for (let i = 10; i < 40; i++) await nick.call("check_list_item", { list: "Groceries", text: `Thing ${i}` });
+    expect(h.state.lists[0]!.items.filter((it) => it.done).map((it) => it.text)).toEqual(Array.from({ length: 20 }, (_, i) => `Thing ${i + 20}`));
+    expect(await nick.call("add_list_item", { list: "Groceries", text: "One more thing" })).toMatchObject({ status: "done" });
+  });
+
+  it("lets only so many requests wait, keeps only the latest decided ones, and asks nothing it can't keep", async () => {
+    const h = household();
+    const waiting = h.state.requests[0]!;
+    h.state.requests.push(...Array.from({ length: 29 }, (_, i) => ({ ...waiting, id: `waiting-${i}` })));
+    const listBefore = JSON.stringify(h.state.lists);
+    // Jak's asks wait for a parent: the 31st isn't sent, and nothing goes on the list for it.
+    await expect(h.as("Jak").call("add_list_item", { list: "Groceries", text: "Candy" })).rejects.toThrow("30 requests are already waiting to be decided, so this one wasn't sent. Decide some of those first.");
+    expect(JSON.stringify(h.state.lists)).toBe(listBefore);
+    h.state.requests.push(...Array.from({ length: 35 }, (_, i) => ({ ...waiting, id: `decided-${i}`, status: "declined" as const, decidedBy: h.state.people[0]!.id })));
+    await h.as("Holly").call("decide_approval", { request: "waiting-0", decision: "decline" });
+    // The one just decided stays, with the latest asked of the rest.
+    expect(h.state.requests.filter((r) => r.status !== "pending").map((r) => r.id)).toEqual(["waiting-0", ...Array.from({ length: 29 }, (_, i) => `decided-${i + 6}`)]);
+    expect(await h.as("Jak").call("add_list_item", { list: "Groceries", text: "Candy" })).toMatchObject({ status: "waiting_for_approval" });
+  });
+
+  it("lets only so many orders be open, and keeps only the latest delivered ones", async () => {
+    const h = household();
+    const order = (id: string, deliveryDate: string) => ({
+      id,
+      supplier: { id: "sample.valley-feed", name: "Valley Feed & Propane", live: false },
+      lines: [{ supply: "Hay", product: "hay-bale", unit: "bale", quantity: 20, unitPriceCents: 1450 }],
+      totalCents: 29_000,
+      by: null,
+      at: "2026-10-15T09:00:00-06:00[America/Denver]",
+      status: "placed" as const,
+      deliveryDate,
+      reference: null,
+      request: null,
+    });
+    h.state.orders.push(...Array.from({ length: 25 }, (_, i) => order(`delivered-${i}`, "2026-10-15")));
+    h.state.orders.push(...Array.from({ length: 20 }, (_, i) => order(`coming-${i}`, "2026-10-18")));
+    await expect(h.as("Nick").call("place_order", { items: [{ supply: "hay" }] })).rejects.toThrow("20 orders are already on their way or waiting for a yes, so nothing was ordered.");
+    h.state.orders = h.state.orders.filter((o) => o.id !== "coming-0");
+    expect(await h.as("Nick").call("place_order", { items: [{ supply: "hay" }] })).toMatchObject({ status: "done" });
+    expect(h.state.orders.filter((o) => o.id.startsWith("delivered-")).map((o) => o.id)).toEqual(Array.from({ length: 20 }, (_, i) => `delivered-${i + 5}`));
+    expect(h.state.orders).toHaveLength(20 + 20);
   });
 });
 

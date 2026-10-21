@@ -195,11 +195,16 @@ export async function quote(suppliers: Supplier[], items: { supply: string; quan
   };
 }
 
-/** How many to order: the number said, a whole one or more, or the usual order when none is. */
+/** The most of one supply an order takes, so a slip ("a million bags") can't run a total past what a household keeps. */
+const MAX_QUANTITY = 10_000;
+
+/** How many to order: the number said, a whole one from 1 to MAX_QUANTITY, or the usual order when none is. */
 function amountOf(said: unknown, product: SupplierProduct): number {
   if (said === undefined || said === null || said === "") return product.usualQuantity;
   const n = Number(said);
-  if (!Number.isInteger(n) || n < 1) throw new ToolError(`Say how many ${plural(product.unit)} of ${lowerFirst(product.supply)} as a whole number, 1 or more.`);
+  if (!Number.isInteger(n) || n < 1 || n > MAX_QUANTITY) {
+    throw new ToolError(`Say how many ${plural(product.unit)} of ${lowerFirst(product.supply)} as a whole number from 1 to ${MAX_QUANTITY.toLocaleString("en-US")}.`);
+  }
   return n;
 }
 

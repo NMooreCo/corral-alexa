@@ -1,9 +1,21 @@
 import { Temporal } from "temporal-polyfill";
-import type { Household, HouseholdAbout, HouseholdHistoryEntry, HouseholdTool } from "../household.ts";
+import { ToolError, type Household, type HouseholdAbout, type HouseholdHistoryEntry, type HouseholdTool } from "../household.ts";
 import { SampleHousehold } from "./index.ts";
 import { seed, type SampleState } from "./seed.ts";
 import type { KeptSample, SampleStore } from "./store.ts";
 import { now as clockNow } from "../clock.ts";
+
+/**
+ * The most a household keeps, as UTF-8 JSON: half of the 2 MB one value in a
+ * Durable Object's SQLite storage holds. The household's own limits keep it far
+ * below this; this is what stops a change that would get past them anyway.
+ */
+export const MAX_KEPT_BYTES = 1_000_000;
+
+/** Whether a household's state, as kept, fits its storage. */
+export function fitsStorage(state: string): boolean {
+  return new TextEncoder().encode(state).length <= MAX_KEPT_BYTES;
+}
 
 /** What a shared sample household says about itself: its name, its day and its change counter. */
 export interface SampleStatus {
@@ -109,7 +121,10 @@ export class SharedSample implements Household {
     if (!this.#household) this.#load();
     const household = this.#household!;
     household.nextDay();
-    this.#kept = { day: this.#dayOf(household), version: this.#kept!.version + 1, state: freeze(household.state) };
+    const state = freeze(household.state);
+    // A household moved on so many mornings that it no longer fits starts the new day over instead.
+    if (!fitsStorage(state)) return this.reset();
+    this.#kept = { day: this.#dayOf(household), version: this.#kept!.version + 1, state };
     this.#store.save(this.#kept);
     return this.status();
   }
@@ -159,8 +174,16 @@ export class SharedSample implements Household {
     if (household !== this.#household || !this.#kept) return;
     const state = freeze(household.state);
     if (state === this.#kept.state) return;
-    this.#kept = { ...this.#kept, version: this.#kept.version + 1, state };
-    this.#store.save(this.#kept);
+    if (!fitsStorage(state)) {
+      // Too big to keep: the change is taken back, so one call can't leave a household that every later save fails on.
+      const before = thaw(this.#kept.state);
+      if (before) this.#household = new SampleHousehold({ now: this.#now, state: before });
+      else this.#start();
+      throw new ToolError(`${household.name} can't keep any more, so that change wasn't made. Starting the household over makes room.`);
+    }
+    const kept = { ...this.#kept, version: this.#kept.version + 1, state };
+    this.#store.save(kept);
+    this.#kept = kept;
   }
 
   #dayOf(household: SampleHousehold): string {

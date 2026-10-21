@@ -236,8 +236,9 @@ describe("what can't be ordered", () => {
       [{ items: [{ supply: "caviar" }] }, 'There\'s no supply called "caviar" here to order. Supplies: Horse feed, Hay, Dog food, Layer pellets, Propane, Fly spray.'],
       [{ items: [{ supply: "fly spray" }] }, "Valley Feed & Propane doesn't sell fly spray. It sells propane, dog food, horse feed, layer pellets and hay."],
       [{ items: [{ supply: "hay" }], supplier: "Tractor World" }, 'There\'s no store called "Tractor World" to order from. Stores: Valley Feed & Propane.'],
-      [{ items: [{ supply: "dog food", quantity: 0 }] }, "Say how many 40 lb bags of dog food as a whole number, 1 or more."],
-      [{ items: [{ supply: "dog food", quantity: 2.5 }] }, "Say how many 40 lb bags of dog food as a whole number, 1 or more."],
+      [{ items: [{ supply: "dog food", quantity: 0 }] }, "Say how many 40 lb bags of dog food as a whole number from 1 to 10,000."],
+      [{ items: [{ supply: "dog food", quantity: 2.5 }] }, "Say how many 40 lb bags of dog food as a whole number from 1 to 10,000."],
+      [{ items: [{ supply: "propane", quantity: 1e300 }] }, "Say how many gallons of propane as a whole number from 1 to 10,000."],
       [{ items: [] }, "Say what to order: one to 12 of the supplies from the supplies tool."],
     ];
     for (const [args, said] of refusals) await expect(h.as("Nick").call("place_order", args)).rejects.toThrow(said);

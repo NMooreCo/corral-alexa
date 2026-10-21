@@ -20,6 +20,38 @@ const MAX_ORDER_ITEMS = 12;
 const MAX_HISTORY = 60;
 
 /**
+ * How much a household takes and keeps. Anyone can reach the shared sample
+ * household, so every input that's kept has a length or a count, and so does
+ * what piles up; together they keep it far below what its storage holds.
+ */
+const LIMITS = {
+  /** A title, a place, a list item. */
+  text: 200,
+  /** How much of something, like "2 gallons". */
+  quantity: 40,
+  /** A person's name, as someone says it. */
+  name: 60,
+  /** People named for one event. */
+  people: 10,
+  /** What a task asks for when it's done: how many answers, and how long they run in all, as JSON. */
+  values: 12,
+  valuesChars: 1000,
+  /** A supply used, added or counted. */
+  amount: 100_000,
+  events: 200,
+  tasks: 200,
+  /** Things still on one list, and checked-off ones kept (they're never shown again). */
+  listItems: 50,
+  checkedOff: 20,
+  /** Requests waiting to be decided, and decided ones kept. */
+  waiting: 30,
+  decided: 30,
+  /** Orders on their way or waiting for a yes, and delivered ones kept. */
+  openOrders: 20,
+  delivered: 20,
+} as const;
+
+/**
  * The sample household, answering Corral's tools the way Corral does, so the
  * bridge runs and demos with no Corral account. Every call comes from
  * someone: a person in the household (the simulated Echo Show says who Alexa
@@ -401,6 +433,9 @@ export class SampleHousehold implements Household {
 
   /** Keeps a change as a request for an approver, and says so, the way Corral answers; `note` says why, when that's worth saying. */
   private hold(actor: SampleActor, tool: RequestChange, args: Args, summary: string, note?: string): CorralChange & { status: "waiting_for_approval" } {
+    if (this.state.requests.filter((r) => r.status === "pending").length >= LIMITS.waiting) {
+      throw new ToolError(`${LIMITS.waiting} requests are already waiting to be decided, so this one wasn't sent. Decide some of those first.`);
+    }
     const id = crypto.randomUUID();
     this.state.requests.push({ id, from: actor.person?.id ?? null, summary, at: this.#now().toZonedDateTimeISO(this.state.timeZone).toString(), change: { tool, args }, status: "pending" });
     return { status: "waiting_for_approval", summary, approvers: this.approvers().filter((p) => p.id !== actor.person?.id).map((p) => p.shortName), requestId: id, ...(note ? { note } : {}) };
@@ -413,13 +448,17 @@ export class SampleHousehold implements Household {
     const end = args.end ? this.wire(args.end, "end") : isAllDay(start) ? start : Temporal.ZonedDateTime.from(start).add({ hours: 1 }).toString();
     if (Temporal.Instant.compare(this.instantOf(end), this.instantOf(start)) < 0) throw new ToolError("The end is before the start.");
     const names = Array.isArray(args.people) ? args.people.filter((n): n is string => typeof n === "string") : [];
-    const members = names.map((n) => personNamed(this.state, n)).filter((p): p is SamplePerson => Boolean(p));
+    if (names.length > LIMITS.people) throw new ToolError(`Name at most ${LIMITS.people} people for one event.`);
+    if (names.some((n) => n.length > LIMITS.name)) throw new ToolError(`A name is at most ${LIMITS.name} characters.`);
+    // Each person once, however many times they're named.
+    const members = [...new Set(names.map((n) => personNamed(this.state, n)).filter((p): p is SamplePerson => Boolean(p)))];
     const guests = names.filter((n) => !personNamed(this.state, n));
     const titleWithGuests = guests.length ? `${title} with ${guests.join(" and ")}` : title;
     const calendar = this.calendarFor(actor, args.calendar);
-    const location = typeof args.location === "string" && args.location.trim() ? args.location.trim().slice(0, 200) : null;
+    const location = typeof args.location === "string" && args.location.trim() ? this.short(args.location, "place") : null;
     const summary = `${titleWithGuests}, ${whenLabel(start)}`;
     if (!approved && this.waits(actor, "add_event", true)) return this.hold(actor, "add_event", { title, start, end, people: names, calendar, location }, summary);
+    if (this.state.events.length >= LIMITS.events) throw new ToolError(`The calendar here holds at most ${LIMITS.events} events, so nothing was added.`);
     const id = crypto.randomUUID();
     this.state.events.push({ id, title: titleWithGuests, start, end, people: members.map((p) => p.id), drivers: [], location, calendar });
     return { status: "done", summary, event: id };
@@ -428,11 +467,13 @@ export class SampleHousehold implements Household {
   private addTask(actor: SampleActor, args: Args, approved = false): CorralChange {
     const title = this.titled(args.title, "New task");
     const due = args.due ? this.wire(args.due, "due time") : this.today().toString();
-    const named = Array.isArray(args.assignees) ? args.assignees.map((n) => this.person(n)).filter((p): p is SamplePerson => Boolean(p)) : [];
+    // Each person once, however many times they're named.
+    const named = Array.isArray(args.assignees) ? [...new Set(args.assignees.map((n) => this.person(n)).filter((p): p is SamplePerson => Boolean(p)))] : [];
     const assignees = named.length ? named.map((p) => p.id) : "anyone";
     const summary = `${title}, due ${whenLabel(due)}`;
     const forOthers = assignees === "anyone" || assignees.some((id) => id !== actor.person?.id);
     if (!approved && this.waits(actor, "add_task", forOthers)) return this.hold(actor, "add_task", { title, due, assignees: named.map((p) => p.shortName) }, summary);
+    if (this.state.tasks.length >= LIMITS.tasks) throw new ToolError(`The task list here holds at most ${LIMITS.tasks} tasks, so nothing was added.`);
     this.state.tasks.push({ id: crypto.randomUUID(), title, due, assignees, status: "open", doneBy: null });
     return { status: "done", summary };
   }
@@ -443,10 +484,14 @@ export class SampleHousehold implements Household {
     const by = this.person(args.by);
     switch (tool) {
       case "complete_task": {
+        const values = args.values && typeof args.values === "object" && !Array.isArray(args.values) ? (args.values as Record<string, unknown>) : null;
+        if (values && (Object.keys(values).length > LIMITS.values || JSON.stringify(values).length > LIMITS.valuesChars)) {
+          throw new ToolError(`What a task asks for goes in values by key, like {"eggs": 9}: at most ${LIMITS.values} answers, in under ${LIMITS.valuesChars.toLocaleString("en-US")} characters.`);
+        }
         t.status = "done";
         // Credit goes to whoever's named, else the one person it's for, else whoever's speaking; a shared screen itself is nobody.
         t.doneBy = by?.id ?? (t.assignees !== "anyone" && t.assignees.length === 1 ? t.assignees[0]! : (actor.person?.id ?? null));
-        if (args.values && typeof args.values === "object" && !Array.isArray(args.values)) t.captured = args.values as Record<string, unknown>;
+        if (values) t.captured = values;
         this.note(t.doneBy, `${t.title}: done${t.doneBy ? ` by ${this.shortNameOf(t.doneBy)}` : ""}`);
         return { status: "done", summary: `${t.title}: done${t.doneBy ? ` by ${this.shortNameOf(t.doneBy)}` : ""}` };
       }
@@ -470,20 +515,24 @@ export class SampleHousehold implements Household {
   }
 
   private addListItem(actor: SampleActor, args: Args): CorralChange {
-    const text = String(args.text ?? "").trim().slice(0, 300);
+    const text = this.short(args.text, "item");
     if (!text) throw new ToolError("Say what to add.");
     const list = typeof args.list === "string" && args.list ? this.list(args.list) : this.state.lists[0]!;
-    const quantity = typeof args.quantity === "string" && args.quantity.trim() ? args.quantity.trim().slice(0, 40) : null;
+    const quantity = typeof args.quantity === "string" && args.quantity.trim() ? args.quantity.trim() : null;
+    if (quantity && quantity.length > LIMITS.quantity) throw new ToolError(`Say how much in ${LIMITS.quantity} characters or fewer, like "2 gallons".`);
     const there = list.items.find((it) => !it.done && it.text.toLowerCase() === text.toLowerCase());
     if (there) {
       if (quantity) there.quantity = quantity;
       return { status: "done", summary: `${there.text} is already on ${list.name}` };
     }
+    if (list.items.filter((it) => !it.done).length >= LIMITS.listItems) throw new ToolError(`${list.name} already has ${LIMITS.listItems} things on it. Check some off before adding more.`);
     const item = text.charAt(0).toUpperCase() + text.slice(1);
     // Waiting, it's on the list for everyone to see, marked as waiting for a parent.
     const waits = this.waits(actor, "add_list_item", true);
+    // The request first: when too many already wait, nothing goes on the list.
+    const held = waits ? this.hold(actor, "add_list_item", { list: list.name, text: item }, `${item} on ${list.name}`) : null;
     list.items.push({ text: item, quantity, done: false, approved: !waits });
-    if (waits) return this.hold(actor, "add_list_item", { list: list.name, text: item }, `${item} on ${list.name}`);
+    if (held) return held;
     return { status: "done", summary: `Added ${text} to ${list.name}` };
   }
 
@@ -494,6 +543,12 @@ export class SampleHousehold implements Household {
     const found = open.find(({ it }) => it.text.toLowerCase() === text) ?? open.find(({ it }) => it.text.toLowerCase().includes(text) && text.length > 0);
     if (!found) throw new ToolError(`"${args.text}" isn't on ${lists.length === 1 ? lists[0]!.name : "any list"}.`);
     found.it.done = true;
+    // A checked-off item is never shown again, so only the latest few are kept.
+    const checked = found.l.items.filter((it) => it.done);
+    if (checked.length > LIMITS.checkedOff) {
+      const old = new Set(checked.slice(0, checked.length - LIMITS.checkedOff));
+      found.l.items = found.l.items.filter((it) => !old.has(it));
+    }
     return { status: "done", summary: `Checked off ${found.it.text} on ${found.l.name}` };
   }
 
@@ -507,7 +562,7 @@ export class SampleHousehold implements Household {
     const s = this.supplyNamed(args.supply);
     if (!s) throw new ToolError(`There's no supply called "${args.supply}" here. Look it up with the supplies tool.`);
     const amount = Number(args.amount);
-    if (!Number.isFinite(amount) || amount < 0) throw new ToolError("Give an amount of 0 or more.");
+    if (!Number.isFinite(amount) || amount < 0 || amount > LIMITS.amount) throw new ToolError(`Give an amount from 0 to ${LIMITS.amount.toLocaleString("en-US")}.`);
     if (args.change === "used") s.quantity = Math.max(0, s.quantity - amount);
     else if (args.change === "added") s.quantity += amount;
     else if (args.change === "count") s.quantity = amount;
@@ -527,6 +582,9 @@ export class SampleHousehold implements Household {
   private async placeOrder(actor: SampleActor, args: Args): Promise<CorralChange> {
     const raw = Array.isArray(args.items) ? args.items : [];
     if (!raw.length || raw.length > MAX_ORDER_ITEMS) throw new ToolError(`Say what to order: one to ${MAX_ORDER_ITEMS} of the supplies from the supplies tool.`);
+    if (this.state.orders.filter((o) => this.orderStatus(o) !== "delivered").length >= LIMITS.openOrders) {
+      throw new ToolError(`${LIMITS.openOrders} orders are already on their way or waiting for a yes, so nothing was ordered.`);
+    }
     const items = raw.map((it) => {
       const item = (it && typeof it === "object" ? it : { supply: it }) as Args;
       const s = this.supplyNamed(item.supply);
@@ -558,14 +616,24 @@ export class SampleHousehold implements Household {
       const note = overLimit && actor.role.orders ? `${over}, so ${either(others.map((p) => p.shortName))} decides.` : undefined;
       const held = this.hold(actor, "place_order", { order: order.id }, `Order ${what}, ${dollars(q.totalCents)}`, note);
       order.request = held.requestId;
-      this.state.orders.push(order);
+      this.keepOrder(order);
       return held;
     }
     await this.send(order);
-    this.state.orders.push(order);
+    this.keepOrder(order);
     const arrives = whenLabel(order.deliveryDate!);
     this.note(actor.person?.id ?? null, `Ordered ${what}, ${dollars(order.totalCents)}, arriving ${arrives}`);
     return { status: "done", summary: `Ordered ${what}: ${dollars(order.totalCents)}, arriving ${arrives}`, order: order.id, total: dollars(order.totalCents), arrives };
+  }
+
+  /** Keeps a new order, and only the latest delivered ones from before. */
+  private keepOrder(order: SampleOrder): void {
+    const delivered = this.state.orders.filter((o) => this.orderStatus(o) === "delivered");
+    if (delivered.length > LIMITS.delivered) {
+      const old = new Set(delivered.slice(0, delivered.length - LIMITS.delivered));
+      this.state.orders = this.state.orders.filter((o) => !old.has(o));
+    }
+    this.state.orders.push(order);
   }
 
   /** Places an order with its store, and keeps what the store answered. If the store won't take it, nothing changes. */
@@ -636,6 +704,12 @@ export class SampleHousehold implements Household {
     }
     r.status = args.decision === "approve" ? "approved" : "declined";
     r.decidedBy = me.id;
+    // Only the latest decided requests are kept, to say who decided one that's asked about again: this one, and the latest asked of the rest.
+    const decided = this.state.requests.filter((x) => x.status !== "pending" && x !== r);
+    if (decided.length >= LIMITS.decided) {
+      const old = new Set(decided.slice(0, decided.length - LIMITS.decided + 1));
+      this.state.requests = this.state.requests.filter((x) => !old.has(x));
+    }
     const asker = r.from ? `${this.shortNameOf(r.from)}'s` : `${this.state.actingAs}'s`;
     const summary = `${args.decision === "approve" ? "Approved" : "Declined"} ${asker} request: ${r.summary}`;
     this.note(me.id, `${me.shortName} ${args.decision === "approve" ? "approved" : "declined"} ${asker} request: ${r.summary}${placed?.deliveryDate ? `, arriving ${whenLabel(placed.deliveryDate)}` : ""}`);
@@ -777,8 +851,15 @@ export class SampleHousehold implements Household {
   }
 
   private titled(v: unknown, fallback: string): string {
-    const s = String(v ?? "").trim().slice(0, 300);
+    const s = this.short(v, "title");
     return s ? s.charAt(0).toUpperCase() + s.slice(1) : fallback;
+  }
+
+  /** Text someone gave, trimmed, and refused in words when it's longer than the household keeps. */
+  private short(v: unknown, what: "title" | "place" | "item"): string {
+    const s = String(v ?? "").trim();
+    if (s.length > LIMITS.text) throw new ToolError(`That ${what} is too long: say it in ${LIMITS.text} characters or fewer.`);
+    return s;
   }
 
   /** The person named, or none when nobody was named; a name nobody here has is a mistake to say. */

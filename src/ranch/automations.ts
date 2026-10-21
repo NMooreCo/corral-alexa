@@ -70,6 +70,9 @@ interface Rule extends AutomationSpec {
 
 const READING_EVERY_MINUTES = 60;
 const TIME = /^([01]?\d|2[0-3]):([0-5]\d)$/;
+/** The longest name an automation takes, and how many a ranch keeps. */
+const MAX_NAME = 60;
+const MAX_AUTOMATIONS = 20;
 
 export class Automations {
   #rules: Rule[];
@@ -111,6 +114,8 @@ export class Automations {
   async add(input: { name?: unknown; when?: unknown; then?: unknown }): Promise<AutomationView> {
     const name = typeof input.name === "string" ? input.name.trim() : "";
     if (!name) throw new ToolError("Give the automation a short name, like \"Freeze protection\".");
+    if (name.length > MAX_NAME) throw new ToolError(`Give the automation a shorter name, ${MAX_NAME} characters at most, like "Freeze protection".`);
+    if (this.#rules.length >= MAX_AUTOMATIONS) throw new ToolError(`The ranch already has ${MAX_AUTOMATIONS} automations, as many as it keeps, so this one wasn't added. Turn one that's there on or off instead.`);
     if (this.#rules.some((r) => r.name.toLowerCase() === name.toLowerCase())) throw new ToolError(`There's already an automation called "${name}". Turn it on or off instead, or pick another name.`);
     const when = await this.#trigger(input.when);
     const then = await this.#steps(input.then);
