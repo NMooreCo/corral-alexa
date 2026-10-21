@@ -388,7 +388,7 @@ describe("the sample household's Durable Object", () => {
     const next = (await tool(env, "alerts", { since: first.cursor })) as { alerts: { kind: string; text: string }[]; cursor: string };
     expect(next.alerts).toHaveLength(1);
     expect(next.alerts[0]).toMatchObject({ kind: "animal" });
-    expect(next.alerts[0]!.text).toMatch(/^Hunter just left the fence, about \d+ ft out to the north-east, near the Woods$/);
+    expect(next.alerts[0]!.text).toMatch(/^Hunter just left the fence, about \d+ ft out to the northeast, near the Woods$/);
     expect(((await tool(env, "alerts", { since: next.cursor })) as { alerts: unknown[] }).alerts).toEqual([]);
     // A cursor that isn't one is said plainly.
     const bad = await call(env, "/mcp", {

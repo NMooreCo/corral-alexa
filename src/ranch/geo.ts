@@ -79,7 +79,7 @@ export function labelPoint(polygon: Point[]): Point {
   return { x: polygon.reduce((s, p) => s + p.x, 0) / n, y: polygon.reduce((s, p) => s + p.y, 0) / n };
 }
 
-const COMPASS = ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"];
+const COMPASS = ["north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest"];
 
 /** Which way `to` lies from `from`, in eight compass words. */
 export function direction(from: Point, to: Point): string {

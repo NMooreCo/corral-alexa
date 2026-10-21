@@ -157,7 +157,7 @@ describe("the ranch's automations", () => {
     await ranch.tick();
     await ranch.tick();
     const left = ranch.history(at("00:00")).filter((h) => h.kind === "animal");
-    expect(left.map((h) => h.text)).toEqual([expect.stringMatching(/^Hunter just left the fence, about \d+ ft out to the north-east, near the Woods$/)]);
+    expect(left.map((h) => h.text)).toEqual([expect.stringMatching(/^Hunter just left the fence, about \d+ ft out to the northeast, near the Woods$/)]);
   });
 
   it("keeps an automation's run as something to say out loud, and its switch as just history", async () => {

@@ -24,7 +24,7 @@ export interface AnimalReport {
   stale: boolean;
   insideFence: boolean;
   zone: string | null;
-  /** Outside the fence: "about 260 ft north-east of the fence, nearest the North pasture". */
+  /** Outside the fence: "about 260 ft northeast of the fence, nearest the North pasture". */
   outside?: { distance: string; meters: number; direction: string; nearestZone: string | null; words: string };
   position: LatLon;
 }

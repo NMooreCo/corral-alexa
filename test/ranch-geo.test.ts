@@ -4,7 +4,7 @@ import { area, direction, distanceToEdge, inside, localPlane, mapFrame, pathOf, 
 import type { PropertyMap } from "../src/ranch/types.ts";
 import { sampleRanchConfig } from "../src/sample/ranch.ts";
 
-// An L: a 100 by 100 square with its north-east quarter cut out.
+// An L: a 100 by 100 square with its northeast quarter cut out.
 const L: Point[] = [
   { x: 0, y: 0 },
   { x: 100, y: 0 },
@@ -88,7 +88,7 @@ describe("fence geometry", () => {
   it("works out areas and compass directions", () => {
     expect(area(L)).toBe(7500);
     expect(direction({ x: 0, y: 0 }, { x: 0, y: 10 })).toBe("north");
-    expect(direction({ x: 0, y: 0 }, { x: 10, y: 10 })).toBe("north-east");
+    expect(direction({ x: 0, y: 0 }, { x: 10, y: 10 })).toBe("northeast");
     expect(direction({ x: 0, y: 0 }, { x: -10, y: -1 })).toBe("west");
     expect(direction({ x: 0, y: 0 }, { x: 1, y: -10 })).toBe("south");
   });
@@ -137,9 +137,9 @@ describe("placing points on a property", () => {
     expect(north).toMatchObject({ insideFence: false, zone: null, outside: { direction: "north", nearestZone: "North pasture" } });
     expect(north.outside!.meters).toBeGreaterThanOrEqual(49);
     expect(north.outside!.meters).toBeLessThanOrEqual(51);
-    // Across the road, south-west of the property's middle, and never "near" the road itself.
+    // Across the road, southwest of the property's middle, and never "near" the road itself.
     const west = plane.place(at(-200, -60));
-    expect(west).toMatchObject({ insideFence: false, outside: { direction: "south-west", nearestZone: "South pasture" } });
+    expect(west).toMatchObject({ insideFence: false, outside: { direction: "southwest", nearestZone: "South pasture" } });
     expect(west.outside!.meters).toBeGreaterThanOrEqual(76);
     expect(west.outside!.meters).toBeLessThanOrEqual(80);
   });

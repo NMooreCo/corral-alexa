@@ -25,10 +25,10 @@ describe("the trackers tool", () => {
     const r = await ranch(NIGHT).animals();
     expect(r.outsideFence).toEqual(["Hunter", "Pepper"]);
     const hunter = r.animals.find((a) => a.animal === "Hunter")!;
-    expect(hunter).toMatchObject({ insideFence: false, zone: null, outside: { direction: "north-east", nearestZone: "Woods" } });
-    expect(hunter.outside!.words).toMatch(/^about \d+ ft outside the fence to the north-east, nearest the Woods$/);
+    expect(hunter).toMatchObject({ insideFence: false, zone: null, outside: { direction: "northeast", nearestZone: "Woods" } });
+    expect(hunter.outside!.words).toMatch(/^about \d+ ft outside the fence to the northeast, nearest the Woods$/);
     const pepper = r.animals.find((a) => a.animal === "Pepper")!;
-    expect(pepper).toMatchObject({ signal: "weak", outside: { direction: "south-west", nearestZone: "South pasture" } });
+    expect(pepper).toMatchObject({ signal: "weak", outside: { direction: "southwest", nearestZone: "South pasture" } });
   });
 
   it("flags a low collar battery, and says when each collar last reported", async () => {
