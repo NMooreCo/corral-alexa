@@ -550,4 +550,17 @@ describe("the Wrangler config", () => {
     expect(production.exports).toEqual({});
     expect(production.migrations).toEqual([]);
   }, 30_000);
+
+  it("holds each visitor to a limit on the model, the voice and the household's own changes, locally and in the demo", async () => {
+    process.env.WRANGLER_LOG = "error";
+    const { unstable_readConfig } = await import("wrangler");
+    const config = (env?: string) => unstable_readConfig({ config: fileURLToPath(new URL("../wrangler.jsonc", import.meta.url)), env });
+    for (const env of [undefined, "demo"]) {
+      const limits = Object.fromEntries(config(env).ratelimits.map((r) => [r.name, r.simple]));
+      expect(limits).toEqual({ MODEL_LIMIT: { limit: 20, period: 60 }, VOICE_LIMIT: { limit: 30, period: 60 }, HOUSEHOLD_LIMIT: { limit: 10, period: 60 } });
+    }
+    // Each environment counts on its own.
+    expect(new Set([...config().ratelimits, ...config("demo").ratelimits].map((r) => r.namespace_id)).size).toBe(6);
+    expect(config("production").ratelimits).toEqual([]);
+  }, 30_000);
 });
