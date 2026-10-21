@@ -270,6 +270,7 @@ That builds the screens and starts the Worker at `http://127.0.0.1:8795` with th
 - `/preview` shows any screen in Echo Show 5, 8 and 15 and phone frames, light or dark.
 - `pnpm smoke [url]` talks to a running server the way Alexa+ does and prints timings.
 - `pnpm health [base]` checks the live demo the way a judge meets it (the page, MCP in a household of its own, one real model turn and one Polly line, with `DEMO_PASSCODE` set) and fails if any part is down or a model turn takes over 12 seconds. The **Demo health** workflow runs it twice a day.
+- `pnpm simulate` opens the bridge in the open Alexa+ simulator: an Echo Show 5 to 21 or an Echo Dot, every request timed against Alexa+'s 500 ms budget, and the screens run under the policy they declare. `pnpm simulate check [url]` runs its readiness check against Alexa+'s published requirements, like `pnpm simulate check https://alexa.corral.narralogy.ai/mcp` for the live bridge's account linking. Until the simulator is published, it runs from its checkout beside this one.
 
 ## Deploy
 

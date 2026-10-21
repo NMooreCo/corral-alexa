@@ -17,6 +17,7 @@
     "check": "pnpm build:widgets && tsc -p tsconfig.json && tsc -p tsconfig.screens.json && vitest run",
     "smoke": "node scripts/smoke.mjs",
     "health": "node scripts/demo-health.mjs",
+    "simulate": "node scripts/simulate.mjs",
     "alexa:client": "node scripts/alexa-client.mjs",
     "ship:demo": "pnpm build:widgets && wrangler deploy --env demo"
   },
