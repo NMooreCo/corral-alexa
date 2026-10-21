@@ -5,7 +5,7 @@ name: Demo health
 # Needs the repository secret DEMO_PASSCODE.
 on:
   schedule:
-    # 8 AM and 8 PM Mountain Time (UTC-7 through November 1, UTC-6 after).
+    # 8 AM and 8 PM Mountain Time while it's UTC-6, through November 1; 7 AM and 7 PM after, at UTC-7.
     - cron: "0 14 * * *"
     - cron: "0 2 * * *"
   workflow_dispatch:
