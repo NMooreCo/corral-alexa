@@ -35,6 +35,25 @@ describe("the simulated Echo Show", () => {
     expect(await res.text()).toContain("simulated Echo Show");
   });
 
+  it("is where a browser opening the demo's address goes, while anything else asking there still gets JSON", async () => {
+    const browser = { headers: { accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" } };
+    const page = await call({ BACKEND: "sample" }, "/", browser);
+    expect(page.status).toBe(302);
+    expect(page.headers.get("location")).toBe("https://bridge.example/echo");
+    expect(page.headers.get("vary")).toBe("accept");
+    expect((await call({ BACKEND: "sample" }, "/?household=take-2", browser)).headers.get("location")).toBe("https://bridge.example/echo?household=take-2");
+    for (const accept of [undefined, "*/*", "application/json", "application/json, text/event-stream"]) {
+      const res = await call({ BACKEND: "sample" }, "/", accept ? { headers: { accept } } : undefined);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("vary")).toBe("accept");
+      expect(await res.json()).toMatchObject({ name: "corral", mcp: "https://bridge.example/mcp", backend: "sample" });
+    }
+    // A bridge linked to a real Corral has no simulator, so its address answers in JSON whoever asks.
+    const linked = await call({ BACKEND: "corral", CORRAL_URL: "https://corral.example", OAUTH_KV: {} as KVNamespace }, "/", browser);
+    expect(linked.status).toBe(200);
+    expect(await linked.json()).toMatchObject({ backend: "corral" });
+  });
+
   it("isn't there in corral mode, where calls need account linking", async () => {
     const res = await call({ BACKEND: "corral", CORRAL_URL: "https://corral.example", OAUTH_KV: {} as KVNamespace }, "/echo");
     expect(res.status).toBe(404);
