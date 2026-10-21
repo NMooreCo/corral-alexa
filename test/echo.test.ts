@@ -215,7 +215,7 @@ describe("the simulated Echo Show", () => {
     expect(await res.json()).toMatchObject({ error: { code: "voice_error" } });
     const page = async (env: Env) => (await call({ BACKEND: "sample", ...env }, "/echo")).text();
     expect(await page({ AWS_ACCESS_KEY_ID: "AKIDEXAMPLE", AWS_SECRET_ACCESS_KEY: "secret" })).toContain('data-voice="polly"');
-    expect(await page({ AWS_ACCESS_KEY_ID: "AKIDEXAMPLE", AWS_SECRET_ACCESS_KEY: "secret" })).toContain("and Amazon Polly says the answers.");
+    expect(await page({ AWS_ACCESS_KEY_ID: "AKIDEXAMPLE", AWS_SECRET_ACCESS_KEY: "secret" })).toContain('data-voiced=", and Amazon Polly says the answers"');
     expect(await page({})).toContain('data-voice="browser"');
     expect(await page({})).not.toContain("{{voice");
   });
@@ -245,9 +245,9 @@ describe("the simulated Echo Show", () => {
 
   it("uses whichever provider has a key, Bedrock first, and names it on the page", async () => {
     const page = async (env: Env) => (await call({ BACKEND: "sample", ...env }, "/echo")).text();
-    expect(await page({ BEDROCK_API_KEY: "b", ANTHROPIC_API_KEY: "a" })).toContain("Claude on Amazon Bedrock decides what to do");
-    expect(await page({ ANTHROPIC_API_KEY: "a" })).toContain("Claude through the Claude API decides what to do");
-    expect(await page({ BEDROCK_API_KEY: "b", BEDROCK_MODEL: "openai.gpt-5.6-terra" })).toContain("GPT-5.6 Terra on Amazon Bedrock decides what to do");
+    expect(await page({ BEDROCK_API_KEY: "b", ANTHROPIC_API_KEY: "a" })).toContain('data-model="Claude on Amazon Bedrock"');
+    expect(await page({ ANTHROPIC_API_KEY: "a" })).toContain('data-model="Claude through the Claude API"');
+    expect(await page({ BEDROCK_API_KEY: "b", BEDROCK_MODEL: "openai.gpt-5.6-terra" })).toContain('data-model="GPT-5.6 Terra on Amazon Bedrock"');
     expect(await page({ MODEL_PROVIDER: "anthropic", BEDROCK_API_KEY: "b" })).toContain("not set up on this server");
     expect(await page({ MODEL_MOCK: "true" })).toContain("a practice model standing in for Claude");
     expect(await page({})).not.toContain("{{model}}");

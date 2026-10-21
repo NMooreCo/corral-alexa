@@ -42,6 +42,9 @@ importers:
       '@types/node':
         specifier: '22'
         version: 22.20.5
+      alexa-plus-simulator:
+        specifier: link:..\alexa-plus-simulator
+        version: link:../alexa-plus-simulator
       fast-check:
         specifier: 4.10.2
         version: 4.10.2

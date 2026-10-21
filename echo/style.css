@@ -1,3 +1,4 @@
+/* Corral's look and its extension's pieces, on top of the open simulator's own stylesheet. Always dark, as the demo has been. */
 :root {
   --bg: #0d1110;
   --panel: #151b19;
@@ -5,466 +6,45 @@
   --ink: #eef2ee;
   --muted: #9aa6a0;
   --line: #2a3430;
-  --accent: #8cc4a3;
-  --alexa: #2fd4ff;
+  --accent: #2fd4ff;
+  --good: #8cc4a3;
+  --warn: #f2b65a;
   --bad: #f2a65a;
+  --code: #111715;
   color-scheme: dark;
 }
 
-* {
-  box-sizing: border-box;
-}
-
-[hidden] {
-  display: none !important;
-}
-
-html,
-body {
-  margin: 0;
-  min-height: 100%;
-  background: var(--bg);
-  color: var(--ink);
-  font:
-    15px/1.45 system-ui,
-    -apple-system,
-    "Segoe UI",
-    Roboto,
-    sans-serif;
-}
-
-.layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 400px;
-  gap: 24px;
-  padding: 24px;
-  min-height: 100vh;
-}
-
-@media (max-width: 1100px) {
-  .layout {
-    grid-template-columns: 1fr;
-    padding: 16px;
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #0d1110;
+    --panel: #151b19;
+    --panel-2: #1c2421;
+    --ink: #eef2ee;
+    --muted: #9aa6a0;
+    --line: #2a3430;
+    --accent: #2fd4ff;
+    --good: #8cc4a3;
+    --warn: #f2b65a;
+    --bad: #f2a65a;
+    --code: #111715;
+    color-scheme: dark;
   }
 }
 
-/* ---------- The device ---------- */
-
-.stage {
-  min-width: 0;
-}
-
-.device {
-  position: relative;
-  width: 100%;
-  overflow: hidden;
-  border-radius: 22px;
-  background: #050606;
-  box-shadow:
-    0 0 0 14px #1d1f1f,
-    0 0 0 15px #2c2f2f,
-    0 30px 80px rgb(0 0 0 / 0.55);
-}
-
-.screen {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 1280px;
-  height: 800px;
-  transform-origin: top left;
-  overflow: hidden;
-  background: #0b0f0d;
-}
-
-.idle {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-content: center;
-  text-align: center;
-  gap: 12px;
-  background: radial-gradient(ellipse at 30% 20%, #1b2a24, #0b0f0d 70%);
-}
-
-.idle-clock {
-  font-size: 140px;
-  font-weight: 300;
-  letter-spacing: -2px;
-}
-
-.idle-hint {
-  font-size: 30px;
-  color: var(--muted);
-}
-
-.app-host,
-.app-host iframe {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  border: 0;
-}
-
-.caption {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 80px 56px 44px;
-  background: linear-gradient(transparent, rgb(5 8 7 / 0.92) 45%);
-  pointer-events: none;
-}
-
-.caption p {
-  margin: 0;
-}
-
-.heard {
-  font-size: 26px;
-  color: #b9c4be;
-}
-
-.said {
-  margin-top: 8px !important;
-  font-size: 40px;
-  font-weight: 600;
-  line-height: 1.25;
-  color: #fff;
-}
-
-/* The light bar along the bottom edge: cyan while listening, moving while thinking, glowing while speaking. */
-.lightbar {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 10px;
-  opacity: 0;
-  transition: opacity 0.25s;
-  background: var(--alexa);
-}
-
-.lightbar[data-state="listening"] {
-  opacity: 1;
-  animation: pulse 1.2s ease-in-out infinite;
-}
-
-.lightbar[data-state="thinking"] {
-  opacity: 1;
-  background: linear-gradient(90deg, #0a3b4a, var(--alexa), #0a3b4a);
-  background-size: 50% 100%;
-  animation: sweep 1s linear infinite;
-}
-
-.lightbar[data-state="speaking"] {
-  opacity: 1;
-  box-shadow: 0 0 24px var(--alexa);
-  animation: pulse 0.7s ease-in-out infinite;
-}
-
-/* Speaking up on its own, the way an Echo's light shows a notification. */
-.lightbar[data-state="notify"] {
-  opacity: 1;
-  background: #f2b65a;
-  box-shadow: 0 0 24px #f2b65a;
-  animation: pulse 0.9s ease-in-out infinite;
-}
-
-/* What the device says on its own, over whatever's on the screen. */
-.alert {
-  position: absolute;
-  top: 74px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  width: min(84%, 980px);
-  padding: 18px 26px;
-  border: 3px solid #f2b65a;
-  border-radius: 22px;
-  background: rgb(20 14 4 / 0.94);
-  color: #fff;
-  box-shadow: 0 18px 50px rgb(0 0 0 / 0.55);
-}
-
-.alert[hidden] {
-  display: none;
-}
-
-.alert p {
-  margin: 0;
-}
-
-.alert-icon {
-  flex: none;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: #f2b65a;
-  box-shadow: 0 0 0 6px rgb(242 182 90 / 0.25);
-}
-
-.alert-kicker {
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 3px;
-  text-transform: uppercase;
-  color: #f2b65a;
-}
-
-.alert-text {
-  font-size: 28px;
-  font-weight: 600;
-  line-height: 1.25;
-}
-
-@keyframes pulse {
-  50% {
-    filter: brightness(0.55);
-  }
-}
-
-@keyframes sweep {
-  to {
-    background-position: 200% 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .lightbar {
-    animation: none !important;
-  }
-}
-
-.device-note {
-  margin: 28px 4px 0;
-  color: var(--muted);
-}
-
-/* ---------- An Echo Dot (?show=dot): no screen, only the light ring, with what was heard and said beside it ---------- */
-
-.dot .device {
-  width: min(380px, 70%);
-  height: auto !important;
-  aspect-ratio: 1;
-  margin: 40px auto 0;
-  border-radius: 50%;
-  background: radial-gradient(circle at 50% 38%, #3a3f3f, #1a1d1d 62%, #0f1111);
-  box-shadow:
-    0 0 0 10px #151717,
-    0 34px 80px rgb(0 0 0 / 0.6);
-}
-
-.dot .screen {
-  display: none;
-}
-
-/* Its four buttons: volume down and up, the action button and the microphone. */
-.dot .device::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(circle at 50% 24%, #4d5353 0 4.2%, transparent 4.6%),
-    radial-gradient(circle at 50% 76%, #4d5353 0 4.2%, transparent 4.6%),
-    radial-gradient(circle at 24% 50%, #4d5353 0 4.2%, transparent 4.6%),
-    radial-gradient(circle at 76% 50%, #4d5353 0 4.2%, transparent 4.6%);
-}
-
-/* The ring: the light bar, as the edge of the Dot. */
-.dot .lightbar,
-.dot .lightbar[data-state] {
-  inset: 0;
-  height: auto;
-  border-radius: 50%;
-  background: none;
-  border: 16px solid var(--alexa);
-}
-
-.dot .lightbar[data-state="thinking"] {
-  border-color: var(--alexa) #0a3b4a #0a3b4a #0a3b4a;
-  animation: spin 0.9s linear infinite;
-}
-
-.dot .lightbar[data-state="speaking"] {
-  box-shadow: 0 0 36px var(--alexa);
-}
-
-.dot .lightbar[data-state="notify"] {
-  border-color: #f2b65a;
-  box-shadow: 0 0 36px #f2b65a;
-}
-
-.dot .caption {
-  position: static;
-  max-width: 760px;
-  margin: 28px auto 0;
-  padding: 0 4px;
-  background: none;
-  text-align: center;
-}
-
-.dot .heard {
-  font-size: 20px;
-}
-
-.dot .said {
-  font-size: 28px;
-}
-
-.dot .device-note {
-  text-align: center;
+.chip-label {
+  color: var(--accent);
 }
 
 /* The tour taps the Echo Show's screen. */
-.dot #tour {
+.dot .tour {
   display: none;
 }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
+/* ---------- The demo passcode: a card over the device, so it's in view at any size ---------- */
 
-/* ---------- The panel ---------- */
-
-.panel {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-width: 0;
-}
-
-h1 {
-  margin: 0 0 4px;
-  font-size: 1.35rem;
-}
-
-.lede {
-  margin: 0;
-  color: var(--muted);
-}
-
-.talk {
-  display: grid;
-  gap: 10px;
-  padding: 14px;
-  border-radius: 14px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-}
-
-.mic {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  min-height: 52px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--alexa);
-  color: #00222c;
-  font: inherit;
-  font-weight: 700;
-  font-size: 1.05rem;
-  cursor: pointer;
-}
-
-.mic svg {
-  width: 22px;
-  height: 22px;
-  fill: currentColor;
-}
-
-.mic[aria-pressed="true"] {
-  box-shadow: 0 0 0 4px rgb(47 212 255 / 0.35);
-}
-
-.mic:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.ask {
-  display: flex;
-  gap: 8px;
-}
-
-.ask input,
-.passcode input,
-select {
-  flex: 1;
-  min-width: 0;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: var(--panel-2);
-  color: var(--ink);
-  font: inherit;
-}
-
-button {
-  font: inherit;
-}
-
-.ask button,
-.passcode button,
-footer button {
-  padding: 10px 14px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: var(--panel-2);
-  color: var(--ink);
-  cursor: pointer;
-}
-
-.toggle {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  color: var(--muted);
-}
-
-.note {
-  margin: 0;
-  color: var(--bad);
-}
-
-.note:empty {
-  display: none;
-}
-
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.chips button {
-  text-align: left;
-  padding: 7px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--ink);
-  cursor: pointer;
-}
-
-.chips button:hover,
-.chips button:focus-visible {
-  border-color: var(--accent);
-}
-
-/* Over the device's screen, so it's in view at any size. */
 .passcode {
   position: absolute;
   inset: 0;
-  z-index: 5;
   display: grid;
   place-items: center;
   padding: 12px;
@@ -478,7 +58,7 @@ footer button {
   padding: 14px;
   border-radius: 14px;
   background: var(--panel);
-  border: 1px solid var(--alexa);
+  border: 1px solid var(--accent);
   color: var(--ink);
 }
 
@@ -491,6 +71,15 @@ footer button {
   gap: 8px;
 }
 
+.passcode-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
 .passcode-note {
   margin: 0;
   color: var(--muted);
@@ -498,99 +87,6 @@ footer button {
 
 .passcode-note:empty {
   display: none;
-}
-
-details {
-  border-radius: 14px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  padding: 10px 12px;
-}
-
-summary {
-  cursor: pointer;
-  font-weight: 700;
-}
-
-.hint {
-  font-weight: 400;
-  color: var(--muted);
-  font-size: 0.85rem;
-  margin-left: 6px;
-}
-
-.log {
-  list-style: none;
-  margin: 10px 0 0;
-  padding: 0;
-  display: grid;
-  gap: 6px;
-  max-height: 260px;
-  overflow: auto;
-  font:
-    12.5px/1.4 ui-monospace,
-    SFMono-Regular,
-    Consolas,
-    monospace;
-}
-
-.log li {
-  display: grid;
-  grid-template-columns: auto auto 1fr;
-  gap: 2px 8px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  background: var(--panel-2);
-}
-
-.log li.bad {
-  outline: 1px solid var(--bad);
-}
-
-.log .when {
-  color: var(--muted);
-}
-
-.log .who {
-  font-weight: 700;
-}
-
-.who[data-who="assistant"],
-.who[data-who="claude"],
-.who[data-who="gpt"],
-.who[data-who="model"] {
-  color: var(--alexa);
-}
-
-.who[data-who="screen"] {
-  color: var(--accent);
-}
-
-.who[data-who="page"] {
-  color: var(--muted);
-}
-
-.log .what {
-  overflow-wrap: anywhere;
-}
-
-.log .meta {
-  grid-column: 1 / -1;
-  color: var(--muted);
-}
-
-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  color: var(--muted);
-}
-
-footer label {
-  display: flex;
-  gap: 8px;
-  align-items: center;
 }
 
 /* ---------- Who's speaking ---------- */
@@ -618,7 +114,7 @@ footer label {
 .speakers {
   margin: 0;
   padding: 12px 14px 14px;
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--panel);
   border: 1px solid var(--line);
   min-width: 0;
@@ -671,7 +167,7 @@ footer label {
 }
 
 .speaker:has(input:focus-visible) {
-  outline: 2px solid var(--alexa);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -707,7 +203,6 @@ footer label {
   top: 16px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 2;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -717,7 +212,7 @@ footer label {
   color: #fff;
   font-size: 22px;
   font-weight: 600;
-  pointer-events: none;
+  pointer-events: none !important;
   opacity: 0.8;
   transition:
     opacity 0.3s,
@@ -752,141 +247,97 @@ footer label {
   }
 }
 
-.chip-as {
-  display: inline-block;
-  margin-right: 2px;
-  padding: 0 7px;
-  border-radius: 999px;
-  background: var(--panel-2);
-  color: var(--alexa);
-  font-size: 0.8rem;
-  font-weight: 700;
+/* ---------- What the device says on its own, over whatever's on the screen ---------- */
+
+.alert {
+  position: absolute;
+  top: 74px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  width: min(84%, 980px);
+  padding: 18px 26px;
+  border: 3px solid #f2b65a;
+  border-radius: 22px;
+  background: rgb(20 14 4 / 0.94);
+  color: #fff;
+  box-shadow: 0 18px 50px rgb(0 0 0 / 0.55);
 }
 
-footer a {
-  color: var(--accent);
+.alert p {
+  margin: 0;
+}
+
+.alert-icon {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #f2b65a;
+  box-shadow: 0 0 0 6px rgb(242 182 90 / 0.25);
+}
+
+.alert-kicker {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #f2b65a;
+}
+
+.alert-text {
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.25;
 }
 
 /* ---------- One of two devices (/echo?devices=2) ---------- */
 
-.device-label {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin: 0 0 12px;
-  color: var(--muted);
-}
-
-.device-label strong {
-  color: var(--ink);
-  font-size: 1.05rem;
-}
-
-.embedded .layout {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  height: 100vh;
-  min-height: 0;
-  overflow: hidden;
-  padding: 0 0 12px;
-}
-
-.embedded .stage {
-  flex: none;
-  padding: 12px 15px 15px;
-}
-
-.embedded .device {
-  margin: 0 auto;
-}
-
-.embedded .device-label {
-  margin-bottom: 18px;
-}
-
-.embedded .device-note,
-.embedded .panel > header,
-.embedded .toggle,
-.embedded footer,
-.embedded details:has(#model-log) {
+.compact .toggle {
   display: none;
 }
 
-.embedded .panel {
-  flex: 1;
-  min-height: 0;
-  gap: 8px;
-  padding: 0 15px;
-}
-
-.embedded .talk {
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-  padding: 8px;
-}
-
-.embedded .talk .note {
-  grid-column: 1 / -1;
-}
-
-.embedded .mic {
-  min-height: 42px;
-  padding: 0 16px;
-  font-size: 0.95rem;
-}
-
-.embedded .chips {
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.embedded .chips button {
-  flex: none;
-}
-
-/* The log takes what's left under the talk bar; fit() in main.ts sets its height. */
-.embedded .log {
-  max-height: 120px;
-}
-
-/* Stacked on a phone or a tablet: the screen and the talk bar only. In a tall column, the suggestions and the log too (main.ts sets roomy). */
-html:not(.roomy) .embedded .chips,
-html:not(.roomy) .embedded details {
-  display: none !important;
-}
-
-/* In the two-device view, who's speaking is a compact row of name chips, so each device's talk bar stays in view. */
-.embedded .speakers {
+/* Who's speaking is a compact row of name chips, so each device's talk bar stays in view. */
+.compact .speakers {
   padding: 6px 10px 8px;
 }
 
-.embedded .speakers .hint,
-.embedded .speaker-role {
+.compact .speakers .hint,
+.compact .speaker-role {
   display: none;
 }
 
-.embedded .speaker-list {
+.compact .speaker-list {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-.embedded .speaker {
+.compact .speaker {
   display: flex;
   gap: 6px;
   padding: 3px 10px 3px 3px;
   border-radius: 999px;
 }
 
-.embedded .speaker:last-child {
+.compact .speaker:last-child {
   grid-column: auto;
 }
 
-.embedded .speaker .avatar {
+.compact .speaker .avatar {
   width: 24px;
   height: 24px;
   font-size: 0.8rem;
+}
+
+.compact .chips {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.compact .chips button {
+  flex: none;
 }
