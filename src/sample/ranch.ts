@@ -9,18 +9,23 @@ import { fromCelsius, readingText, tempUnit } from "../ranch/words.ts";
 import { now as clockNow } from "../clock.ts";
 
 /**
- * Juniper Hollow's ranch, made up for the demo: a fenced property in the
- * grasslands, laid out like a real one (a road along its
- * west side, the barn and coop on the north fence line, the house in the
- * middle with a big pasture between it and the road, woods rising to the
- * east) but placed nowhere real, a heated greenhouse whose controller speaks the
- * same API as a real ESP32 valve controller, animal-care devices in the barn
- * and pastures, and nine dogs in GPS collars. Everything specific lives
- * here, as data; the ranch tools only read it.
+ * Juniper Hollow's ranch, made up for the demo: a fenced property laid out
+ * like a real one (a road along its west side, the barn and coop on the
+ * north fence line, the house in the middle with a big pasture between it
+ * and the road, woods rising to the east), a heated greenhouse whose
+ * controller speaks the same API as a real ESP32 valve controller,
+ * animal-care devices in the barn and pastures, and nine dogs in GPS
+ * collars. Everything specific lives here, as data; the ranch tools only
+ * read it.
  */
 
 // ---------- The place ----------
 
+/**
+ * The property's middle: public land in Wyoming's Thunder Basin National
+ * Grassland, with Forest Service land on every side for 2 km, so the map and
+ * the forecast are a real place's and no one's home.
+ */
 const ORIGIN: LatLon = { latitude: 43.44, longitude: -105.21 };
 const plane = localPlane(ORIGIN);
 /** A rectangle given in meters east and north of the property's middle. */
@@ -289,6 +294,7 @@ export function simulatedController(opts: { now: () => Temporal.Instant; timeZon
       remaining_s: valveOn ? Math.ceil(offAt.since(now).total("seconds")) : 0,
       uptime_s: Math.floor(now.since(boot).total("seconds")),
       rssi: -61,
+      // Station pressure, as it reads at the sample's 1,469 m.
       climate: { temp_c: Math.round(temp * 100) / 100, humidity: Math.round(humidity * 10) / 10, pressure_hpa: 852.5, age_s: 2, ok: true },
       soil: {
         age_s: 6,
