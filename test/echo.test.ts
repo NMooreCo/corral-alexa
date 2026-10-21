@@ -19,11 +19,11 @@ const MUDDLED = "Something went wrong with that one. Start a new conversation an
 
 /** What someone asked to start turn `i`. */
 const asked = (i: number) => ({ role: "user", content: [{ type: "text", text: "(Alexa recognized the voice: Nick Rivera, Parent.)" }, { type: "text", text: `Question ${i}` }] });
-/** `turns` turns of a conversation, each a question, a tool call, its 12 KB result and an answer. */
+/** `turns` turns of a conversation, each a question, a tool call (with Claude's thinking before it), its 12 KB result and an answer. */
 const conversation = (turns: number) =>
   Array.from({ length: turns }, (_, i) => [
     asked(i),
-    { role: "assistant", content: [{ type: "tool_use", id: `toolu_${i}`, name: "show_today", input: {} }] },
+    { role: "assistant", content: [{ type: "thinking", thinking: "", signature: `sig_${i}` }, { type: "tool_use", id: `toolu_${i}`, name: "show_today", input: {} }] },
     { role: "user", content: [{ type: "tool_result", tool_use_id: `toolu_${i}`, content: "x".repeat(12_000) }] },
     { role: "assistant", content: [{ type: "text", text: `Answer ${i}` }] },
   ]).flat();
@@ -173,8 +173,11 @@ describe("the simulated Echo Show", () => {
     const kept = sent[0]!.messages;
     expect(kept.length).toBeLessThanOrEqual(80);
     expect(JSON.stringify(kept).length).toBeLessThanOrEqual(300_000);
-    // The latest of it, from the start of a turn, as it was: turns go four at a time, so it starts at the 13th (turn 12).
-    expect(kept).toEqual(long.slice(48));
+    // The latest of it, from the start of a turn, as it was but for Claude's thinking, which was made with the whole
+    // conversation before it: turns go four at a time, so it starts at the 13th (turn 12).
+    const unthought = long.slice(48).map((m) => (Array.isArray(m.content) ? { ...m, content: m.content.filter((b) => b.type !== "thinking") } : m));
+    expect(kept).toEqual(unthought);
+    expect(JSON.stringify(kept)).not.toContain('"thinking"');
     expect(kept[0]).toEqual(asked(12));
     expect(res.headers.get("x-trimmed-messages")).toBe("48");
     // Every tool result still follows its call, and the model is told the start was left out.
@@ -195,8 +198,14 @@ describe("the simulated Echo Show", () => {
     const env: Env = { BACKEND: "sample", ANTHROPIC_API_KEY: "key" };
     for (const turns of [30, 31, 32]) expect((await call(env, "/echo/model", turn([...conversation(turns), { role: "user", content: "And tomorrow?" }]))).status).toBe(200);
     expect(firsts).toEqual([asked(12), asked(12), asked(16)]);
-    // A conversation that fits goes as it is.
+    // A conversation that fits goes as it is, Claude's thinking and all.
+    const sent: { messages: unknown[] }[] = [];
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      sent.push(await new Request(input, init).json());
+      return Response.json({ id: "msg_2", type: "message", role: "assistant", model: "m", content: [{ type: "text", text: "Hi." }], stop_reason: "end_turn", stop_sequence: null, usage: { input_tokens: 1, output_tokens: 1 } });
+    });
     expect((await call(env, "/echo/model", turn(conversation(3)))).headers.get("x-trimmed-messages")).toBeNull();
+    expect(JSON.stringify(sent[0]!.messages)).toContain('"signature":"sig_2"');
   });
 
   it("says the conversation got long when even its latest turn won't fit, rather than an error", async () => {

@@ -32,8 +32,11 @@ export function startsTurn(message: MessageParam): boolean {
  * still starts with something someone said, as the Messages API needs.
  * Turns go four at a time, counted from the conversation's start, so the
  * start of what's kept stays put for a few turns and the model's host can
- * keep reusing what it cached of it. The latest turn always stays: null
- * when that alone doesn't fit. A conversation that fits comes back as it is.
+ * keep reusing what it cached of it. A cut conversation goes without its
+ * thinking blocks: each was made with the whole conversation before it, and
+ * Claude's host can refuse a request that brings one back once what came
+ * before it has changed. The latest turn always stays: null when that alone
+ * doesn't fit. A conversation that fits comes back as it is.
  */
 export function fitConversation(messages: MessageParam[], limits: ConversationLimits): MessageParam[] | null {
   // How long the messages from each one on run as a JSON array: each message and its comma, and the brackets.
@@ -45,5 +48,19 @@ export function fitConversation(messages: MessageParam[], limits: ConversationLi
   const first = starts.findIndex(fits);
   if (first < 0) return null;
   const turn = Math.min(Math.ceil(first / TURNS_AT_A_TIME) * TURNS_AT_A_TIME, starts.length - 1);
-  return messages.slice(starts[turn]);
+  return withoutThinking(messages.slice(starts[turn]));
+}
+
+/**
+ * The messages with every thinking block left out. An assistant message that
+ * was only thinking goes too: it called no tool, so nothing waits on it, and
+ * the person's messages either side of it simply run together.
+ */
+function withoutThinking(messages: MessageParam[]): MessageParam[] {
+  return messages.flatMap((m) => {
+    if (m.role !== "assistant" || typeof m.content === "string") return [m];
+    const content = m.content.filter((b) => b.type !== "thinking" && b.type !== "redacted_thinking");
+    if (content.length === m.content.length) return [m];
+    return content.length ? [{ ...m, content }] : [];
+  });
 }

@@ -223,20 +223,34 @@ describe("naming a Bedrock model (properties)", () => {
 // ---------- Fitting a long conversation ----------
 
 describe("a long conversation cut to fit (properties)", () => {
-  // Turns as the simulator makes them: what someone said, then the assistant's calls and their results, then maybe its answer.
+  // Turns as the simulator makes them: what someone said, then the assistant's calls and their results, then maybe its
+  // answer, any of the assistant's messages perhaps with Claude's thinking first (an answer can be thinking alone).
   const said = fc.oneof(words, fc.array(textBlock, { minLength: 1, maxLength: 3 }));
-  const call = fc.tuple(id, toolName, words);
-  const turnOf = fc.record({ said, calls: fc.array(call, { maxLength: 3 }), answer: fc.option(words, { nil: undefined }) }).map(({ said, calls, answer }) => [
-    { role: "user" as const, content: said },
-    ...calls.flatMap(([callId, name, result], i) => [
-      { role: "assistant" as const, content: [{ type: "tool_use" as const, id: `${callId}-${i}`, name, input: {} }] },
-      { role: "user" as const, content: [{ type: "tool_result" as const, tool_use_id: `${callId}-${i}`, content: result }] },
-    ]),
-    ...(answer === undefined ? [] : [{ role: "assistant" as const, content: answer }]),
-  ]);
+  const thought = fc.option(fc.constantFrom<Block>({ type: "thinking", thinking: "", signature: "sig" }, { type: "redacted_thinking", data: "opaque" }), { nil: undefined });
+  const call = fc.tuple(id, toolName, words, thought);
+  const answer = fc.option(fc.tuple(thought, fc.option(words, { nil: undefined })), { nil: undefined });
+  const turnOf = fc.record({ said, calls: fc.array(call, { maxLength: 3 }), answer }).map(({ said, calls, answer }) => {
+    const answered: Block[] = answer ? [...(answer[0] ? [answer[0]] : []), ...(answer[1] === undefined ? [] : [{ type: "text" as const, text: answer[1] }])] : [];
+    return [
+      { role: "user" as const, content: said },
+      ...calls.flatMap(([callId, name, result, think], i) => [
+        { role: "assistant" as const, content: [...(think ? [think] : []), { type: "tool_use" as const, id: `${callId}-${i}`, name, input: {} }] },
+        { role: "user" as const, content: [{ type: "tool_result" as const, tool_use_id: `${callId}-${i}`, content: result }] },
+      ]),
+      ...(answered.length ? [{ role: "assistant" as const, content: answered }] : []),
+    ];
+  });
   const conversation = fc.array(turnOf, { minLength: 1, maxLength: 14 }).map((turns) => turns.flat() as MessageParam[]);
   const limits = fc.record({ messages: fc.integer({ min: 1, max: 40 }), chars: fc.integer({ min: 20, max: 3000 }) });
   const size = (messages: MessageParam[]) => JSON.stringify(messages).length;
+  const thinking = (b: Block) => b.type === "thinking" || b.type === "redacted_thinking";
+  /** The messages as a cut conversation keeps them: no thinking, and no assistant message that was only thinking. */
+  const unthought = (messages: MessageParam[]) =>
+    messages.flatMap((m) => {
+      if (m.role !== "assistant" || typeof m.content === "string" || !m.content.some(thinking)) return [m];
+      const content = m.content.filter((b) => !thinking(b));
+      return content.length ? [{ ...m, content }] : [];
+    });
 
   it("keeps the latest whole turns within the limits, every tool result right after its call, or says it can't", () => {
     fc.assert(
@@ -248,7 +262,6 @@ describe("a long conversation cut to fit (properties)", () => {
           expect(lastTurn.length > max.messages || size(lastTurn) > max.chars).toBe(true);
           return;
         }
-        expect(kept).toEqual(messages.slice(messages.length - kept.length));
         expect(startsTurn(kept[0]!)).toBe(true);
         expect(kept.length).toBeLessThanOrEqual(max.messages);
         expect(size(kept)).toBeLessThanOrEqual(max.chars);
@@ -261,12 +274,21 @@ describe("a long conversation cut to fit (properties)", () => {
     );
   });
 
-  it("leaves a conversation that fits as it is, and otherwise never keeps less than the latest turn", () => {
+  it("leaves a conversation that fits as it is, thinking and all; a cut one is its latest turns from the start of one, never less than the last, without thinking", () => {
     fc.assert(
       fc.property(conversation, limits, (messages, max) => {
         const kept = fitConversation(messages, max);
-        if (messages.length <= max.messages && size(messages) <= max.chars) expect(kept).toBe(messages);
-        if (kept) expect(kept.length).toBeGreaterThanOrEqual(messages.length - messages.findLastIndex(startsTurn));
+        if (messages.length <= max.messages && size(messages) <= max.chars) {
+          expect(kept).toBe(messages);
+          return;
+        }
+        if (!kept) return;
+        const cut = messages.indexOf(kept[0]!);
+        expect(cut).toBeGreaterThan(0);
+        expect(cut).toBeLessThanOrEqual(messages.findLastIndex(startsTurn));
+        expect(startsTurn(messages[cut]!)).toBe(true);
+        expect(kept).toEqual(unthought(messages.slice(cut)));
+        expect(kept.flatMap((m) => (typeof m.content === "string" ? [] : m.content)).some(thinking)).toBe(false);
       }),
     );
   });
