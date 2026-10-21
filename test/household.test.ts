@@ -374,6 +374,19 @@ describe("the sample household's Durable Object", () => {
     expect(await bad.text()).toContain("since is the cursor an earlier call answered");
   });
 
+  it("still says Hunter's slip when the device's cursor is from later in the real evening than the household's evening", async () => {
+    const { env } = sampleEnv();
+    // The device asked first at 11 PM real time; then someone made it evening, which puts the household at 8:15.
+    vi.setSystemTime(FRIDAY.add({ hours: 12, minutes: 30 }).epochMilliseconds);
+    const late = (await tool(env, "alerts")) as { cursor: string };
+    await call(env, "/household/clock", { method: "POST", body: JSON.stringify({ mode: "evening" }), headers: { "content-type": "application/json" } });
+    const caughtUp = (await tool(env, "alerts", { since: late.cursor })) as { alerts: unknown[]; cursor: string };
+    expect(caughtUp.alerts).toEqual([]);
+    vi.setSystemTime(FRIDAY.add({ hours: 12, minutes: 33 }).epochMilliseconds);
+    const next = (await tool(env, "alerts", { since: caughtUp.cursor })) as { alerts: { text: string }[] };
+    expect(next.alerts.map((a) => a.text)).toEqual([expect.stringMatching(/^Hunter just left the fence/)]);
+  });
+
   it("starts over with no passcode when the server has none", async () => {
     const { env } = sampleEnv();
     expect((await call(env, "/household/reset", { method: "POST" })).status).toBe(200);

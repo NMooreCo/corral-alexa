@@ -436,7 +436,8 @@ export async function buildServer(household: Household, ranch?: Ranch): Promise<
       (args) =>
         answer(async () => {
           await ranch.tick();
-          let from = ranch.now();
+          const now = ranch.now();
+          let from = now;
           if (typeof args.since === "string") {
             try {
               from = Temporal.Instant.from(args.since);
@@ -444,6 +445,9 @@ export async function buildServer(household: Household, ranch?: Ranch): Promise<
               throw new ToolError("since is the cursor an earlier call answered.");
             }
           }
+          // A cursor from the household's future (its clock was moved back, to the evening, say) means from now:
+          // otherwise everything until the clock caught up with it would go unsaid.
+          if (Temporal.Instant.compare(from, now) > 0) from = now;
           const alerts = ranch
             .history(from)
             .filter((h) => ALERT_KINDS.includes(h.kind) && Temporal.Instant.compare(h.at, from) > 0)

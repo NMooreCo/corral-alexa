@@ -334,6 +334,7 @@ export function corral(o: CorralOptions): { extension: Extension; playDemo: (sho
       return false;
     }
     await readClock();
+    forgetAlerts();
     sim.newConversation();
     await loadSpeakers();
     sim.log("page", mode === "evening" ? "Set the household's clock to evening" : mode === "morning" ? "Moved the household on to the next morning" : "Set the household's clock back to the real time");
@@ -359,6 +360,7 @@ export function corral(o: CorralOptions): { extension: Extension; playDemo: (sho
       return askForPasscode(tried ? "That passcode didn't work. Check it and try again." : "Enter the demo passcode to start the household over.");
     }
     if (!res?.ok) return sim.caption("", "Couldn't start the household over. Try again.");
+    forgetAlerts();
     sim.newConversation();
     // The household starts over from its seed, which may name different people than it did.
     await loadSpeakers();
@@ -382,6 +384,13 @@ export function corral(o: CorralOptions): { extension: Extension; playDemo: (sho
   const heldAlerts: string[] = [];
   let alertCursor: string | undefined;
   let watching = false;
+  /** Bumped when the household's clock moves or it starts over: what was held, and any answer on its way, belong to before. */
+  let alertsEpoch = 0;
+  function forgetAlerts() {
+    alertsEpoch++;
+    alertCursor = undefined;
+    heldAlerts.length = 0;
+  }
 
   const banner = el("div", "alert");
   banner.setAttribute("role", "status");
@@ -398,10 +407,11 @@ export function corral(o: CorralOptions): { extension: Extension; playDemo: (sho
     for (;;) {
       await pause(ALERT_EVERY_MS);
       if (sim.busy) continue;
+      const epoch = alertsEpoch;
       try {
         const result = await sim.callTool("alerts", alertCursor ? { since: alertCursor } : {}, { quiet: true });
         const text = (result.content as { type: string; text?: string }[] | undefined)?.find((c) => c.type === "text")?.text;
-        if (!result.isError && text) {
+        if (!result.isError && text && epoch === alertsEpoch) {
           const answer = JSON.parse(text) as { alerts: { text: string }[]; cursor: string };
           alertCursor = answer.cursor;
           heldAlerts.push(...answer.alerts.map((a) => a.text));
