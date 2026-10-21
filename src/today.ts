@@ -15,6 +15,11 @@ export type TodayView = {
   whereabouts: CorralWhere[];
   /** Requests waiting for whoever's looking to decide, for a household that decides its own; they can approve one with a tap. */
   toDecide?: CorralRequest[];
+  /**
+   * This server runs the household's ranch too, so the screen offers the ranch's tabs from its first
+   * look rather than after the ranch's own read, which a slow source can hold up. Only screens read it.
+   */
+  hasRanch?: boolean;
 };
 
 /**

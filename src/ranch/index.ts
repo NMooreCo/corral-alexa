@@ -42,6 +42,8 @@ export class Ranch {
   /** Who was outside the fence at the last look, to notice someone leaving; null before the first look. */
   #outside: Set<string> | null = null;
   #ticking: Promise<void> = Promise.resolve();
+  /** Goes up with each change the history keeps to a device or an automation, so a read made meanwhile knows to look again. */
+  #changes = 0;
 
   /** With `history`, scheduled automations start as having run at their last time (a sample's past). */
   constructor(opts: { config: RanchConfig; sources: DeviceSource[]; trackers: TrackerFeed; now?: () => Temporal.Instant; fetch?: typeof fetch; history?: boolean }) {
@@ -74,6 +76,22 @@ export class Ranch {
     return next;
   }
 
+  /**
+   * What `read` finds once anything due has run, with the read going at the same time as the tick
+   * rather than after it, so a slow source (a controller on weak Wi-Fi, a forecast that times out)
+   * is waited on once, alongside the tick's own reads of it, not once for the tick and again for
+   * the read. When something changed meanwhile (an automation ran, a device was switched), `read`
+   * goes again, so the answer always shows it.
+   */
+  async look<T>(read: () => Promise<T>): Promise<T> {
+    const seen = this.#changes;
+    const early = read();
+    // When something changed, this answer is set aside, and so is any failure of it.
+    early.catch(() => {});
+    await this.tick();
+    return this.#changes === seen ? early : read();
+  }
+
   /** Keeps an animal that's outside the fence now and wasn't at the last look. The first look only learns who's out. */
   async #watchFence(): Promise<void> {
     const report = await this.animals().catch(() => null);
@@ -96,6 +114,8 @@ export class Ranch {
   /** Keeps something that happened on the ranch, for "since last night". */
   note(text: string, kind: RanchHistoryEntry["kind"] = "device"): void {
     this.#history.push({ at: this.#now(), text, kind });
+    // An animal leaving changes nothing a read of the devices or the collars says.
+    if (kind !== "animal") this.#changes++;
     if (this.#history.length > MAX_HISTORY) this.#history.splice(0, this.#history.length - MAX_HISTORY);
   }
 

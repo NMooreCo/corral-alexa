@@ -215,6 +215,9 @@ export async function buildServer(household: Household, ranch?: Ranch): Promise<
     }));
   };
 
+  // Today says whether there's a ranch, so the screen's rail has the ranch's tabs from the start; the assistant hears today as ever.
+  const today = async () => ({ ...(await todayView(household)), ...(ranch ? { hasRanch: true } : {}) });
+  const sayToday = ({ hasRanch: _r, ...view }: Record<string, unknown>) => view;
   screen(
     "show_today",
     "Show today",
@@ -222,14 +225,15 @@ export async function buildServer(household: Household, ranch?: Ranch): Promise<
     z.object({}),
     TODAY_URI,
     widgetHtml.today,
-    () => todayView(household),
+    today,
+    sayToday,
   );
   // The Today screen keeps itself current through this; only the screen calls it, so the assistant never sees it.
   registerAppTool(
     server,
     "refresh_today",
     { title: "Refresh today", description: "The Today screen's own refresh.", inputSchema: z.object({}), annotations: readOnly("Refresh today"), _meta: { ui: { resourceUri: TODAY_URI, visibility: ["app"] } } },
-    () => asView(() => todayView(household)),
+    () => asView(today, sayToday),
   );
   // A change made anywhere (another Echo Show, the assistant, a tap) reaches every screen within a few seconds:
   // a stateless server can't push, so screens ask this cheap counter and refresh when it moves. Only screens call it.
@@ -319,8 +323,8 @@ export async function buildServer(household: Household, ranch?: Ranch): Promise<
         { title: t.title, description: t.description, inputSchema: t.input, annotations: { ...readOnly(t.title), openWorldHint: t.openWorld } },
         (args) =>
           answer(async () => {
-            await ranch.tick();
-            const out = await t.run(ranch, args as Record<string, unknown>);
+            // Read alongside anything due, rather than after it, so a slow source is waited on once.
+            const out = await ranch.look(() => t.run(ranch, args as Record<string, unknown>));
             // Someone who may not switch devices hears so (and who can) before anything is offered.
             const refusal = t.name === "devices" ? household.refusal?.("switch_device") : null;
             return refusal ? { switching: refusal, devices: out } : out;
@@ -341,8 +345,7 @@ export async function buildServer(household: Household, ranch?: Ranch): Promise<
     );
     server.registerTool(AUTOMATIONS.name, { title: AUTOMATIONS.title, description: AUTOMATIONS.description, inputSchema: AUTOMATIONS.input, annotations: readOnly(AUTOMATIONS.title) }, () =>
       answer(async () => {
-        await ranch.tick();
-        const list = await ranch.automations.list();
+        const list = await ranch.look(() => ranch.automations.list());
         // Someone who may not change automations hears so (and who can) before anything is offered.
         const refusal = household.refusal?.("switch_device");
         return refusal ? { changing: refusal, automations: list } : list;

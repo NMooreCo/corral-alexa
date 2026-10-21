@@ -1,8 +1,9 @@
 import { Temporal } from "temporal-polyfill";
 import { beforeEach, describe, expect, it } from "vitest";
 import { ToolError } from "../src/household.ts";
+import { Ranch } from "../src/ranch/index.ts";
 import { clearWeatherCache } from "../src/ranch/weather.ts";
-import { sampleRanch } from "../src/sample/ranch.ts";
+import { SampleCollars, SampleDevices, sampleRanch, sampleRanchConfig } from "../src/sample/ranch.ts";
 import { openMeteo, openMeteoFetch } from "./ranch-fixtures.ts";
 
 // Friday, October 16, 2026, in Denver.
@@ -83,6 +84,27 @@ describe("the ranch's automations", () => {
     mild.move("17:01");
     await mild.ranch.tick();
     expect((await device(mild.ranch, "Barn heater")).state).toBe("off");
+  });
+
+  it("looks again at a reading that an earlier run in the same look moved", async () => {
+    let now = at("06:58");
+    const config = {
+      ...sampleRanchConfig(),
+      automations: [
+        { id: "barn-morning", name: "Warm the barn at 7", enabled: true, when: { kind: "schedule" as const, times: ["07:00"] }, then: [{ device: "sample.barn-heater", state: "on" as const }] },
+        { id: "barn-cold", name: "Warm a cold barn", enabled: true, when: { kind: "reading" as const, device: "sample.barn-heater", reading: "air", below: 40 }, then: [{ device: "sample.barn-heater", state: "on" as const }] },
+      ],
+    };
+    const clock = () => now;
+    const ranch = new Ranch({ config, sources: [new SampleDevices({ now: clock, timeZone: config.timeZone, units: config.units })], trackers: new SampleCollars({ now: clock, timeZone: config.timeZone }), now: clock });
+    await ranch.tick();
+    now = at("07:01");
+    // The barn reads in the 30s at 7, so both are due when the look starts; once the first has the heater on, the second's reading is warm.
+    expect((await device(ranch, "Barn heater")).readings[0]!.value).toBeLessThan(40);
+    await ranch.tick();
+    const [morning, cold] = await ranch.automations.list();
+    expect(morning!.lastRun).toMatchObject({ did: ["Barn heater on, with no set end"] });
+    expect(cold!.lastRun).toBeNull();
   });
 
   it("adds a new one after checking its devices and runs against their limits", async () => {
