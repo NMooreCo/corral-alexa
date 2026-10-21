@@ -135,9 +135,13 @@ export function drawMap(ranch: Ranch, report: TrackerReport | null): RanchView["
 }
 
 export async function ranchView(ranch: Ranch, household: Household, tab?: RanchTab): Promise<RanchView> {
-  // Anything due runs first, so the screen shows what it did.
-  await ranch.tick();
-  const [about, devices, report, weather, automations] = await Promise.all([household.about(), ranch.devices.all(), optional(ranch.animals()), optional(soon(ranch.weather())), ranch.automations.list()]);
+  // Every source is read at once: the devices and automations alongside anything due (and again if it ran, so the screen shows what it did), the rest without waiting on it.
+  const [about, [devices, automations], report, weather] = await Promise.all([
+    household.about(),
+    ranch.look(() => Promise.all([ranch.devices.all(), ranch.automations.list()])),
+    optional(ranch.animals()),
+    optional(soon(ranch.weather())),
+  ]);
   const attention = devices.filter((d) => d.attention.length).length + (report ? report.outsideFence.length + report.lowBattery.length : 0);
   return {
     household: about.name ?? null,
@@ -219,7 +223,9 @@ export async function briefingView(household: Household, ranch: Ranch): Promise<
   const tz = ranch.config.timeZone;
   const local = ranch.now().toZonedDateTimeISO(tz);
   const todayLabel = local.toPlainDate().toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric" });
-  const [about, events, tasks, where, supplies, weather, devices, report] = await Promise.all([
+  // In the morning, the briefing starts with what happened since 6 PM yesterday.
+  const since = local.hour < 12 ? local.toPlainDate().subtract({ days: 1 }).toZonedDateTime({ timeZone: tz, plainTime: Temporal.PlainTime.from(OVERNIGHT_FROM) }).toInstant() : null;
+  const [about, events, tasks, where, supplies, weather, devices, report, history] = await Promise.all([
     household.about(),
     list<CorralEvent>(household.call("calendar", {})),
     list<CorralTask>(household.call("tasks", {})),
@@ -228,14 +234,14 @@ export async function briefingView(household: Household, ranch: Ranch): Promise<
     optional<Forecast>(soon(ranch.weather())),
     ranch.devices.all(),
     optional(ranch.animals()),
+    since ? optional(household.history?.(since) ?? Promise.resolve([])) : Promise.resolve(null),
   ]);
 
   const cards: BriefingCard[] = [];
 
   // In the morning, what happened since 6 PM yesterday: devices switched, automations, orders, chores, requests decided.
-  if (local.hour < 12) {
-    const since = local.toPlainDate().subtract({ days: 1 }).toZonedDateTime({ timeZone: tz, plainTime: Temporal.PlainTime.from(OVERNIGHT_FROM) }).toInstant();
-    const told = (await optional(household.history?.(since) ?? Promise.resolve([]))) ?? [];
+  if (since) {
+    const told = history ?? [];
     const happened = [
       ...told.map((h) => ({ at: Temporal.ZonedDateTime.from(h.at).toInstant(), texts: [h.text], device: false })),
       ...ranch.history(since).map((h) => ({ at: h.at, texts: [h.text], device: h.kind === "device" })),

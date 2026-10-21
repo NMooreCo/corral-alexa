@@ -135,8 +135,15 @@ export class Automations {
     const since = this.#checked;
     this.#checked = now;
     if (!since) return;
-    for (const r of this.#rules) {
-      if (!r.enabled || !(await this.#due(r, since, now))) continue;
+    // Every rule is checked at once (tonight's forecast, a device's reading), so a slow source is waited on once, not once a rule.
+    const rules = [...this.#rules];
+    const due = await Promise.all(rules.map((r) => r.enabled && this.#due(r, since, now)));
+    let ran = false;
+    for (const [i, r] of rules.entries()) {
+      if (!due[i] || !r.enabled) continue;
+      // A run before this one may have moved the reading this one watches, so it looks again.
+      if (ran && r.when.kind === "reading" && !(await this.#due(r, since, now))) continue;
+      ran = true;
       const did: string[] = [];
       const failed: string[] = [];
       for (const s of r.then) {

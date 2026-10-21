@@ -149,6 +149,18 @@ describe("the greenhouse controller connector (against a fake controller)", () =
     expect((err as Error).message).toMatch(/can't tell whether the Greenhouse misters started.*closes on its own/);
   });
 
+  it("shares one /status request among reads that come while it's out, and asks again after", async () => {
+    const c = clock();
+    const fake = fakeController(c.now);
+    const gh = controller({ fetch: fake.fetch, now: c.now });
+    const [a, b, d] = await Promise.all([gh.list(), gh.list(), gh.list()]);
+    expect(fake.calls).toEqual([{ method: "GET", url: "http://192.0.2.72/status", key: null }]);
+    expect(b).toEqual(a);
+    expect(d).toEqual(a);
+    await gh.list();
+    expect(fake.calls).toHaveLength(2);
+  });
+
   it("says when something other than the controller answers at its address", async () => {
     const c = clock();
     const gh = controller({ fetch: (async () => new Response("<html>router login</html>", { status: 200 })) as unknown as typeof fetch, now: c.now });

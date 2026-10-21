@@ -90,6 +90,8 @@ export class GreenhouseController implements DeviceSource {
   readonly #o: Required<Omit<GreenhouseOptions, "fetch" | "now">> & { fetch: typeof fetch; now: () => Temporal.Instant };
   readonly #base: string;
   #cached: { at: number; status: V0Status } | null = null;
+  /** A /status request on its way, which every read that comes meanwhile shares: a small controller on weak Wi-Fi answers one request at a time. */
+  #asking: Promise<V0Status> | null = null;
   /** The last good answer, to say what it last read when it stops answering. */
   #lastGood: { at: Temporal.Instant; status: V0Status } | null = null;
 
@@ -147,7 +149,9 @@ export class GreenhouseController implements DeviceSource {
 
   async #status(): Promise<V0Status> {
     if (this.#cached && this.#o.now().epochMilliseconds - this.#cached.at < this.#o.cacheMs) return this.#cached.status;
-    return this.#request("GET", "/status");
+    // Reads that come together (a screen's devices and its automations, an automation's check) wait on one answer, and on one timeout.
+    if (!this.#asking) this.#asking = this.#request("GET", "/status").finally(() => (this.#asking = null));
+    return this.#asking;
   }
 
   async list(): Promise<Device[]> {
