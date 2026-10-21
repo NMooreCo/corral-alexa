@@ -215,6 +215,9 @@ export async function buildServer(household: Household, ranch?: Ranch): Promise<
     }));
   };
 
+  // Today says whether there's a ranch, so the screen's rail has the ranch's tabs from the start; the assistant hears today as ever.
+  const today = async () => ({ ...(await todayView(household)), ...(ranch ? { hasRanch: true } : {}) });
+  const sayToday = ({ hasRanch: _r, ...view }: Record<string, unknown>) => view;
   screen(
     "show_today",
     "Show today",
@@ -222,14 +225,15 @@ export async function buildServer(household: Household, ranch?: Ranch): Promise<
     z.object({}),
     TODAY_URI,
     widgetHtml.today,
-    () => todayView(household),
+    today,
+    sayToday,
   );
   // The Today screen keeps itself current through this; only the screen calls it, so the assistant never sees it.
   registerAppTool(
     server,
     "refresh_today",
     { title: "Refresh today", description: "The Today screen's own refresh.", inputSchema: z.object({}), annotations: readOnly("Refresh today"), _meta: { ui: { resourceUri: TODAY_URI, visibility: ["app"] } } },
-    () => asView(() => todayView(household)),
+    () => asView(today, sayToday),
   );
   // A change made anywhere (another Echo Show, the assistant, a tap) reaches every screen within a few seconds:
   // a stateless server can't push, so screens ask this cheap counter and refresh when it moves. Only screens call it.

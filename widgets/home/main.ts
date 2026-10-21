@@ -1,5 +1,5 @@
 import type { CallToolResult } from "@modelcontextprotocol/server";
-import type { RanchTab, RanchView } from "../../src/ranch/views.ts";
+import type { RanchView } from "../../src/ranch/views.ts";
 import type { TodayView } from "../../src/today.ts";
 import { escape, startScreen, type Screen } from "../shared/screen.ts";
 import "../shared/base.css";
@@ -8,6 +8,7 @@ import "../ranch/style.css";
 import "./style.css";
 import { animalsHtml } from "./animals.ts";
 import { automationsClick, automationsHtml } from "./automations.ts";
+import { TABS, isRanchTab, railTabs, type Tab } from "./rail.ts";
 import { ranchClick, ranchHtml, startCountdowns } from "./ranch.ts";
 import { todayClick, todayHtml } from "./today.ts";
 
@@ -18,8 +19,6 @@ import { todayClick, todayHtml } from "./today.ts";
  * between tabs right here, through the screens' own refresh tools, without
  * asking the assistant. On a server without a ranch, Today stands alone.
  */
-
-type Tab = "today" | RanchTab;
 
 interface HomeView {
   tab: Tab;
@@ -39,15 +38,8 @@ const root = document.getElementById("app")!;
 const state: HomeView = { tab: (root.dataset.start as Tab | undefined) ?? "today", today: null, ranch: null };
 /** A refresh's answer keeps the tab; a tool's answer (the assistant showing a screen) may move it. */
 const REFRESH = Symbol("refresh");
-
-const TABS: { tab: Tab; label: string; icon: string }[] = [
-  { tab: "today", label: "Today", icon: `<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>` },
-  { tab: "ranch", label: "Ranch", icon: `<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-5h4v5"/>` },
-  { tab: "animals", label: "Animals", icon: `<circle cx="6" cy="10" r="2"/><circle cx="10" cy="6" r="2"/><circle cx="14" cy="6" r="2"/><circle cx="18" cy="10" r="2"/><path d="M8 17c0-3 2-5 4-5s4 2 4 5c0 2-2 2-4 2s-4 0-4-2Z"/>` },
-  { tab: "automations", label: "Automations", icon: `<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>` },
-];
-
-const isRanchTab = (t: Tab): t is RanchTab => t !== "today";
+/** Whether a background read of the ranch is on its way (see fillRanch). */
+let fillingRanch = false;
 
 const screen: Screen<HomeView> = await startScreen<HomeView>({
   name: "corral-home",
@@ -57,6 +49,8 @@ const screen: Screen<HomeView> = await startScreen<HomeView>({
     if (v && Array.isArray(v.events)) {
       state.today = v as unknown as TodayView;
       if (!refresh) state.tab = "today";
+      // Today says whether there's a ranch; until the ranch has answered, each of Today's answers asks it again.
+      if (state.today.hasRanch) fillRanch();
     } else if (v && v.map && Array.isArray(v.places)) {
       const ranch = v as unknown as RanchView;
       state.ranch = ranch;
@@ -80,11 +74,10 @@ const home: Home = {
   ranch: () => state.ranch,
 };
 
-/** The rail; the ranch's tabs only once this server has shown it has a ranch. */
+/** The rail; the ranch's tabs whenever this server has a ranch, before the ranch itself has answered. */
 function rail(): string {
-  const hasRanch = state.ranch !== null || isRanchTab(state.tab);
   const outside = state.ranch?.animals.outside.length ?? 0;
-  return `<nav class="rail" aria-label="Screens">${TABS.filter((t) => t.tab === "today" || hasRanch)
+  return `<nav class="rail" aria-label="Screens">${railTabs(state)
     .map(
       (t) => `<button type="button" data-tab="${t.tab}" ${state.tab === t.tab ? `aria-current="page"` : ""}>
         <svg viewBox="0 0 24 24" aria-hidden="true">${t.icon}</svg><span>${escape(t.label)}</span>
@@ -118,8 +111,14 @@ async function open(tab: Tab) {
 
 startCountdowns(root, home);
 
-// Opened on Today, ask once whether this server has a ranch (and how the animals are), so the rail can offer its tabs.
-if (state.tab === "today" && !state.ranch) {
+/**
+ * Reads the ranch in the background, one ask at a time, so its tabs open straight onto it and the
+ * Animals tab can show how many are outside the fence. The tabs are on the rail already; one opened
+ * before this answers shows the ranch loading, then the ranch.
+ */
+function fillRanch() {
+  if (state.ranch || fillingRanch) return;
+  fillingRanch = true;
   screen.app
     .callServerTool({ name: "refresh_ranch", arguments: {} })
     .then((r) => {
@@ -128,7 +127,8 @@ if (state.tab === "today" && !state.ranch) {
       state.ranch = v as unknown as RanchView;
       render();
     })
-    .catch(() => {});
+    .catch(() => {})
+    .finally(() => (fillingRanch = false));
 }
 
 root.addEventListener("click", (e) => {
