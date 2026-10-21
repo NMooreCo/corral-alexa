@@ -149,8 +149,10 @@ async function tool(env: Env, name: string, args: Record<string, unknown> = {}, 
   const data = (res.headers.get("content-type") ?? "").includes("text/event-stream")
     ? text.split("\n").filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trim()).filter(Boolean).at(-1)!
     : text;
-  const result = (JSON.parse(data) as { result: { content: { text: string }[]; structuredContent?: unknown; isError?: boolean } }).result;
-  return result.structuredContent ?? JSON.parse(result.content[0]!.text);
+  const result = (JSON.parse(data) as { result: { content: { text: string }[]; structuredContent?: { items?: unknown }; isError?: boolean } }).result;
+  // A screen tool's structuredContent is what its screen shows; any other tool's is its JSON answer, with a list wrapped as its items.
+  const said = JSON.parse(result.content[0]!.text) as unknown;
+  return Array.isArray(said) ? said : (result.structuredContent ?? said);
 }
 
 /** The id of a chore by its title, through MCP. */

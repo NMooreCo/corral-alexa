@@ -129,6 +129,18 @@ describe("serving Alexa+ (MCP 2025-11-25 over Streamable HTTP)", () => {
   it("says Corral's refusal back to the model as a tool error", async () => {
     const { body } = await rpc(SAMPLE, "tools/call", { name: "complete_task", arguments: { task: "not-a-task" } });
     expect(body!.result).toMatchObject({ isError: true, content: [{ type: "text", text: "Use the task's id from the tasks tool." }] });
+    expect(body!.result!.structuredContent).toBeUndefined();
+  });
+
+  it("gives a tool without a screen its data as structuredContent too, for Alexa+'s data-only visuals", async () => {
+    const people = (await rpc(SAMPLE, "tools/call", { name: "people", arguments: {} })).body!.result!;
+    const said = JSON.parse(people.content[0].text);
+    // structuredContent is always an object, so a list goes in as its items.
+    expect(people.structuredContent).toEqual(Array.isArray(said) ? { items: said } : said);
+    const lists = (await rpc(SAMPLE, "tools/call", { name: "lists", arguments: {} })).body!.result!;
+    expect(lists.structuredContent).toEqual({ items: ["Groceries", "Feed store", "Hardware"] });
+    const tasks = (await rpc(SAMPLE, "tools/call", { name: "tasks", arguments: {} })).body!.result!;
+    expect(tasks.structuredContent).toEqual({ items: JSON.parse(tasks.content[0].text) });
   });
 
   it("also serves the current protocol to an up-to-date client", async () => {

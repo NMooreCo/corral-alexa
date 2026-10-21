@@ -156,15 +156,27 @@ function instructions(about: HouseholdAbout, decides: boolean, ranch: boolean, o
   ].join(" ");
 }
 
-/** A tool's answer as MCP content, with Corral's refusals said back to the model to act on. */
+/**
+ * A tool's answer as MCP content, with Corral's refusals said back to the
+ * model to act on. The same data goes in structuredContent too: Alexa+ draws
+ * its own visuals from it for a tool without a screen (its "data-only flow").
+ */
 async function answer(run: () => Promise<unknown>): Promise<CallToolResult> {
   try {
-    return { content: [{ type: "text", text: JSON.stringify(await run()) }] };
+    const value = await run();
+    return { content: [{ type: "text", text: JSON.stringify(value) }], ...structured(value) };
   } catch (err) {
     if (err instanceof ToolError) return { content: [{ type: "text", text: err.message }], isError: true };
     if (err instanceof UpstreamAuthError) return { content: [{ type: "text", text: "Corral didn't accept this connection's sign-in. Link the account again." }], isError: true };
     throw err;
   }
+}
+
+/** structuredContent has to be an object: a list goes in as `items`, anything else that isn't an object as `value`. */
+export function structured(value: unknown): { structuredContent?: Record<string, unknown> } {
+  if (value === undefined) return {};
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) return { structuredContent: value as Record<string, unknown> };
+  return { structuredContent: Array.isArray(value) ? { items: value } : { value } };
 }
 
 /** One MCP server for one request, answering from `household` (and its ranch, when it has one). */
