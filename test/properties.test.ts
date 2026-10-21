@@ -3,6 +3,7 @@ import fc from "fast-check";
 import { Temporal } from "temporal-polyfill";
 import { describe, expect, it } from "vitest";
 import { HouseholdClock } from "../src/clock.ts";
+import { fitConversation, startsTurn } from "../src/echo/conversation.ts";
 import { modelLabel } from "../src/echo/model.ts";
 import { messagesReply, responsesInput } from "../src/echo/responses.ts";
 import { ToolError } from "../src/household.ts";
@@ -214,6 +215,58 @@ describe("naming a Bedrock model (properties)", () => {
         const id = `${provider}gpt-${version}${variant.map((w) => `-${w}`).join("")}`;
         const name = variant.map((w) => w[0]!.toUpperCase() + w.slice(1)).join(" ");
         expect(modelLabel(id)).toBe(`GPT-${version}${name ? ` ${name}` : ""}`);
+      }),
+    );
+  });
+});
+
+// ---------- Fitting a long conversation ----------
+
+describe("a long conversation cut to fit (properties)", () => {
+  // Turns as the simulator makes them: what someone said, then the assistant's calls and their results, then maybe its answer.
+  const said = fc.oneof(words, fc.array(textBlock, { minLength: 1, maxLength: 3 }));
+  const call = fc.tuple(id, toolName, words);
+  const turnOf = fc.record({ said, calls: fc.array(call, { maxLength: 3 }), answer: fc.option(words, { nil: undefined }) }).map(({ said, calls, answer }) => [
+    { role: "user" as const, content: said },
+    ...calls.flatMap(([callId, name, result], i) => [
+      { role: "assistant" as const, content: [{ type: "tool_use" as const, id: `${callId}-${i}`, name, input: {} }] },
+      { role: "user" as const, content: [{ type: "tool_result" as const, tool_use_id: `${callId}-${i}`, content: result }] },
+    ]),
+    ...(answer === undefined ? [] : [{ role: "assistant" as const, content: answer }]),
+  ]);
+  const conversation = fc.array(turnOf, { minLength: 1, maxLength: 14 }).map((turns) => turns.flat() as MessageParam[]);
+  const limits = fc.record({ messages: fc.integer({ min: 1, max: 40 }), chars: fc.integer({ min: 20, max: 3000 }) });
+  const size = (messages: MessageParam[]) => JSON.stringify(messages).length;
+
+  it("keeps the latest whole turns within the limits, every tool result right after its call, or says it can't", () => {
+    fc.assert(
+      fc.property(conversation, limits, (messages, max) => {
+        const kept = fitConversation(messages, max);
+        const lastTurn = messages.slice(messages.findLastIndex(startsTurn));
+        if (!kept) {
+          // Only when the latest turn alone is too much.
+          expect(lastTurn.length > max.messages || size(lastTurn) > max.chars).toBe(true);
+          return;
+        }
+        expect(kept).toEqual(messages.slice(messages.length - kept.length));
+        expect(startsTurn(kept[0]!)).toBe(true);
+        expect(kept.length).toBeLessThanOrEqual(max.messages);
+        expect(size(kept)).toBeLessThanOrEqual(max.chars);
+        kept.forEach((m, i) => {
+          for (const b of typeof m.content === "string" ? [] : m.content) {
+            if (b.type === "tool_result") expect((kept[i - 1]!.content as { id?: string }[]).map((c) => c.id)).toContain(b.tool_use_id);
+          }
+        });
+      }),
+    );
+  });
+
+  it("leaves a conversation that fits as it is, and otherwise never keeps less than the latest turn", () => {
+    fc.assert(
+      fc.property(conversation, limits, (messages, max) => {
+        const kept = fitConversation(messages, max);
+        if (messages.length <= max.messages && size(messages) <= max.chars) expect(kept).toBe(messages);
+        if (kept) expect(kept.length).toBeGreaterThanOrEqual(messages.length - messages.findLastIndex(startsTurn));
       }),
     );
   });

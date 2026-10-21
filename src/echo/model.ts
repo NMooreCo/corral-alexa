@@ -2,6 +2,7 @@ import Anthropic, { betaRefusalFallbackMiddleware } from "@anthropic-ai/sdk";
 import type { Env } from "../env.ts";
 import { json } from "../http.ts";
 import { skillPrompt } from "../server.ts";
+import { fitConversation } from "./conversation.ts";
 import { demoGate } from "./gate.ts";
 import { ResponsesError, responsesTurn } from "./responses.ts";
 import { voiceReady } from "./voice.ts";
@@ -110,9 +111,20 @@ export function echoPage(html: string, env: Env): string {
     .replaceAll("{{passcode}}", env.DEMO_PASSCODE ? "required" : "none");
 }
 
-const MAX_BODY = 300_000;
+/** What goes to the model at most: messages, and characters of JSON (the conversation, the tools and the context). */
 const MAX_MESSAGES = 80;
+const MAX_SENT = 300_000;
 const MAX_TOOLS = 40;
+/** What the route reads at all. A longer conversation is cut to fit before it's sent; past this, it isn't read. */
+const MAX_READ = 4_000_000;
+
+/**
+ * What the device says when a turn can't go to the model. The simulator says
+ * a failed turn's message aloud, so each is a sentence for the person, not
+ * an error for a developer (that's in `detail`, and the Worker's log).
+ */
+const TOO_LONG = "That conversation got long. Start a new one and ask me again.";
+const MUDDLED = "Something went wrong with that one. Start a new conversation and ask me again.";
 
 const VOICE = `You are the voice of a smart display in a family's home (the kitchen, unless it says otherwise below): a simulated Alexa+ on an Echo Show, connected to the family's Corral over MCP. What you say is spoken aloud and shown as a caption.
 
@@ -137,21 +149,49 @@ function clip(v: unknown, max: number): string {
   return typeof v === "string" ? v.slice(0, max) : "";
 }
 
-/** The parts of a turn request this takes, after checking its shape and size. */
-function readTurn(raw: string): TurnRequest | string {
-  if (raw.length > MAX_BODY) return "That conversation is too long; start a new one.";
+/** A turn the route won't send on: its status, and what the device says. */
+interface Refusal {
+  status: 400 | 413;
+  code: "bad_request" | "too_long";
+  message: string;
+  /** For a developer: what was wrong with the request. */
+  detail?: string;
+}
+
+const refused = (r: Refusal) => json(r.status, { error: { code: r.code, message: r.message, ...(r.detail ? { detail: r.detail } : {}) } });
+const malformed = (detail: string): Refusal => ({ status: 400, code: "bad_request", message: MUDDLED, detail });
+const tooLong: Refusal = { status: 413, code: "too_long", message: TOO_LONG };
+
+function isMessage(m: unknown): m is Anthropic.Beta.BetaMessageParam {
+  const { role, content } = (m ?? {}) as { role?: unknown; content?: unknown };
+  return (role === "user" || role === "assistant") && (typeof content === "string" || (Array.isArray(content) && content.every((b) => typeof (b as { type?: unknown } | null)?.type === "string")));
+}
+
+/** The parts of a turn request this takes, after checking its shape, with the conversation cut to fit what goes to the model. */
+function readTurn(raw: string): (TurnRequest & { dropped: number }) | Refusal {
+  if (raw.length > MAX_READ) return tooLong;
   let body: Partial<TurnRequest>;
   try {
     body = JSON.parse(raw) as Partial<TurnRequest>;
   } catch {
-    return "Send JSON.";
+    return malformed("Send JSON.");
   }
-  if (!Array.isArray(body.messages) || !body.messages.length || body.messages.length > MAX_MESSAGES) return "Send between 1 and 80 messages; start a new conversation if it's longer.";
-  if (!Array.isArray(body.tools) || body.tools.length > MAX_TOOLS) return "Send at most 40 tools.";
+  if (!Array.isArray(body.messages) || !body.messages.length) return malformed("Send at least one message.");
+  if (!body.messages.every(isMessage)) return malformed("Each message needs a role (user or assistant) and content.");
+  if (!Array.isArray(body.tools) || body.tools.length > MAX_TOOLS) return malformed(`Send at most ${MAX_TOOLS} tools.`);
   for (const t of body.tools) {
-    if (!t || typeof t.name !== "string" || !/^[a-zA-Z0-9_-]{1,64}$/.test(t.name) || typeof t.input_schema !== "object") return "Each tool needs a name and an input schema.";
+    if (!t || typeof t.name !== "string" || !/^[a-zA-Z0-9_-]{1,64}$/.test(t.name) || typeof t.input_schema !== "object") return malformed("Each tool needs a name and an input schema.");
   }
-  return { messages: body.messages, tools: body.tools, context: body.context };
+  // The tools and the context go every turn; the conversation gets what's left.
+  const rest = JSON.stringify(body.tools).length + JSON.stringify(body.context ?? {}).length;
+  const messages = fitConversation(body.messages, { messages: MAX_MESSAGES, chars: MAX_SENT - rest });
+  if (!messages) return tooLong;
+  return { messages, tools: body.tools, context: body.context, dropped: body.messages.length - messages.length };
+}
+
+/** What the device says when the model's host turned a request down: that the conversation's too long, or a plain sentence. */
+function hostRefused(said: string): Response {
+  return refused(/too long|too many (input )?tokens|context (window|length)/i.test(said) ? tooLong : { status: 400, code: "bad_request", message: MUDDLED });
 }
 
 export async function modelTurn(request: Request, env: Env): Promise<Response> {
@@ -160,7 +200,9 @@ export async function modelTurn(request: Request, env: Env): Promise<Response> {
   const stopped = await demoGate(request, env, env.MODEL_LIMIT);
   if (stopped) return stopped;
   const turn = readTurn(await request.text());
-  if (typeof turn === "string") return json(400, { error: { code: "bad_request", message: turn } });
+  if ("status" in turn) return refused(turn);
+  // Says how many of the oldest messages were left out, when any were.
+  const trimmed: Record<string, string> = turn.dropped ? { "x-trimmed-messages": String(turn.dropped) } : {};
 
   const ctx = turn.context ?? {};
   // The same every turn, so it's cached.
@@ -174,6 +216,7 @@ export async function modelTurn(request: Request, env: Env): Promise<Response> {
       ? "This device is an Echo Dot, with no screen: nothing a tool shows appears here. Say what matters in words (two or three short sentences when a screen would have carried the detail), and never mention a screen, a tab or a tap."
       : "",
     clip(ctx.instructions, 2000),
+    turn.dropped ? "The start of this conversation was left out to keep it short." : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -181,14 +224,14 @@ export async function modelTurn(request: Request, env: Env): Promise<Response> {
   if (provider.api === "responses") {
     try {
       const message = await responsesTurn({ baseURL: provider.baseURL, apiKey: provider.apiKey, model: provider.model, instructions: `${standing}\n\n${now}`, messages: turn.messages, tools: turn.tools });
-      return json(200, message, { "x-model-provider": provider.id });
+      return json(200, message, { "x-model-provider": provider.id, ...trimmed });
     } catch (err) {
       if (!(err instanceof ResponsesError)) throw err;
       // The host's own words stay in the Worker's log; the page gets a plain sentence.
       console.error(`${provider.name} answered ${err.status}: ${err.message}`);
       if (err.status === 401 || err.status === 403) return json(502, { error: { code: "model_key", message: `${provider.name} didn't accept the simulator's key or model access.` } });
       if (err.status === 429) return json(429, { error: { code: "rate_limited", message: `${provider.name} is busy. Try again in a moment.` } });
-      if (err.status === 400) return json(400, { error: { code: "bad_request", message: err.message } });
+      if (err.status === 400) return hostRefused(err.message);
       return json(502, { error: { code: "model_error", message: `${provider.name} answered ${err.status}.` } });
     }
   }
@@ -213,13 +256,17 @@ export async function modelTurn(request: Request, env: Env): Promise<Response> {
       tools: turn.tools,
       messages: turn.messages,
     });
-    return json(200, message, { "x-model-provider": provider.id });
+    return json(200, message, { "x-model-provider": provider.id, ...trimmed });
   } catch (err) {
     if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
       return json(502, { error: { code: "model_key", message: `${provider.name} didn't accept the simulator's key or model access.` } });
     }
     if (err instanceof Anthropic.RateLimitError) return json(429, { error: { code: "rate_limited", message: `${provider.name} is busy. Try again in a moment.` } });
-    if (err instanceof Anthropic.BadRequestError) return json(400, { error: { code: "bad_request", message: err.message } });
+    if (err instanceof Anthropic.BadRequestError) {
+      // The host's own words stay in the Worker's log; the device says a plain sentence.
+      console.error(`${provider.name} answered 400: ${err.message}`);
+      return hostRefused(err.message);
+    }
     if (err instanceof Anthropic.APIError) return json(502, { error: { code: "model_error", message: `${provider.name} answered ${err.status ?? "with an error"}.` } });
     throw err;
   }

@@ -13,6 +13,21 @@ const turn = (messages: unknown[], tools: unknown[] = [{ name: "show_today", des
 
 afterEach(() => vi.unstubAllGlobals());
 
+/** What the device says when a turn can't go to the model. */
+const TOO_LONG = "That conversation got long. Start a new one and ask me again.";
+const MUDDLED = "Something went wrong with that one. Start a new conversation and ask me again.";
+
+/** What someone asked to start turn `i`. */
+const asked = (i: number) => ({ role: "user", content: [{ type: "text", text: "(Alexa recognized the voice: Nick Rivera, Parent.)" }, { type: "text", text: `Question ${i}` }] });
+/** `turns` turns of a conversation, each a question, a tool call, its 12 KB result and an answer. */
+const conversation = (turns: number) =>
+  Array.from({ length: turns }, (_, i) => [
+    asked(i),
+    { role: "assistant", content: [{ type: "tool_use", id: `toolu_${i}`, name: "show_today", input: {} }] },
+    { role: "user", content: [{ type: "tool_result", tool_use_id: `toolu_${i}`, content: "x".repeat(12_000) }] },
+    { role: "assistant", content: [{ type: "text", text: `Answer ${i}` }] },
+  ]).flat();
+
 describe("the simulated Echo Show", () => {
   it("serves its page in sample mode", async () => {
     const res = await call({ BACKEND: "sample" }, "/echo");
@@ -88,14 +103,86 @@ describe("the simulated Echo Show", () => {
     expect(await samePasscode("", "ranch")).toBe(false);
   });
 
-  it("refuses an oversized or malformed turn before it costs anything", async () => {
+  it("refuses a malformed turn before it costs anything, with a sentence the device can say", async () => {
     const env: Env = { BACKEND: "sample", BEDROCK_API_KEY: "key" };
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
-    expect((await call(env, "/echo/model", turn([]))).status).toBe(400);
-    expect((await call(env, "/echo/model", turn([{ role: "user", content: "hi" }], [{ name: "bad name!", input_schema: {} }]))).status).toBe(400);
-    expect((await call(env, "/echo/model", turn(Array.from({ length: 81 }, () => ({ role: "user", content: "hi" }))))).status).toBe(400);
+    const malformed = [turn([]), turn([{ role: "user", content: "hi" }], [{ name: "bad name!", input_schema: {} }]), turn([{ role: "robot", content: "hi" }]), { method: "POST", body: "{not json" }];
+    for (const init of malformed) {
+      const res = await call(env, "/echo/model", init);
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: { code: "bad_request", message: MUDDLED, detail: expect.any(String) } });
+    }
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("drops a long conversation's oldest whole turns to fit, never a tool's call without its result", async () => {
+    const sent: { messages: { role: string; content: { type: string; id?: string; tool_use_id?: string; text?: string }[] | string }[]; system: { text: string }[] }[] = [];
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      sent.push(await new Request(input, init).json());
+      return Response.json({ id: "msg_1", type: "message", role: "assistant", model: "m", content: [{ type: "text", text: "Hi." }], stop_reason: "end_turn", stop_sequence: null, usage: { input_tokens: 1, output_tokens: 1 } });
+    });
+    const env: Env = { BACKEND: "sample", ANTHROPIC_API_KEY: "key" };
+    // 30 turns of 4 messages, each with a 12 KB tool result, then a new question: 121 messages and about 370 KB.
+    const long = [...conversation(30), { role: "user", content: "What's going on tonight?" }];
+    const res = await call(env, "/echo/model", turn(long));
+    expect(res.status).toBe(200);
+    const kept = sent[0]!.messages;
+    expect(kept.length).toBeLessThanOrEqual(80);
+    expect(JSON.stringify(kept).length).toBeLessThanOrEqual(300_000);
+    // The latest of it, from the start of a turn, as it was: turns go four at a time, so it starts at the 13th (turn 12).
+    expect(kept).toEqual(long.slice(48));
+    expect(kept[0]).toEqual(asked(12));
+    expect(res.headers.get("x-trimmed-messages")).toBe("48");
+    // Every tool result still follows its call, and the model is told the start was left out.
+    kept.forEach((m, i) => {
+      for (const b of typeof m.content === "string" ? [] : m.content) {
+        if (b.type === "tool_result") expect((kept[i - 1]!.content as { id?: string }[]).map((c) => c.id)).toContain(b.tool_use_id);
+      }
+    });
+    expect(sent[0]!.system[1]!.text).toContain("The start of this conversation was left out to keep it short.");
+  });
+
+  it("keeps where the kept part starts for a few turns, so the model's host can reuse what it cached", async () => {
+    const firsts: unknown[] = [];
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      firsts.push(((await new Request(input, init).json()) as { messages: unknown[] }).messages[0]);
+      return Response.json({ id: "msg_1", type: "message", role: "assistant", model: "m", content: [{ type: "text", text: "Hi." }], stop_reason: "end_turn", stop_sequence: null, usage: { input_tokens: 1, output_tokens: 1 } });
+    });
+    const env: Env = { BACKEND: "sample", ANTHROPIC_API_KEY: "key" };
+    for (const turns of [30, 31, 32]) expect((await call(env, "/echo/model", turn([...conversation(turns), { role: "user", content: "And tomorrow?" }]))).status).toBe(200);
+    expect(firsts).toEqual([asked(12), asked(12), asked(16)]);
+    // A conversation that fits goes as it is.
+    expect((await call(env, "/echo/model", turn(conversation(3)))).headers.get("x-trimmed-messages")).toBeNull();
+  });
+
+  it("says the conversation got long when even its latest turn won't fit, rather than an error", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const env: Env = { BACKEND: "sample", ANTHROPIC_API_KEY: "key" };
+    const huge = await call(env, "/echo/model", turn([...conversation(2), { role: "user", content: "x".repeat(310_000) }]));
+    expect(huge.status).toBe(413);
+    expect(await huge.json()).toEqual({ error: { code: "too_long", message: TOO_LONG } });
+    // Past what the route reads at all.
+    const enormous = await call(env, "/echo/model", turn([{ role: "user", content: "x".repeat(4_100_000) }]));
+    expect(await enormous.json()).toEqual({ error: { code: "too_long", message: TOO_LONG } });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("says a plain sentence when the model's host turns a request down, keeping the host's own words for the log", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const env: Env = { BACKEND: "sample", ANTHROPIC_API_KEY: "key" };
+    const host = (message: string) => vi.stubGlobal("fetch", async () => Response.json({ type: "error", error: { type: "invalid_request_error", message } }, { status: 400 }));
+    host("messages.3: `tool_use` ids were found without `tool_result` blocks immediately after: toolu_9");
+    const muddled = await call(env, "/echo/model", turn([{ role: "user", content: "hi" }]));
+    expect(muddled.status).toBe(400);
+    expect(await muddled.json()).toEqual({ error: { code: "bad_request", message: MUDDLED } });
+    expect(logged.mock.calls.flat().join(" ")).toContain("toolu_9");
+    host("prompt is too long: 1050000 tokens > 1000000 maximum");
+    const long = await call(env, "/echo/model", turn([{ role: "user", content: "hi" }]));
+    expect(long.status).toBe(413);
+    expect(await long.json()).toEqual({ error: { code: "too_long", message: TOO_LONG } });
+    logged.mockRestore();
   });
 
   it("asks Claude on Bedrock with the household skill, the household's time and low effort", async () => {
@@ -215,6 +302,11 @@ describe("the simulated Echo Show", () => {
     expect(await denied.json()).toMatchObject({ error: { code: "model_key" } });
     vi.stubGlobal("fetch", async () => Response.json({ output: [{ type: "message", content: [{ type: "refusal", refusal: "No." }] }] }));
     expect(await (await call(env, "/echo/model", turn([{ role: "user", content: "hi" }]))).json()).toMatchObject({ content: [], stop_reason: "refusal" });
+    // A request it won't take is said as a sentence the device can say, not in the host's words.
+    vi.stubGlobal("fetch", async () => Response.json({ error: { message: "Invalid 'input[3].call_id': no matching function call." } }, { status: 400 }));
+    const muddled = await call(env, "/echo/model", turn([{ role: "user", content: "hi" }]));
+    expect(muddled.status).toBe(400);
+    expect(await muddled.json()).toEqual({ error: { code: "bad_request", message: MUDDLED } });
   });
 
   it("says each answer with Amazon Polly, signed with the IAM key, behind the passcode", async () => {
