@@ -40,10 +40,12 @@ export interface Env {
   POLLY_ENGINE?: string;
   /** Per-visitor limit on the simulator's voice calls. */
   VOICE_LIMIT?: RateLimit;
-  /** When set, the simulator asks for this before it talks to the model. */
+  /** When set, the simulator asks for this before it talks to the model or the voice, starts a household over or sets its clock. */
   DEMO_PASSCODE?: string;
   /** Per-visitor limit on the simulator's model calls. */
   MODEL_LIMIT?: RateLimit;
+  /** Per-visitor limit on starting a sample household over and setting its clock. */
+  HOUSEHOLD_LIMIT?: RateLimit;
   /** "true" answers the simulator with a practice model instead, for building without a model key. Never deployed. */
   MODEL_MOCK?: string;
   /** Local development only: runs the sample household this many minutes ahead (or behind), to record a demo at another hour. Never deployed. */

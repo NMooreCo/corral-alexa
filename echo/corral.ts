@@ -306,6 +306,13 @@ export function corral(o: CorralOptions): { extension: Extension; playDemo: (sho
     eveningBtn.textContent = evening ? "Back to the real time" : "Make it evening";
   }
 
+  /** What a household route said when the per-visitor limit stopped it; null for any other answer. */
+  async function limited(res: Response | null): Promise<string | null> {
+    if (res?.status !== 429) return null;
+    const body = (await res.json().catch(() => null)) as { error?: { message?: unknown } } | null;
+    return typeof body?.error?.message === "string" ? body.error.message : "That's a lot at once. Give it a minute.";
+  }
+
   /** The home screen: today, unless the device has no screen. */
   async function home() {
     if (sim.device.surface === "none") return;
@@ -330,7 +337,7 @@ export function corral(o: CorralOptions): { extension: Extension; playDemo: (sho
       return false;
     }
     if (!res?.ok) {
-      sim.caption("", "Couldn't set the household's clock. Try again.");
+      sim.caption("", (await limited(res)) ?? "Couldn't set the household's clock. Try again.");
       return false;
     }
     await readClock();
@@ -359,7 +366,7 @@ export function corral(o: CorralOptions): { extension: Extension; playDemo: (sho
       waitingStartOver = true;
       return askForPasscode(tried ? "That passcode didn't work. Check it and try again." : "Enter the demo passcode to start the household over.");
     }
-    if (!res?.ok) return sim.caption("", "Couldn't start the household over. Try again.");
+    if (!res?.ok) return sim.caption("", (await limited(res)) ?? "Couldn't start the household over. Try again.");
     forgetAlerts();
     sim.newConversation();
     // The household starts over from its seed, which may name different people than it did.

@@ -98,6 +98,12 @@ async function startOver() {
       tell(frames[0]!, "passcode", pass ? "That passcode didn't work. Check it and try again." : "Enter the demo passcode to start the day over.");
       return;
     }
+    if (res.status === 429) {
+      // The per-visitor limit: trying again straight away won't help.
+      const body = (await res.json().catch(() => null)) as { error?: { message?: unknown } } | null;
+      syncEl.textContent = typeof body?.error?.message === "string" ? body.error.message : "That's a lot at once. Give it a minute.";
+      return;
+    }
     if (!res.ok) throw new Error(String(res.status));
     for (const frame of frames) {
       tell(frame, "new-conversation");

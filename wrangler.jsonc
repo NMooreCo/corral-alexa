@@ -22,10 +22,12 @@
   },
   // Account linking's grants and clients, simulated locally by `wrangler dev`.
   "kv_namespaces": [{ "binding": "OAUTH_KV" }],
-  // At most 20 simulator model calls and 30 spoken answers a minute per visitor.
+  // At most 20 simulator model calls, 30 spoken answers and 10 starts over or clock changes a minute per visitor,
+  // each counted before the demo passcode is checked, so guesses at it count too.
   "ratelimits": [
     { "name": "MODEL_LIMIT", "namespace_id": "4201", "simple": { "limit": 20, "period": 60 } },
-    { "name": "VOICE_LIMIT", "namespace_id": "4203", "simple": { "limit": 30, "period": 60 } }
+    { "name": "VOICE_LIMIT", "namespace_id": "4203", "simple": { "limit": 30, "period": 60 } },
+    { "name": "HOUSEHOLD_LIMIT", "namespace_id": "4205", "simple": { "limit": 10, "period": 60 } }
   ],
   // The shared sample household (sample mode): one Durable Object per household, so every device sees the same one,
   // kept in the object's own SQLite database. Named environments don't inherit this binding.
@@ -59,7 +61,8 @@
       "kv_namespaces": [],
       "ratelimits": [
         { "name": "MODEL_LIMIT", "namespace_id": "4202", "simple": { "limit": 20, "period": 60 } },
-        { "name": "VOICE_LIMIT", "namespace_id": "4204", "simple": { "limit": 30, "period": 60 } }
+        { "name": "VOICE_LIMIT", "namespace_id": "4204", "simple": { "limit": 30, "period": 60 } },
+        { "name": "HOUSEHOLD_LIMIT", "namespace_id": "4206", "simple": { "limit": 10, "period": 60 } }
       ],
       // One shared household for every visitor and device, kept through restarts (the first deploy creates the class).
       "durable_objects": { "bindings": [{ "name": "SAMPLE_HOUSEHOLDS", "class_name": "SampleHouseholdObject" }] },

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { samePasscode } from "../src/echo/gate.ts";
 import { modelLabel } from "../src/echo/model.ts";
 import worker, { type Env } from "../src/index.ts";
 
@@ -55,6 +56,36 @@ describe("the simulated Echo Show", () => {
   it("holds a visitor to the rate limit", async () => {
     const env: Env = { BACKEND: "sample", BEDROCK_API_KEY: "key", MODEL_LIMIT: { limit: async () => ({ success: false }) } as RateLimit };
     expect((await call(env, "/echo/model", turn([{ role: "user", content: "hi" }]))).status).toBe(429);
+  });
+
+  it("counts every try at the passcode against the visitor's limit, before comparing it", async () => {
+    const keys: string[] = [];
+    let left = 2;
+    const MODEL_LIMIT = { limit: async ({ key }: { key: string }) => (keys.push(key), { success: left-- > 0 }) } as unknown as RateLimit;
+    const env: Env = { BACKEND: "sample", BEDROCK_API_KEY: "key", DEMO_PASSCODE: "ranch", MODEL_LIMIT };
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const guess = (passcode: string) => {
+      const req = turn([{ role: "user", content: "hi" }]);
+      return call(env, "/echo/model", { ...req, headers: { ...req.headers, "x-demo-passcode": passcode, "cf-connecting-ip": "203.0.113.9" } });
+    };
+    expect((await guess("barn")).status).toBe(401);
+    expect((await guess("corral")).status).toBe(401);
+    // Out of tries, even the right passcode waits: the limit comes before the comparison.
+    const stopped = await guess("ranch");
+    expect(stopped.status).toBe(429);
+    expect(await stopped.json()).toMatchObject({ error: { code: "rate_limited" } });
+    expect(keys).toEqual(["203.0.113.9", "203.0.113.9", "203.0.113.9"]);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("compares the passcode whole, ignoring only stray spaces on either side", async () => {
+    expect(await samePasscode(" ranch ", "ranch")).toBe(true);
+    expect(await samePasscode("ranch", " ranch")).toBe(true);
+    expect(await samePasscode("Ranch", "ranch")).toBe(false);
+    expect(await samePasscode("ranc", "ranch")).toBe(false);
+    expect(await samePasscode("ranch hand", "ranch")).toBe(false);
+    expect(await samePasscode("", "ranch")).toBe(false);
   });
 
   it("refuses an oversized or malformed turn before it costs anything", async () => {

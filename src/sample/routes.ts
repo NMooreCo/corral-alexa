@@ -1,5 +1,6 @@
 import type { Env } from "../env.ts";
 import { json, serveMcp } from "../http.ts";
+import { demoGate, type GateWords } from "../echo/gate.ts";
 import { SharedSample } from "./shared.ts";
 import { memoryStore } from "./store.ts";
 import { SampleRanchHolder } from "./ranch.ts";
@@ -38,17 +39,18 @@ function localSample(id: string): LocalSample {
 }
 const localHousehold = (id: string): SharedSample => localSample(id).household;
 
-function passcodeOk(request: Request, env: Env): boolean {
-  return !env.DEMO_PASSCODE || request.headers.get("x-demo-passcode")?.trim() === env.DEMO_PASSCODE.trim();
-}
+/** What the household's own changes say when the gate stops them. */
+const LIMITED = "That's a lot of changes to the household at once. Give it a minute.";
+const CLOCK_GATE: GateWords = { passcode: "Enter the demo passcode to set the household's clock.", limited: LIMITED };
+const RESET_GATE: GateWords = { passcode: "Enter the demo passcode to start the household over.", limited: LIMITED };
 
 /**
  * Sample mode's household routes. /mcp goes to the household's Durable
  * Object, which serves MCP from it. /household says its name, day, change
  * counter and clock. POST /household/reset starts it over (for a fresh demo
  * take), and POST /household/clock with {"mode": "evening"} or "now" sets its
- * clock and starts it over at that hour, both after the demo passcode when
- * the server has one.
+ * clock and starts it over at that hour, both after the per-visitor limit
+ * and the demo passcode when the server has them.
  */
 export async function householdRoute(request: Request, env: Env): Promise<Response | null> {
   const url = new URL(request.url);
@@ -72,7 +74,8 @@ export async function householdRoute(request: Request, env: Env): Promise<Respon
 
   if (url.pathname === "/household/clock") {
     if (request.method !== "POST") return json(405, { error: { code: "method", message: 'POST /household/clock with {"mode": "evening"}, {"mode": "morning"} or {"mode": "now"}.' } }, { allow: "POST" });
-    if (!passcodeOk(request, env)) return json(401, { error: { code: "passcode", message: "Enter the demo passcode to set the household's clock." } });
+    const stopped = await demoGate(request, env, env.HOUSEHOLD_LIMIT, CLOCK_GATE);
+    if (stopped) return stopped;
     const body = (await request.json().catch(() => null)) as { mode?: unknown } | null;
     if (!CLOCK_MODES.includes(body?.mode as ClockMode)) return json(400, { error: { code: "mode", message: 'The mode is "evening", "morning" or "now".' } });
     const mode = body!.mode as ClockMode;
@@ -84,7 +87,8 @@ export async function householdRoute(request: Request, env: Env): Promise<Respon
   }
 
   if (request.method !== "POST") return json(405, { error: { code: "method", message: "POST /household/reset to start the household over." } }, { allow: "POST" });
-  if (!passcodeOk(request, env)) return json(401, { error: { code: "passcode", message: "Enter the demo passcode to start the household over." } });
+  const stopped = await demoGate(request, env, env.HOUSEHOLD_LIMIT, RESET_GATE);
+  if (stopped) return stopped;
   if (!object) localSample(id).ranch.reset();
   const status = object ? await object.reset() : localHousehold(id).reset();
   return json(200, { household: id, ...status });

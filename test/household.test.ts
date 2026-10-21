@@ -392,6 +392,26 @@ describe("the sample household's Durable Object", () => {
     expect((await call(env, "/household/reset", { method: "POST" })).status).toBe(200);
   });
 
+  it("holds starting over and setting the clock to a per-visitor limit, counted before the passcode", async () => {
+    const keys: string[] = [];
+    let left = 2;
+    const HOUSEHOLD_LIMIT = { limit: async ({ key }: { key: string }) => (keys.push(key), { success: left-- > 0 }) } as unknown as RateLimit;
+    const { env } = sampleEnv({ DEMO_PASSCODE: "hay bale", HOUSEHOLD_LIMIT });
+    const from = { "cf-connecting-ip": "203.0.113.7" };
+    const clock = (mode: string) => call(env, "/household/clock", { method: "POST", headers: { ...from, "content-type": "application/json", "x-demo-passcode": "hay bale" }, body: JSON.stringify({ mode }) });
+    expect((await call(env, "/household/reset", { method: "POST", headers: { ...from, "x-demo-passcode": "straw" } })).status).toBe(401);
+    expect((await clock("evening")).status).toBe(200);
+    // Out of tries, even the right passcode waits a minute.
+    const reset = await call(env, "/household/reset", { method: "POST", headers: { ...from, "x-demo-passcode": "hay bale" } });
+    expect(reset.status).toBe(429);
+    expect(await reset.json()).toMatchObject({ error: { code: "rate_limited", message: "That's a lot of changes to the household at once. Give it a minute." } });
+    expect((await clock("now")).status).toBe(429);
+    expect(keys).toEqual(Array(4).fill("203.0.113.7"));
+    // The household is still on the evening the last change that got through set, and reading it isn't limited.
+    expect(await (await call(env, "/household", { headers: from })).json()).toMatchObject({ clock: { evening: true } });
+    expect(keys).toHaveLength(4);
+  });
+
   it("offers screens its change counter, kept from the model", async () => {
     const { env } = sampleEnv();
     const kitchen = await device(env, "kitchen");
