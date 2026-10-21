@@ -4,7 +4,7 @@ import { serveMcp } from "../src/http.ts";
 import type { Household } from "../src/household.ts";
 import { GreenhouseController } from "../src/ranch/greenhouse.ts";
 import { Ranch } from "../src/ranch/index.ts";
-import { briefingView, ranchView } from "../src/ranch/views.ts";
+import { briefingView, ranchView, soon } from "../src/ranch/views.ts";
 import { clearWeatherCache } from "../src/ranch/weather.ts";
 import { SampleHousehold } from "../src/sample/index.ts";
 import { SAMPLE_GREENHOUSE, SampleCollars, SampleDevices, sampleRanch, sampleRanchConfig, simulatedController } from "../src/sample/ranch.ts";
@@ -146,6 +146,22 @@ describe("reading the ranch from slow sources", () => {
     // It ran just as it would have, one rule after another.
     expect((await ranch.automations.list()).find((a) => a.name === "Freeze protection")!.lastRun).toMatchObject({ at: "Today at 5:01 PM", failed: [] });
     for (const name of ["Horse tank heater", "Barn heater"]) expect((await ranch.devices.all()).find((d) => d.name === name)!.state).toBe("on");
+  });
+
+  it("waits on a slow forecast only so long, and leaves no timer running once there's an answer, so the request can end", async () => {
+    vi.useFakeTimers();
+    try {
+      await expect(soon(Promise.resolve("forecast"), 2500)).resolves.toBe("forecast");
+      expect(vi.getTimerCount()).toBe(0);
+      await expect(soon(Promise.reject(new Error("Open-Meteo answered 502")), 2500)).rejects.toThrow("502");
+      expect(vi.getTimerCount()).toBe(0);
+      const late = expect(soon(new Promise(() => {}), 2500)).rejects.toThrow("Not yet.");
+      await vi.advanceTimersByTimeAsync(2500);
+      await late;
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("asks for the morning briefing's history with the rest, not after", async () => {

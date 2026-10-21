@@ -81,8 +81,17 @@ function switchedTogether(texts: string[]): string {
 /** The morning briefing's "since last night" starts at this hour the evening before. */
 const OVERNIGHT_FROM = "18:00";
 const MAX_OVERNIGHT_LINES = 6;
-function soon<T>(p: Promise<T>, ms = WEATHER_WAIT_MS): Promise<T> {
-  return Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new ToolError("Not yet.")), ms))]);
+
+/**
+ * `p`, or "Not yet." once `ms` pass without it. The timer goes as soon as
+ * either comes, so it never holds a Worker's request open after its answer.
+ */
+export function soon<T>(p: Promise<T>, ms = WEATHER_WAIT_MS): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new ToolError("Not yet.")), ms);
+  });
+  return Promise.race([p, late]).finally(() => clearTimeout(timer));
 }
 
 /** Places in a stable order: the ones the household puts first, then as their devices come. */
