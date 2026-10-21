@@ -54,6 +54,30 @@ describe("the simulated Echo Show", () => {
     expect(await linked.json()).toMatchObject({ backend: "corral" });
   });
 
+  it("sends its pages as HTML only, with no address passed on, framed only by this server's own pages", async () => {
+    for (const path of ["/echo", "/echo?devices=2", "/preview"]) {
+      const res = await call({ BACKEND: "sample" }, path);
+      expect(res.status, path).toBe(200);
+      expect(Object.fromEntries(["x-content-type-options", "referrer-policy", "x-frame-options", "content-security-policy"].map((h) => [h, res.headers.get(h)]))).toEqual({
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "no-referrer",
+        "x-frame-options": "SAMEORIGIN",
+        "content-security-policy": "frame-ancestors 'self'",
+      });
+    }
+    // The two-device page frames the simulator from this same origin, which that policy allows.
+    expect(await (await call({ BACKEND: "sample" }, "/echo?devices=2")).text()).toMatch(/<iframe id="kitchen"/);
+  });
+
+  it("asks crawlers to stay out, in either mode", async () => {
+    for (const env of [{ BACKEND: "sample" }, { BACKEND: "corral", CORRAL_URL: "https://corral.example", OAUTH_KV: {} as KVNamespace }] as Env[]) {
+      const res = await call(env, "/robots.txt");
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+      expect(await res.text()).toBe("User-agent: *\nDisallow: /\n");
+    }
+  });
+
   it("isn't there in corral mode, where calls need account linking", async () => {
     const res = await call({ BACKEND: "corral", CORRAL_URL: "https://corral.example", OAUTH_KV: {} as KVNamespace }, "/echo");
     expect(res.status).toBe(404);

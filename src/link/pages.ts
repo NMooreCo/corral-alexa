@@ -1,4 +1,6 @@
-/** A small page for when linking can't go on, said for the person holding the phone. */
+import { PAGE_HEADERS } from "../http.ts";
+
+/** A small page for when linking can't go on, said for the person holding the phone. Nothing may frame it. */
 export function messagePage(status: number, title: string, message: string): Response {
   const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
   const html = `<!doctype html>
@@ -10,6 +12,7 @@ export function messagePage(status: number, title: string, message: string): Res
     headers: {
       "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store",
+      ...PAGE_HEADERS,
       "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'",
       "x-frame-options": "DENY",
     },

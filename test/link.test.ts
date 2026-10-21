@@ -260,6 +260,11 @@ describe("linking an Alexa account to Corral", () => {
     const res = await call(`/callback?${new URLSearchParams({ code: "corral-code", state })}`);
     expect(res.status).toBe(400);
     expect(await res.text()).toContain("This sign-in has run out");
+    // A page about signing in is HTML only, passes no address on, and nothing may frame it.
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(res.headers.get("referrer-policy")).toBe("no-referrer");
+    expect(res.headers.get("x-frame-options")).toBe("DENY");
+    expect(res.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
   });
 
   it("refuses a redirect address Alexa's client doesn't have, without redirecting", async () => {

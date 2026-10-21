@@ -1,6 +1,6 @@
 import type { OAuthProvider } from "@cloudflare/workers-oauth-provider";
 import type { Env } from "./env.ts";
-import { json, notFound, siteRoute } from "./http.ts";
+import { htmlPage, json, notFound, siteRoute } from "./http.ts";
 import { linkingProvider, protectedResource } from "./link/provider.ts";
 import { householdRoute } from "./sample/routes.ts";
 import { echoHtml, echoPairHtml, previewHtml } from "./widgets.generated.ts";
@@ -48,10 +48,9 @@ export default {
     const site = siteRoute(request, "sample");
     if (site) return site;
     // The screen preview and the simulated Echo Show talk to /mcp from the browser, which the sample allows without a credential.
-    const page = (html: string) => new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
-    if (url.pathname === "/preview") return page(previewHtml);
-    // /echo?devices=2 is two Echo Shows, a kitchen's and a barn's, on one shared household.
-    if (url.pathname === "/echo" && request.method === "GET") return page(echoPage(url.searchParams.get("devices") === "2" ? echoPairHtml : echoHtml, env));
+    if (url.pathname === "/preview") return htmlPage(previewHtml);
+    // /echo?devices=2 is two Echo Shows, a kitchen's and a barn's, on one shared household: it frames /echo twice, from this origin.
+    if (url.pathname === "/echo" && request.method === "GET") return htmlPage(echoPage(url.searchParams.get("devices") === "2" ? echoPairHtml : echoHtml, env));
     if (url.pathname === "/echo/model" && request.method === "POST") return env.MODEL_MOCK === "true" ? mockTurn(request) : modelTurn(request, env);
     // The simulator's voice: Amazon Polly says each answer when it's set up.
     if (url.pathname === "/echo/voice" && request.method === "POST") return voiceTurn(request, env);
