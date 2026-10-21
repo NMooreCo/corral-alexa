@@ -17,12 +17,16 @@ Written while building, so each entry is what actually happened. For the Devpost
 - **Used for:** the bridge's MCP server, serving 2025-11-25 to Alexa+ and 2026-07-28 to current clients from one endpoint, stateless.
 - **Worked well:** stateless Streamable HTTP fits serverless hosting exactly; authorization (RFC 9728 metadata, RFC 8707 resource indicators) maps cleanly onto an OAuth library.
 - **Needs work:** serving two protocol eras means two discovery stories (`initialize` versus `server/discover`) and two sets of headers.
+- **Onboarding:** the lifecycle, transport and authorization pages were enough to have a server answering on the first day; serving both eras took the most reading.
+- **Build again?** Yes. It's the one integration that works across assistants.
 
 ### MCP TypeScript SDK v2
 
 - **Used for:** `McpServer` and `createMcpHandler` on Cloudflare Workers.
 - **Worked well:** one factory serves both protocol eras; the Workers export condition picks an edge-safe JSON Schema validator automatically.
 - **Needs work:** the move from the single v1 package to `@modelcontextprotocol/server`, `core` and `client` isn't obvious from npm alone (F7).
+- **Onboarding:** quick once we knew to install the v2 packages; until then, MCP Apps 2.x wouldn't load against the v1 SDK (F7).
+- **Build again?** Yes.
 
 ### MCP Apps (`@modelcontextprotocol/ext-apps` 2.0.3)
 
@@ -30,6 +34,64 @@ Written while building, so each entry is what actually happened. For the Devpost
 - **Worked well:** `App` and `AppBridge` are small and clear; the Patterns page (app-only tools, polling with teardown, display modes, CSP) answered every design question.
 - **Portability, tried for real (October 18):** the same server added to Claude as a custom connector rendered our screens in the chat with no changes: the tabbed home screen, taps between tabs, the property map and the polling refresh all worked. Our one layout bug showed up only there (a stacked layout that didn't stretch to a narrower frame), which is a good argument for previewing at more than one host width.
 - **Needs work:** see F7; and the patterns live in a separate page from the API reference, so they're easy to miss.
+- **Onboarding:** a first screen rendered in our stand-in host soon after we found the Patterns page; testing sandboxed screens took longer (F10).
+- **Build again?** Yes. Screens that work in any MCP Apps host are worth the sandbox's constraints.
+
+### Amazon Polly
+
+- **Used for:** the simulated Echo Show's voice. The Worker's `POST /echo/voice` signs `SynthesizeSpeech` with AWS Signature Version 4 (the `aws4fetch` library) using an IAM user allowed only `polly:SynthesizeSpeech`, behind the demo passcode and a per-visitor rate limit; the page plays the MP3 (neural Joanna) and falls back to the browser's voice if Polly doesn't answer.
+- **Worked well:** `SynthesizeSpeech` answered on a brand-new account right away, the request is one small JSON body, and the neural engine starts speaking in about half a second from a Worker (277 ms median on the live demo).
+- **Needs work:** the generative engine took 1.2 to 2.2 seconds for a sentence or two, which is the difference between a device that answers and one that hesitates; streaming the first audio sooner would let a voice product use the better voices.
+- **Onboarding:** quick; signing the request with SigV4 from a Worker was the only real work.
+- **Build again?** Yes.
+
+### Amazon Bedrock
+
+- **Used for:** a second route for the simulator's model: Claude Opus 5.5 through Bedrock's Messages API endpoint with a Bedrock API key, and any other Bedrock model through its Responses API, translated so the page doesn't change (`src/echo/model.ts`, `src/echo/responses.ts`).
+- **Worked well:** the Messages API endpoint takes a Bedrock API key, so the plain Anthropic SDK runs on Cloudflare Workers with no request signing.
+- **Needs work:** a new account, even on the Paid plan, had every Claude model's quota at 0, so the first call was a ThrottlingException; Opus 5.5 said "not available for this account"; the quota requests were declined as the account was too new; Service Quotas showed capacity for other models that the account still couldn't use (F8, F9, F19). None of this is on the model catalog or in the API key flow.
+- **Onboarding:** we never reached a live answer, so the route is tested against stubbed responses only, and the demo runs on the Claude API.
+- **Build again?** Yes, once the account can run a model; the code path is ready.
+
+### Claude API (Anthropic TypeScript SDK)
+
+- **Used for:** the simulator's stand-in for Alexa+'s model: Claude Opus 5.5 at low effort decides what to say and which tools to call, with a cached system prompt built from our Agent Skill and Anthropic's refusal fallback.
+- **Worked well:** tool use maps directly onto MCP tools; low effort keeps a cached turn around two seconds; prompt caching makes later turns cheap.
+- **Needs work:** the first turn after a few idle minutes pays for a cold cache (up to about 6 seconds on the demo); a longer cache lifetime costs more, so a demo that sits idle between visitors is always choosing between cost and the first answer's speed.
+- **Onboarding:** the SDK ran on Cloudflare Workers unchanged, and tool use needed no adapter for MCP's tool definitions.
+- **Build again?** Yes.
+
+### Cloudflare Workers and Durable Objects
+
+- **Used for:** the whole server (MCP, account linking, the simulator's page, the model and voice routes) on Workers, and each demo household as a SQLite-backed Durable Object that serves MCP from inside itself.
+- **Worked well:** stateless Streamable HTTP fits Workers exactly; a Durable Object per household gives every visitor their own state that survives deploys; deploys take seconds.
+- **Needs work:** a fetch to a LAN address hangs under `global_fetch_strictly_public` (F16); Durable Object bindings don't carry across environments, and `wrangler dev --remote` can't run SQLite-backed objects, so the MCP flow is local-only to test (F17).
+- **Onboarding:** fast; we had a deployed MCP endpoint the first day.
+- **Build again?** Yes.
+
+### Cloudflare workers-oauth-provider
+
+- **Used for:** Alexa+ account linking: OAuth 2.1 with PKCE, refresh tokens, and Corral's own tokens kept encrypted in each grant.
+- **Worked well:** a complete provider in one wrapper; the token exchange callback made refreshing Corral's upstream token straightforward.
+- **Needs work:** it serves a path resource's protected resource metadata only under the path, while Alexa+ reads it at the root (F2), and its 401 carries a `WWW-Authenticate` header that breaks Alexa's linking (F3). We serve the root document ourselves and strip the header; our upstream proposal for a root option was declined, since RFC 9728 puts the document under the path.
+- **Onboarding:** smooth for the standard flow; only Alexa's two differences (F2, F3) needed workarounds.
+- **Build again?** Yes.
+
+### Open-Meteo
+
+- **Used for:** the ranch's forecast, which drives the freeze plan and the freeze automation.
+- **Worked well:** no key and a simple query, with hourly and daily values in one answer.
+- **Needs work:** an occasional slow first answer (about 700 ms), which we hide by letting Cloudflare's edge keep the forecast while it's fresh.
+- **Onboarding:** minutes.
+- **Build again?** Yes.
+
+### Web Speech API
+
+- **Used for:** listening in the simulated Echo (push to talk, hands-free after "Alexa", follow-up listening), and its voice when Polly isn't available.
+- **Worked well:** no setup at all in Chrome and Edge.
+- **Needs work:** speech recognition isn't in every browser, and speech synthesis sometimes never fires its end event, so the page also polls to know when it's quiet.
+- **Onboarding:** minutes.
+- **Build again?** Yes, for a simulator; a product would want a server-side recognizer.
 
 ## Feature requests
 
