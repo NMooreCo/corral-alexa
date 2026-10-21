@@ -23,14 +23,14 @@ if (!existsSync(cli)) {
   process.exit(1);
 }
 
-/** The model's credentials from .dev.vars, for what the environment doesn't already set. */
+/** The model's credentials from .dev.vars when the environment has no key of its own: the key and its base URL go together. */
 function devVars() {
   const file = new URL("../.dev.vars", import.meta.url);
-  if (!existsSync(file)) return {};
+  if (process.env.ANTHROPIC_API_KEY || !existsSync(file)) return {};
   const vars = {};
   for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
     const m = /^\s*(ANTHROPIC_API_KEY|ANTHROPIC_BASE_URL)\s*=\s*(.*?)\s*$/.exec(line);
-    if (m && !process.env[m[1]]) vars[m[1]] = m[2].replace(/^(["'])(.*)\1$/, "$2");
+    if (m) vars[m[1]] = m[2].replace(/^(["'])(.*)\1$/, "$2");
   }
   return vars;
 }
