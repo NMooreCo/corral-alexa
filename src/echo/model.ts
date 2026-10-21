@@ -2,7 +2,7 @@ import Anthropic, { betaRefusalFallbackMiddleware } from "@anthropic-ai/sdk";
 import type { Env } from "../env.ts";
 import { json } from "../http.ts";
 import { skillPrompt } from "../server.ts";
-import { fitConversation } from "./conversation.ts";
+import { fitConversation, startsTurn } from "./conversation.ts";
 import { demoGate } from "./gate.ts";
 import { ResponsesError, responsesTurn } from "./responses.ts";
 import { voiceReady } from "./voice.ts";
@@ -134,6 +134,7 @@ const VOICE = `You are the voice of a smart display in a family's home (the kitc
 - Answer what they asked. Bring up something else only when it's urgent (an animal outside the fence before a freeze), never just because a tool mentioned it.
 - Ask at most one question, and make it the very last thing you say: nothing after it.
 - When a tool shows a screen (like show_today), the screen is already in front of them: say one line about it, not everything on it.
+- Lines that start "(It's now" say the time where the household is as someone speaks.
 - Lines that start "(On the screen" tell you what someone just did by tapping the display.
 - Lines that start "(Alexa recognized the voice" say who is speaking now, as Alexa+ knows family members by voice; "(Alexa doesn't recognize this voice" means a guest. The tools already answer as that person and apply their rules, so use their first name only now and then (a greeting, or when it matters, not every answer), "me" and "my" mean them, and pass them as by or assignees when they mean themselves.
 - You help with this household's day and its ranch. For anything else, say briefly that you can help with the family's calendar, chores, lists, whereabouts, points and supplies, and the ranch's devices, weather and animals.`;
@@ -189,6 +190,29 @@ function readTurn(raw: string): (TurnRequest & { dropped: number }) | Refusal {
   return { messages, tools: body.tools, context: body.context, dropped: body.messages.length - messages.length };
 }
 
+/** Whether the conversation's latest turn says the time itself, as the simulator's page does: "(It's now Friday, October 16, 2026 at 8:17 PM.)". */
+function saysTime(messages: Anthropic.Beta.BetaMessageParam[]): boolean {
+  const said = messages.findLast(startsTurn)?.content ?? "";
+  return (typeof said === "string" ? [said] : said.map((b) => (b.type === "text" ? b.text : ""))).some((t) => t.startsWith("(It's now "));
+}
+
+/**
+ * The conversation with a cache breakpoint on its last block. Everything
+ * before it (the tools, the instructions and the conversation so far) is then
+ * kept for a few minutes, and the next call, which repeats all of it, reads it
+ * back at a tenth of the price. The page keeps the conversation as it was
+ * sent, so the breakpoint is only on what goes to the model.
+ */
+function cachedThrough(messages: Anthropic.Beta.BetaMessageParam[]): Anthropic.Beta.BetaMessageParam[] {
+  const last = messages.at(-1);
+  if (last?.role !== "user") return messages;
+  const blocks: Anthropic.Beta.BetaContentBlockParam[] = typeof last.content === "string" ? [{ type: "text", text: last.content }] : last.content;
+  const final = blocks.at(-1);
+  if (!final) return messages;
+  const marked = { ...final, cache_control: { type: "ephemeral" } } as Anthropic.Beta.BetaContentBlockParam;
+  return [...messages.slice(0, -1), { ...last, content: [...blocks.slice(0, -1), marked] }];
+}
+
 /** What the device says when the model's host turned a request down: that the conversation's too long, or a plain sentence. */
 function hostRefused(said: string): Response {
   return refused(/too long|too many (input )?tokens|context (window|length)/i.test(said) ? tooLong : { status: 400, code: "bad_request", message: MUDDLED });
@@ -205,10 +229,12 @@ export async function modelTurn(request: Request, env: Env): Promise<Response> {
   const trimmed: Record<string, string> = turn.dropped ? { "x-trimmed-messages": String(turn.dropped) } : {};
 
   const ctx = turn.context ?? {};
-  // The same every turn, so it's cached.
+  // The same for every conversation, so it's cached with the tools.
   const standing = `${VOICE}\n\n${skillPrompt()}`;
+  // The same all conversation, so the conversation after it can be cached too. The simulator's page says the time in
+  // each turn ("(It's now ...)"); only for a client that doesn't is the time here, where it changes every minute.
   const now = [
-    `The household's time zone is ${clip(ctx.timeZone, 64) || "unknown"}. It's now ${clip(ctx.now, 64) || "unknown"}.`,
+    `The household's time zone is ${clip(ctx.timeZone, 64) || "unknown"}.${saysTime(turn.messages) ? "" : ` It's now ${clip(ctx.now, 64) || "unknown"}.`}`,
     // The simulator can show two displays on one household, a kitchen's and a barn's.
     clip(ctx.place, 40).trim() ? `This display is in the ${clip(ctx.place, 40).trim().toLowerCase()}.` : "",
     // An Echo Dot: the same tools, but nothing they show is seen.
@@ -249,12 +275,13 @@ export async function modelTurn(request: Request, env: Env): Promise<Response> {
       // Spoken replies: low effort keeps the answer quick.
       output_config: { effort: "low" },
       system: [
-        // Tools and this block are cached.
+        // Tools and this block are cached for every conversation.
         { type: "text", text: standing, cache_control: { type: "ephemeral" } },
         { type: "text", text: now },
       ],
       tools: turn.tools,
-      messages: turn.messages,
+      // And the conversation so far, so the next call reads it back from the cache instead of paying for all of it again.
+      messages: cachedThrough(turn.messages),
     });
     return json(200, message, { "x-model-provider": provider.id, ...trimmed });
   } catch (err) {

@@ -289,6 +289,10 @@ export function corral(o: CorralOptions): { extension: Extension; playDemo: (sho
   let skewMs = 0;
   let evening = false;
   let morning = false;
+  /** Now by the household's clock. */
+  const householdNow = () => new Date(Date.now() + skewMs);
+  /** The household's time zone, from the server's instructions; this browser's until they've come. */
+  const householdZone = () => /time zone is ([A-Za-z_]+\/[A-Za-z_/]+)/.exec(sim.instructions)?.[1] ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   const eveningBtn = el("button", "", "Make it evening");
   eveningBtn.type = "button";
   eveningBtn.title = "Runs this household at 8:15 PM, when the sample's dogs wander off, and starts it over";
@@ -602,9 +606,13 @@ export function corral(o: CorralOptions): { extension: Extension; playDemo: (sho
           void watchAlerts();
         }
       },
-      // Who said it, as Alexa+ would know from the voice: each turn says, since the speaker can change mid-conversation.
-      beforeTurn: () =>
-        speaker ? [speaker === GUEST ? "(Alexa doesn't recognize this voice: a guest.)" : `(Alexa recognized the voice: ${speaker.name}${speaker.role ? `, ${speaker.role}` : ""}.)`] : [],
+      // When it was said, by the household's clock, and who said it, as Alexa+ would know from the voice: each turn says,
+      // since the speaker can change mid-conversation. The time is part of the turn, rather than the model's
+      // instructions, so the instructions stay the same and the model's host can reuse the conversation so far.
+      beforeTurn: () => [
+        `(It's now ${householdNow().toLocaleString("en-US", { timeZone: householdZone(), dateStyle: "full", timeStyle: "short" })}.)`,
+        ...(speaker ? [speaker === GUEST ? "(Alexa doesn't recognize this voice: a guest.)" : `(Alexa recognized the voice: ${speaker.name}${speaker.role ? `, ${speaker.role}` : ""}.)`] : []),
+      ],
       modelContext: () => (o.place ? { place: o.place } : {}),
       modelFailed: (failure, question) => {
         if (failure.code !== "passcode") return false;
@@ -617,7 +625,7 @@ export function corral(o: CorralOptions): { extension: Extension; playDemo: (sho
         return true;
       },
       ...(o.polly ? { speak: pollySpeak } : {}),
-      now: () => new Date(Date.now() + skewMs),
+      now: householdNow,
       timeZone: () => /time zone is ([A-Za-z_]+\/[A-Za-z_/]+)/.exec(sim.instructions)?.[1],
       // The screen's note ends with a plain sentence after its YAML header.
       screenNote: (text) => text.split("\n---\n").pop()?.trim() ?? text,

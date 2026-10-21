@@ -17,6 +17,9 @@ afterEach(() => vi.unstubAllGlobals());
 const TOO_LONG = "That conversation got long. Start a new one and ask me again.";
 const MUDDLED = "Something went wrong with that one. Start a new conversation and ask me again.";
 
+/** Messages as the page keeps them: what goes to the model has a cache breakpoint on its last block. */
+const unmarked = (messages: { content: Record<string, unknown>[] }[]) => messages.map((m) => ({ ...m, content: m.content.map(({ cache_control: _c, ...b }) => b) }));
+
 /** What someone asked to start turn `i`. */
 const asked = (i: number) => ({ role: "user", content: [{ type: "text", text: "(Alexa recognized the voice: Nick Rivera, Parent.)" }, { type: "text", text: `Question ${i}` }] });
 /** `turns` turns of a conversation, each a question, a tool call (with Claude's thinking before it), its 12 KB result and an answer. */
@@ -167,7 +170,7 @@ describe("the simulated Echo Show", () => {
     });
     const env: Env = { BACKEND: "sample", ANTHROPIC_API_KEY: "key" };
     // 30 turns of 4 messages, each with a 12 KB tool result, then a new question: 121 messages and about 370 KB.
-    const long = [...conversation(30), { role: "user", content: "What's going on tonight?" }];
+    const long = [...conversation(30), { role: "user", content: [{ type: "text", text: "What's going on tonight?" }] }];
     const res = await call(env, "/echo/model", turn(long));
     expect(res.status).toBe(200);
     const kept = sent[0]!.messages;
@@ -176,7 +179,7 @@ describe("the simulated Echo Show", () => {
     // The latest of it, from the start of a turn, as it was but for Claude's thinking, which was made with the whole
     // conversation before it: turns go four at a time, so it starts at the 13th (turn 12).
     const unthought = long.slice(48).map((m) => (Array.isArray(m.content) ? { ...m, content: m.content.filter((b) => b.type !== "thinking") } : m));
-    expect(kept).toEqual(unthought);
+    expect(unmarked(kept as { content: Record<string, unknown>[] }[])).toEqual(unthought);
     expect(JSON.stringify(kept)).not.toContain('"thinking"');
     expect(kept[0]).toEqual(asked(12));
     expect(res.headers.get("x-trimmed-messages")).toBe("48");
@@ -257,6 +260,35 @@ describe("the simulated Echo Show", () => {
     expect(sent!.body.system[0].text).toContain("(Alexa recognized the voice");
     expect(sent!.body.system[0].cache_control).toEqual({ type: "ephemeral" });
     expect(sent!.body.system[1].text).toContain("America/Denver");
+    // A turn that doesn't say the time gets it in the instructions, and the conversation is cached through its last block.
+    expect(sent!.body.system[1].text).toContain("It's now Friday, October 16, 2026 at 10:30 AM.");
+    expect(sent!.body.messages).toEqual([{ role: "user", content: [{ type: "text", text: "What's going on today?", cache_control: { type: "ephemeral" } }] }]);
+  });
+
+  it("keeps its instructions the same all conversation when each turn says the time, and caches the conversation through its last block", async () => {
+    const sent: { system: unknown; messages: { content: Record<string, unknown>[] }[] }[] = [];
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      sent.push(await new Request(input, init).json());
+      return Response.json({ id: "msg_1", type: "message", role: "assistant", model: "m", content: [{ type: "text", text: "Hi." }], stop_reason: "end_turn", stop_sequence: null, usage: { input_tokens: 1, output_tokens: 1 } });
+    });
+    const env: Env = { BACKEND: "sample", ANTHROPIC_API_KEY: "key" };
+    const said = (time: string, text: string) => ({ role: "user", content: [{ type: "text", text: `(It's now Friday, October 16, 2026 at ${time}.)` }, { type: "text", text: "(Alexa recognized the voice: Nick Rivera, Parent.)" }, { type: "text", text }] });
+    const at = (time: string, messages: unknown[]) => ({ ...turn(messages), body: JSON.stringify({ messages, tools: [{ name: "show_today", description: "Show today", input_schema: { type: "object" } }], context: { timeZone: "America/Denver", now: `Friday, October 16, 2026 at ${time}` } }) });
+    // A turn, the tool it called, and the next turn a few minutes later.
+    const first = [said("8:15 PM", "What's going on tonight?")];
+    const second = [...first, { role: "assistant", content: [{ type: "thinking", thinking: "", signature: "sig" }, { type: "tool_use", id: "toolu_1", name: "show_today", input: {} }] }, { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_1", content: "Movie night at 6:30." }] }];
+    const third = [...second, { role: "assistant", content: [{ type: "text", text: "Movie night's on." }] }, said("8:19 PM", "Thanks.")];
+    for (const [time, messages] of [["8:15 PM", first], ["8:16 PM", second], ["8:19 PM", third]] as const) expect((await call(env, "/echo/model", at(time, messages))).status).toBe(200);
+    // The instructions never change, though the time does: the cache holds from one call to the next.
+    expect(sent[1]!.system).toEqual(sent[0]!.system);
+    expect(sent[2]!.system).toEqual(sent[0]!.system);
+    expect((sent[0]!.system as { text: string }[])[1]!.text).toBe("The household's time zone is America/Denver.");
+    // Each call marks its last block, and only that one, and sends the conversation otherwise as the page has it.
+    for (const [i, messages] of [first, second, third].entries()) {
+      const marks = sent[i]!.messages.flatMap((m) => m.content).filter((b) => b.cache_control);
+      expect(marks).toEqual([{ ...sent[i]!.messages.at(-1)!.content.at(-1)!, cache_control: { type: "ephemeral" } }]);
+      expect(unmarked(sent[i]!.messages)).toEqual(messages);
+    }
   });
 
   it("asks the Claude API, or a gateway that speaks it, when that's the provider", async () => {
@@ -319,6 +351,8 @@ describe("the simulated Echo Show", () => {
       usage: { input_tokens: 1000, cache_read_input_tokens: 6000, cache_creation_input_tokens: 0, output_tokens: 40 },
     });
     expect(sent!.url).toBe("https://bedrock-mantle.us-west-2.api.aws/openai/v1/responses");
+    // Caching is Claude's: nothing marks the Responses input.
+    expect(JSON.stringify(sent!.body)).not.toContain("cache_control");
     expect(sent!.headers.get("authorization")).toBe("Bearer bedrock-key");
     expect(sent!.body).toMatchObject({ model: "openai.gpt-5.6-terra", reasoning: { effort: "low" }, store: false });
     expect(sent!.body.instructions).toContain("Busy means private");
