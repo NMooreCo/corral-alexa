@@ -556,7 +556,7 @@ describe("the Wrangler config", () => {
     const { unstable_readConfig } = await import("wrangler");
     const config = (env?: string) => unstable_readConfig({ config: fileURLToPath(new URL("../wrangler.jsonc", import.meta.url)), env });
     for (const env of [undefined, "demo"]) {
-      const limits = Object.fromEntries(config(env).ratelimits.map((r) => [r.name, r.simple]));
+      const limits = Object.fromEntries(config(env).ratelimits.map((r: { name: string; simple: unknown }) => [r.name, r.simple]));
       expect(limits).toEqual({ MODEL_LIMIT: { limit: 20, period: 60 }, VOICE_LIMIT: { limit: 30, period: 60 }, HOUSEHOLD_LIMIT: { limit: 10, period: 60 } });
     }
     // Each environment counts on its own.
