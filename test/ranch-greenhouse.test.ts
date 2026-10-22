@@ -159,14 +159,15 @@ describe("the greenhouse controller connector (against a fake controller)", () =
       if (!down) return fake.fetch(input, init);
       return new Promise<Response>((_, reject) => init?.signal?.addEventListener("abort", () => reject(new DOMException("timed out", "TimeoutError"))));
     }) as typeof globalThis.fetch;
-    const gh = controller({ fetch, now: c.now, timeoutMs: 30 });
+    // A timeout far longer than an answer from memory takes, so a busy machine can't blur the two.
+    const gh = controller({ fetch, now: c.now, timeoutMs: 400 });
     expect((await gh.list())[0]).toMatchObject({ reachable: false });
     expect(asked).toBe(1);
     // The next reads don't wait on the timeout again.
     c.advance(10);
     const started = performance.now();
     expect((await gh.list())[0]).toMatchObject({ reachable: false });
-    expect(performance.now() - started).toBeLessThan(25);
+    expect(performance.now() - started).toBeLessThan(200);
     expect(asked).toBe(1);
     // A switch always tries the controller.
     await gh.set("greenhouse.valve1", { state: "on", seconds: 30 }).catch(() => {});
