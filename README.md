@@ -4,6 +4,8 @@
 
 **Watch it:** [Corral for Alexa+ in under three minutes](https://youtu.be/Ny-OIqHqBTE) · **Try it:** [the simulated Echo Show](https://alexa-demo.corral.narralogy.ai/echo)
 
+[![Play the video: Corral for Alexa+ in under three minutes](docs/images/video.jpg)](https://youtu.be/Ny-OIqHqBTE)
+
 Alexa can set a timer. It can't tell you whose turn it is to cook, who has the 4:00 pickup, whether the dog got her pill, or that you're down to two bags of horse feed. [Corral](https://corral.narralogy.ai) can. It's the household platform one family and ranch run on every day: the shared calendar, chores and who did them, shopping lists, where everyone is, kids' points, and supplies.
 
 **This isn't a mockup.** Corral has run the builder's own family and small ranch since September 28, 2026, at [corral.narralogy.ai](https://corral.narralogy.ai): a hub in the kitchen, everyone's phones and a board in the barn. This server is deployed beside it and linked to it with real account linking, so the requests here are the ones a real family, kids and a farm hand make every day. The demo runs on a made-up household shaped like ours, so judges can try everything without our family's data. [What's real and what's simulated](#whats-real-and-whats-simulated) lists each part.
