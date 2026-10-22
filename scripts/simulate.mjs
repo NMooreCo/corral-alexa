@@ -9,17 +9,19 @@
 //
 // Talking uses the same model credentials as the bridge's own Echo page
 // (ANTHROPIC_API_KEY and ANTHROPIC_BASE_URL, from the environment or .dev.vars).
-// Until the simulator is published, it runs from its checkout beside this one
-// (../alexa-plus-simulator, built with `pnpm build`), or wherever ALEXA_SIMULATOR points.
+// The simulator comes from its npm package (alexa-plus-simulator, a dev dependency), or from wherever
+// ALEXA_SIMULATOR points, like a checkout's dist/server/cli.js.
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 
 const LOCAL = "http://127.0.0.1:8795/mcp";
-const cli = process.env.ALEXA_SIMULATOR ?? fileURLToPath(new URL("../../alexa-plus-simulator/dist/server/cli.js", import.meta.url));
+// The package's exports name only its library, so its CLI is found beside its package.json.
+const cli = process.env.ALEXA_SIMULATOR ?? join(dirname(createRequire(import.meta.url).resolve("alexa-plus-simulator/package.json")), "dist", "server", "cli.js");
 if (!existsSync(cli)) {
   console.error(`The Alexa+ simulator isn't at ${cli}.`);
-  console.error("Build it in its checkout (pnpm install && pnpm build), or set ALEXA_SIMULATOR to its dist/server/cli.js.");
+  console.error("Run pnpm install, or set ALEXA_SIMULATOR to a checkout's dist/server/cli.js.");
   process.exit(1);
 }
 
