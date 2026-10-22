@@ -9,5 +9,7 @@ export default defineConfig({
   test: {
     // Bundled through Vite, so the alias above reaches inside it.
     server: { deps: { inline: ["@cloudflare/workers-oauth-provider"] } },
+    // The ranch's forecast comes from a recording, never the network.
+    setupFiles: ["./test/setup.ts"],
   },
 });
