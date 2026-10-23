@@ -649,7 +649,9 @@ export function corral(o: CorralOptions): { extension: Extension; playDemo: (sho
       method: "POST",
       headers: { "content-type": "application/json", ...gated() },
       body: JSON.stringify({ text }),
-      signal,
+      // Polly answers in well under a second. One that hasn't in 5 seconds is stuck, so the simulator's fallback (the
+      // browser's voice) says it rather than the device sitting silent. Only fetching the audio is timed, not playing it.
+      signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
     });
     if (!res.ok) throw new Error(`The voice answered ${res.status}.`);
     const url = URL.createObjectURL(await res.blob());
