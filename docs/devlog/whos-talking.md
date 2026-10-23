@@ -42,7 +42,7 @@ Branch `whos-talking`. Alexa+ recognizes voices, so the simulated Echo Show now 
 
 ### Not verified
 
-- A real Alexa+. How Alexa+ tells an MCP server which recognized person is speaking isn't in the docs available to us; this assumes each person links their own Corral account and the token says who it is.
+- A real Alexa+. How Alexa+ tells an MCP server which recognized person is speaking isn't in the docs available to entrants; this assumes each person links their own Corral account and the token says who it is.
 - Linked mode end to end with a real Corral (unchanged by this branch apart from the header being ignored, which a test covers).
 - Speech in and out with the new speaker lines; everything above was typed.
 
@@ -50,7 +50,7 @@ Branch `whos-talking`. Alexa+ recognizes voices, so the simulated Echo Show now 
 
 1. **Testing taps inside an MCP Apps screen.** The browser automation refused clicks inside the screen: "the press ... could not be attributed to a frame (frame owner is CSS-transformed (scaled))". Every host that scales a 1280 by 800 Echo Show frame to fit a window will hit this. Workaround for the test: inject a style that removes the scale for a moment, click the real button, put the scale back. There's no headless harness for an `App` either, so the widget's own button code can only be exercised in a real browser.
 2. **Changing a header mid-connection in the MCP client SDK.** `StreamableHTTPClientTransport` takes `requestInit` once, at construction. Changing the speaker without reconnecting works only because 2.3.1 builds each request's headers from `requestInit.headers` afresh (`_commonHeaders`), which isn't documented. Reconnecting instead would orphan every `AppBridge` holding the old `Client`. A test now guards the behavior so an SDK upgrade can't silently pin the first speaker.
-3. **No standard for "who's speaking" on a shared device.** MCP identity is the bearer token, which is one account per connection. A kitchen Echo is used by a whole family; voice ID knows who's talking, but neither MCP nor the Alexa+ docs we have describe passing a recognized person per request. Feature request: a per-request speaker claim (signed, in `_meta` or a header) for multi-user devices, or guidance that each recognized person links separately.
+3. **No standard for "who's speaking" on a shared device.** MCP identity is the bearer token, which is one account per connection. A kitchen Echo is used by a whole family; voice ID knows who's talking, but neither MCP nor the Alexa+ docs available describe passing a recognized person per request. Feature request: a per-request speaker claim (signed, in `_meta` or a header) for multi-user devices, or guidance that each recognized person links separately.
 4. **Server instructions are per connection.** Anything that depends on the speaker can't go there, so it moved into the conversation.
 5. **Parallel tool calls have no order.** In one turn Claude called `add_list_item` and `show_approvals` together; the screen could have been drawn before the change landed. It happened to work. The skill now says to show a screen in the step after a change.
 6. **A log race in the simulator.** The traffic log read "who made this call" after the response came back, so tools Claude ran together were labeled by whoever finished last (the model's `show_approvals` showed as the screen's). It now captures who when the call goes out.

@@ -9,7 +9,7 @@ Written while building, so each entry is what actually happened. For the Devpost
 - **Used for:** the account-linking contract (OAuth 2.1, PKCE S256, `resource` on authorize and token, refresh tokens), where Alexa+ reads protected resource metadata, the 500 ms round-trip budget, MCP Apps support for visuals, and the `addon.json` fields.
 - **Worked well:** the account-linking page is a precise checklist; building to it first meant the bridge linked to a real Corral on the first try. Choosing MCP as the integration standard means the same server also works in other assistants without changes.
 - **Needs work:** which tools are partner-only isn't said on the setup pages (see F1); Alexa's discovery differs from the MCP spec in two places (F2, F3); there's no published list of Alexa's redirect URIs, which makes the fixed client a chicken-and-egg step (F4).
-- **Onboarding:** we couldn't reach "hello world" on a real Alexa+, since the CLI, Local Inspector and web simulator are gated. Everything up to that point (spec, auth, latency) was buildable from the docs alone.
+- **Onboarding:** I couldn't reach "hello world" on a real Alexa+, since the CLI, Local Inspector and web simulator are gated. Everything up to that point (spec, auth, latency) was buildable from the docs alone.
 - **Build again?** Yes. MCP-first is the right call: one server, every assistant.
 
 ### MCP specification (2025-11-25, Streamable HTTP)
@@ -25,16 +25,16 @@ Written while building, so each entry is what actually happened. For the Devpost
 - **Used for:** `McpServer` and `createMcpHandler` on Cloudflare Workers.
 - **Worked well:** one factory serves both protocol eras; the Workers export condition picks an edge-safe JSON Schema validator automatically.
 - **Needs work:** the move from the single v1 package to `@modelcontextprotocol/server`, `core` and `client` isn't obvious from npm alone (F7).
-- **Onboarding:** quick once we knew to install the v2 packages; until then, MCP Apps 2.x wouldn't load against the v1 SDK (F7).
+- **Onboarding:** quick once I knew to install the v2 packages; until then, MCP Apps 2.x wouldn't load against the v1 SDK (F7).
 - **Build again?** Yes.
 
 ### MCP Apps (`@modelcontextprotocol/ext-apps` 2.0.3)
 
 - **Used for:** the Today screen (an interactive calendar, chores and whereabouts view), a screen-only refresh tool, full screen, host fonts and model-context updates, and a stand-in host for previewing on Echo Show sizes.
 - **Worked well:** `App` and `AppBridge` are small and clear; the Patterns page (app-only tools, polling with teardown, display modes, CSP) answered every design question.
-- **Portability, tried for real (October 18):** the same server added to Claude as a custom connector rendered our screens in the chat with no changes: the tabbed home screen, taps between tabs, the property map and the polling refresh all worked. Our one layout bug showed up only there (a stacked layout that didn't stretch to a narrower frame), which is a good argument for previewing at more than one host width.
+- **Portability, tried for real (October 18):** the same server added to Claude as a custom connector rendered the screens in the chat with no changes: the tabbed home screen, taps between tabs, the property map and the polling refresh all worked. The one layout bug showed up only there (a stacked layout that didn't stretch to a narrower frame), which is a good argument for previewing at more than one host width.
 - **Needs work:** see F7; and the patterns live in a separate page from the API reference, so they're easy to miss.
-- **Onboarding:** a first screen rendered in our stand-in host soon after we found the Patterns page; testing sandboxed screens took longer (F10).
+- **Onboarding:** a first screen rendered in the stand-in host soon after I found the Patterns page; testing sandboxed screens took longer (F10).
 - **Build again?** Yes. Screens that work in any MCP Apps host are worth the sandbox's constraints.
 
 ### Amazon Polly
@@ -50,12 +50,12 @@ Written while building, so each entry is what actually happened. For the Devpost
 - **Used for:** a second route for the simulator's model: Claude Opus 5.5 through Bedrock's Messages API endpoint with a Bedrock API key, and any other Bedrock model through its Responses API, translated so the page doesn't change (`src/echo/model.ts`, `src/echo/responses.ts`).
 - **Worked well:** the Messages API endpoint takes a Bedrock API key, so the plain Anthropic SDK runs on Cloudflare Workers with no request signing.
 - **Needs work:** a new account, even on the Paid plan, had every Claude model's quota at 0, so the first call was a ThrottlingException; Opus 5.5 said "not available for this account"; the quota requests were declined as the account was too new; Service Quotas showed capacity for other models that the account still couldn't use (F8, F9, F19). None of this is on the model catalog or in the API key flow.
-- **Onboarding:** we never reached a live answer, so the route is tested against stubbed responses only, and the demo runs on the Claude API.
+- **Onboarding:** I never reached a live answer, so the route is tested against stubbed responses only, and the demo runs on the Claude API.
 - **Build again?** Yes, once the account can run a model; the code path is ready.
 
 ### Claude API (Anthropic TypeScript SDK)
 
-- **Used for:** the simulator's stand-in for Alexa+'s model: Claude Opus 5.5 at low effort decides what to say and which tools to call, with a cached system prompt built from our Agent Skill and Anthropic's refusal fallback.
+- **Used for:** the simulator's stand-in for Alexa+'s model: Claude Opus 5.5 at low effort decides what to say and which tools to call, with a cached system prompt built from the Agent Skill and Anthropic's refusal fallback.
 - **Worked well:** tool use maps directly onto MCP tools; low effort keeps a cached turn around two seconds; prompt caching makes later turns cheap.
 - **Needs work:** the first turn after a few idle minutes pays for a cold cache (up to about 6 seconds on the demo); a longer cache lifetime costs more, so a demo that sits idle between visitors is always choosing between cost and the first answer's speed.
 - **Onboarding:** the SDK ran on Cloudflare Workers unchanged, and tool use needed no adapter for MCP's tool definitions.
@@ -66,14 +66,14 @@ Written while building, so each entry is what actually happened. For the Devpost
 - **Used for:** the whole server (MCP, account linking, the simulator's page, the model and voice routes) on Workers, and each demo household as a SQLite-backed Durable Object that serves MCP from inside itself.
 - **Worked well:** stateless Streamable HTTP fits Workers exactly; a Durable Object per household gives every visitor their own state that survives deploys; deploys take seconds.
 - **Needs work:** a fetch to a LAN address hangs under `global_fetch_strictly_public` (F16); Durable Object bindings don't carry across environments, and `wrangler dev --remote` can't run SQLite-backed objects, so the MCP flow is local-only to test (F17).
-- **Onboarding:** fast; we had a deployed MCP endpoint the first day.
+- **Onboarding:** fast; I had a deployed MCP endpoint the first day.
 - **Build again?** Yes.
 
 ### Cloudflare workers-oauth-provider
 
 - **Used for:** Alexa+ account linking: OAuth 2.1 with PKCE, refresh tokens, and Corral's own tokens kept encrypted in each grant.
 - **Worked well:** a complete provider in one wrapper; the token exchange callback made refreshing Corral's upstream token straightforward.
-- **Needs work:** it serves a path resource's protected resource metadata only under the path, while Alexa+ reads it at the root (F2), and its 401 carries a `WWW-Authenticate` header that breaks Alexa's linking (F3). We serve the root document ourselves and strip the header; our upstream proposal for a root option was declined, since RFC 9728 puts the document under the path.
+- **Needs work:** it serves a path resource's protected resource metadata only under the path, while Alexa+ reads it at the root (F2), and its 401 carries a `WWW-Authenticate` header that breaks Alexa's linking (F3). The bridge serves the root document itself and strips the header; my upstream proposal for a root option was declined, since RFC 9728 puts the document under the path.
 - **Onboarding:** smooth for the standard flow; only Alexa's two differences (F2, F3) needed workarounds.
 - **Build again?** Yes.
 
@@ -81,7 +81,7 @@ Written while building, so each entry is what actually happened. For the Devpost
 
 - **Used for:** the ranch's forecast, which drives the freeze plan and the freeze automation.
 - **Worked well:** no key and a simple query, with hourly and daily values in one answer.
-- **Needs work:** an occasional slow first answer (about 700 ms), which we hide by letting Cloudflare's edge keep the forecast while it's fresh.
+- **Needs work:** an occasional slow first answer (about 700 ms), which the server hides by letting Cloudflare's edge keep the forecast while it's fresh.
 - **Onboarding:** minutes.
 - **Build again?** Yes.
 
@@ -104,9 +104,9 @@ Written while building, so each entry is what actually happened. For the Devpost
 | An Alexa+ identity for shared devices (a household screen rather than one person) in account linking | A kitchen Echo is used by the whole family; linking it as one adult's account reads that adult's private things aloud | Nice to have |
 | A per-request "who's speaking" claim for multi-user devices (signed, in `_meta` or a header), or guidance that each recognized voice links separately | Alexa+ knows voices, but MCP identity is one bearer token per connection, so a family's rules can't follow the person speaking (F12) | Important |
 | A standard change signal for stateless MCP servers and MCP Apps (a change token in a tool result's `_meta` that hosts watch or poll) | Every app with shared state on two devices reinvents a poll (F11) | Nice to have |
-| Document how an MCP add-on starts a proactive notification on the household's devices (the chime, the yellow light, a spoken "heads up"), with who should hear it | The Alexa team told us add-ons get a way to do this, but the MCP Toolkit pages don't show it. A ranch needs to hear "a dog just left the fence" when it happens, not when someone asks; stateless MCP can't push, so our simulator polls a screen-only tool instead | Important |
+| Document how an MCP add-on starts a proactive notification on the household's devices (the chime, the yellow light, a spoken "heads up"), with who should hear it | The Alexa team said add-ons get a way to do this, but the MCP Toolkit pages don't show it. A ranch needs to hear "a dog just left the fence" when it happens, not when someone asks; stateless MCP can't push, so the simulator polls a screen-only tool instead | Important |
 | A way to mark a tool as an action that updates a screen, as distinct from one that opens a screen | Hosts and previews that open screens by calling their tools with no arguments call actions like `set_device` too (F14) | Nice to have |
-| An app-to-host request to open another tool's screen (with arguments), without a model turn | A touch screen needs taps that move between screens instantly; today a screen can only reach another through the model, so ours had to merge into one bundle with tabs (F18) | Important |
+| An app-to-host request to open another tool's screen (with arguments), without a model turn | A touch screen needs taps that move between screens instantly; today a screen can only reach another through the model, so Corral's had to merge into one bundle with tabs (F18) | Important |
 
 ## Friction log
 
@@ -185,7 +185,7 @@ Written while building, so each entry is what actually happened. For the Devpost
 - **Task:** call Claude Opus 5.5 on Amazon Bedrock from the simulator, through Bedrock's Messages API endpoint with a Bedrock API key.
 - **Steps:** a new AWS account; created a Bedrock API key; called `anthropic.claude-opus-5-5`; then tried Opus 4.8 and Haiku 4.5; upgraded the account from the Free plan to Paid.
 - **Expected:** a first call that works, or an error that names the fix.
-- **Actual:** Opus 5.5 and 4.8 answered "not available for this account"; Haiku 4.5 first needed a use-case form, then answered ThrottlingException. After the upgrade, every Claude model's tokens-per-minute and requests-per-minute quota still showed 0. Nothing on the model catalog page, in the API key flow or in the error said a quota request was the next step. The quota requests (F9) were declined on October 19: the account was too new, and AWS asked us to build usage and billing history first and ask again after the next billing cycle.
+- **Actual:** Opus 5.5 and 4.8 answered "not available for this account"; Haiku 4.5 first needed a use-case form, then answered ThrottlingException. After the upgrade, every Claude model's tokens-per-minute and requests-per-minute quota still showed 0. Nothing on the model catalog page, in the API key flow or in the error said a quota request was the next step. The quota requests (F9) were declined on October 19: the account was too new, and AWS said to build usage and billing history first and ask again after the next billing cycle.
 - **Severity:** High (the AWS integration was built and tested but couldn't go live in time to know).
 - **Workaround:** made the provider a setting; the demo runs on the Claude API until the quota arrives.
 - **Suggestion:** give new accounts a small default Claude quota, or say "your quota for this model is 0; request an increase" in the error and on the model's page.
@@ -243,11 +243,11 @@ Written while building, so each entry is what actually happened. For the Devpost
 ### F14. Actions that update a screen look like screens
 
 - **Task:** let a device switched by voice show its countdown on the Ranch screen.
-- **Steps:** gave `set_device` the Ranch screen's resource, then opened every screen tool from our preview host.
+- **Steps:** gave `set_device` the Ranch screen's resource, then opened every screen tool from the preview host.
 - **Expected:** a way to mark a tool as an action that updates a screen, apart from a tool that opens one.
 - **Actual:** `set_device` shows the Ranch screen so a run started by voice counts down there, but nothing distinguishes "an action that updates this screen" from "a tool that opens this screen". A host or preview that opens screens by calling their tools with no arguments calls the action too, and gets an error.
 - **Severity:** Low.
-- **Workaround:** our preview skips screen tools with required arguments.
+- **Workaround:** the preview skips screen tools with required arguments.
 - **Suggestion:** a `_meta.ui` flag for actions, so hosts know a tool updates a screen rather than opening one.
 
 ### F15. `content` versus `structuredContent` for a large view
@@ -262,7 +262,7 @@ Written while building, so each entry is what actually happened. For the Devpost
 
 ### F16. Wrangler: a LAN fetch hangs under `global_fetch_strictly_public`
 
-- **Task:** reach our greenhouse controller on the home network from `wrangler dev`.
+- **Task:** reach the greenhouse controller on the home network from `wrangler dev`.
 - **Steps:** set the controller's LAN address, ran `wrangler dev` with the project's compatibility flags, and called the controller's status endpoint with a 3 second `AbortSignal.timeout`.
 - **Expected:** the call to succeed, or to fail fast with an error.
 - **Actual:** with the flag set, a fetch to a LAN address neither failed nor honored `AbortSignal.timeout`; it hung until the caller gave up, and nothing pointed at the flag, so the controller looked down.

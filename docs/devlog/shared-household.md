@@ -27,7 +27,7 @@ In sample mode, `src/index.ts` kept a `SampleHousehold` in module memory. Every 
 - **Polling a counter, not shortening every refresh.** Options I weighed:
   - Server notifications or resource subscriptions: not available on a stateless Streamable HTTP endpoint, and Alexa+ connects statelessly.
   - Shorter refresh while two devices are up: the screen can't know that, and it would re-fetch the whole view every few seconds on every screen.
-  - The host re-sending tool results: works only in our simulator, not on a real Echo Show.
+  - The host re-sending tool results: works only in the simulator, not on a real Echo Show.
   - A change counter the screens poll: tiny answers, works in any MCP Apps host (including real Echo Shows, if Alexa+ proxies app-only tool calls as the spec says), and a screen only re-fetches its view when something changed. Chosen, at 3 seconds while the screen is visible, with the existing minute refresh kept as a backstop.
   - A linked Corral has no counter: the tool isn't listed, the screen's first ask fails, and it stops asking (after transient failures it drops to once a minute instead of stopping).
   - The simulator keeps these polls out of its traffic log unless one fails, so the log still reads as a story; the refresh they trigger does show.
