@@ -24,10 +24,10 @@ export async function mockTurn(request: Request): Promise<Response> {
   const words = blocks.filter((b) => b.type === "text").map((b) => (b.type === "text" ? b.text : "")).join(" ").toLowerCase();
   if (/waiting for me|approv/.test(words)) return toolUse("show_approvals", {});
   if (/sleepover/.test(words)) {
-    // Whoever Alexa recognized is the one going, on the coming Friday.
+    // Whoever Alexa recognized is the one going: tomorrow when they say so, otherwise on the coming Friday.
     const who = /alexa recognized the voice: ([^,.)]+)/.exec(words)?.[1];
     let day = Temporal.Now.plainDateISO(context?.timeZone ?? "UTC").add({ days: 1 });
-    while (day.dayOfWeek !== 5) day = day.add({ days: 1 });
+    if (!/tomorrow/.test(words)) while (day.dayOfWeek !== 5) day = day.add({ days: 1 });
     return toolUse("add_event", { title: "Sleepover at Ava's", start: day.toString(), ...(who ? { people: [who] } : {}) });
   }
   if (/today|going on|my day/.test(words)) return toolUse("show_today", {});

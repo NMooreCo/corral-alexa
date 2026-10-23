@@ -38,7 +38,7 @@ const PASSCODE_KEY = "corral-echo-passcode";
 /** Things to try. One with `as` is said by that person: the picker switches to them first. */
 const SUGGESTIONS: (string | { text: string; as: string })[] = [
   "What's going on today?",
-  { text: "Can I have a sleepover at Ava's on Friday?", as: "Eli" },
+  { text: "Can I have a sleepover at Ava's tomorrow night?", as: "Eli" },
   { text: "Anything waiting for me?", as: "Nick" },
   "Did anyone collect the eggs yet?",
   "Jak emptied the dishwasher.",
@@ -85,7 +85,7 @@ interface DemoBeat {
 const DEMO: DemoBeat[] = [
   { as: "Nick", say: "What's going on tonight?", linger: 6000, taps: 14000, short: true },
   { as: "Jak", say: "I emptied the dishwasher." },
-  { as: "Eli", say: "Can I have a sleepover at Ava's on Friday?", short: true },
+  { as: "Eli", say: "Can I have a sleepover at Ava's tomorrow night?", short: true },
   { as: "Eli", say: "Yes please.", ifAsked: true, short: true },
   { as: "Nick", say: "Anything waiting for me?", linger: 4000, short: true },
   { as: "Nick", say: "Approve the sleepover.", short: true },

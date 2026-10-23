@@ -1,3 +1,4 @@
+import { Temporal } from "temporal-polyfill";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { samePasscode } from "../src/echo/gate.ts";
 import { modelLabel } from "../src/echo/model.ts";
@@ -468,13 +469,15 @@ describe("the simulated Echo Show", () => {
     expect(first).toMatchObject({ stop_reason: "tool_use", content: [{ type: "tool_use", name: "show_today" }] });
   });
 
-  it("plays the approval demo with the practice model too: a kid's sleepover for the coming Friday, then a parent's approvals", async () => {
+  it("plays the approval demo with the practice model too: a kid's sleepover tomorrow night, then a parent's approvals", async () => {
     const env: Env = { BACKEND: "sample", MODEL_MOCK: "true" };
     const said = (who: string, text: string) => [{ role: "user", content: [{ type: "text", text: who }, { type: "text", text }] }];
-    const asked = await (await call(env, "/echo/model", turn(said("(Alexa recognized the voice: Eli Rivera, Kid.)", "Can I have a sleepover at Ava's on Friday?")))).json() as { content: { input: { start: string } }[] };
-    const use = asked.content[0]!;
+    const ask = async (text: string) => ((await (await call(env, "/echo/model", turn(said("(Alexa recognized the voice: Eli Rivera, Kid.)", text)))).json()) as { content: { input: { start: string } }[] }).content[0]!;
+    const use = await ask("Can I have a sleepover at Ava's tomorrow night?");
     expect(use).toMatchObject({ type: "tool_use", name: "add_event", input: { title: "Sleepover at Ava's", people: ["eli rivera"] } });
-    expect(new Date(`${use.input.start}T12:00:00Z`).getUTCDay()).toBe(5);
+    expect(use.input.start).toBe(Temporal.Now.plainDateISO("America/Denver").add({ days: 1 }).toString());
+    // A day named without "tomorrow" is the coming one.
+    expect(new Date(`${(await ask("Can I have a sleepover at Ava's on Friday?")).input.start}T12:00:00Z`).getUTCDay()).toBe(5);
     const waiting = await (await call(env, "/echo/model", turn(said("(Alexa recognized the voice: Nick Rivera, Parent.)", "Anything waiting for me?")))).json();
     expect(waiting).toMatchObject({ content: [{ type: "tool_use", name: "show_approvals" }] });
   });

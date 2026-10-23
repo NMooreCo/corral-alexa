@@ -21,7 +21,7 @@ On a ranch it also runs the place: **"Alexa, turn on the misters for 30 seconds"
 1. Open **[the simulated Echo Show](https://alexa-demo.corral.narralogy.ai/echo)**, enter the demo passcode (it's in the submission's testing instructions), and press **Make it evening**: it's 8:15 PM at the ranch.
 2. Ask **"What's going on tonight?"** (press Talk, or type it). The Today screen comes up; tap **Animals** on its rail for the nine dogs on the property map.
 3. Wait a moment. A couple of minutes into the evening, the Echo **speaks up on its own**: "Heads up: Hunter just left the fence."
-4. Tap the suggestion marked **Eli** (a sleepover on Friday) and say yes when Alexa offers to ask, then the one marked **Nick** ("Anything waiting for me?") and tap **Approve**. Kids ask; parents decide.
+4. Tap the suggestion marked **Eli** (a sleepover tomorrow night) and say yes when Alexa offers to ask, then the one marked **Nick** ("Anything waiting for me?") and tap **Approve**. Kids ask; parents decide.
 
 Or press **Play the demo** and watch the evening and the next morning play out with the real model.
 
@@ -46,7 +46,7 @@ Or press **Play the demo** and watch the evening and the next morning play out w
 | "Order the propane." | It confirms in one sentence ("Order 100 gallons of propane from Valley Feed & Propane for $289, delivered Tuesday?"), then orders it, and the **Supplies** screen shows it on order with its day. A kid's order goes to a parent to approve, and a parent's order over the household's $300 limit goes to the other parent. |
 | "Add tortillas and salsa." | Both go on the grocery list; the **List** screen shows it, and tapping an item checks it off. |
 | "Put the dentist on Thursday at 3:30 for Jak." | It confirms first. A parent's change happens right away; from a kid, or from a shared kitchen device, the event goes to a parent to approve, and it says who. |
-| Eli: "Can I have a sleepover at Ava's on Friday?" | It offers to ask, and the request goes to Nick and Holly. Nothing is on the calendar yet. |
+| Eli: "Can I have a sleepover at Ava's tomorrow night?" | It offers to ask, and the request goes to Nick and Holly. Nothing is on the calendar yet. |
 | Nick: "Anything waiting for me?" | The **Approvals** screen: Eli's sleepover with Approve and Decline. A tap on Approve puts it on the calendar, and the **Week** screen shows it. |
 | (tapping a chore on the screen) | The screen checks it off through Corral and tells the assistant, so "who did the eggs?" right after has the answer. |
 | (a chore checked off on the kitchen Echo Show) | The barn Echo Show's screen shows it within a few seconds: every device shares one household, kept through restarts until its day turns over. |
@@ -258,7 +258,7 @@ Alexa app --> /authorize --> Corral's consent page --> /callback --> back to Ale
 
 ## Run it locally
 
-Needs Node 22 and pnpm 9.
+Needs Node 22.13 or later and pnpm 9.
 
 ```bash
 pnpm install
